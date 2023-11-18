@@ -593,7 +593,7 @@
       )
       (project "drone"
         (path "/d34d8324-c983-4098-8d7e-5c2fbd34794d/f15c5f25-9d1e-45fb-9072-66f0c0192516"
-          (reference "C20") (unit 1)
+          (reference "C1") (unit 1)
         )
       )
     )
@@ -628,7 +628,7 @@
       )
       (project "drone"
         (path "/d34d8324-c983-4098-8d7e-5c2fbd34794d/f15c5f25-9d1e-45fb-9072-66f0c0192516"
-          (reference "#PWR032") (unit 1)
+          (reference "#PWR03") (unit 1)
         )
       )
     )
@@ -663,7 +663,7 @@
       )
       (project "drone"
         (path "/d34d8324-c983-4098-8d7e-5c2fbd34794d/f15c5f25-9d1e-45fb-9072-66f0c0192516"
-          (reference "#PWR035") (unit 1)
+          (reference "#PWR04") (unit 1)
         )
       )
     )
@@ -728,7 +728,7 @@
       )
       (project "drone"
         (path "/d34d8324-c983-4098-8d7e-5c2fbd34794d/f15c5f25-9d1e-45fb-9072-66f0c0192516"
-          (reference "IC7") (unit 1)
+          (reference "IC1") (unit 1)
         )
       )
     )
@@ -779,7 +779,7 @@
       )
       (project "drone"
         (path "/d34d8324-c983-4098-8d7e-5c2fbd34794d/f15c5f25-9d1e-45fb-9072-66f0c0192516"
-          (reference "R25") (unit 1)
+          (reference "R2") (unit 1)
         )
       )
     )
@@ -814,7 +814,7 @@
       )
       (project "drone"
         (path "/d34d8324-c983-4098-8d7e-5c2fbd34794d/f15c5f25-9d1e-45fb-9072-66f0c0192516"
-          (reference "#PWR033") (unit 1)
+          (reference "#PWR02") (unit 1)
         )
       )
     )
@@ -865,7 +865,7 @@
       )
       (project "drone"
         (path "/d34d8324-c983-4098-8d7e-5c2fbd34794d/f15c5f25-9d1e-45fb-9072-66f0c0192516"
-          (reference "R24") (unit 1)
+          (reference "R1") (unit 1)
         )
       )
     )
@@ -900,7 +900,7 @@
       )
       (project "drone"
         (path "/d34d8324-c983-4098-8d7e-5c2fbd34794d/f15c5f25-9d1e-45fb-9072-66f0c0192516"
-          (reference "#PWR034") (unit 1)
+          (reference "#PWR05") (unit 1)
         )
       )
     )
@@ -935,7 +935,7 @@
       )
       (project "drone"
         (path "/d34d8324-c983-4098-8d7e-5c2fbd34794d/f15c5f25-9d1e-45fb-9072-66f0c0192516"
-          (reference "#PWR031") (unit 1)
+          (reference "#PWR01") (unit 1)
         )
       )
     )

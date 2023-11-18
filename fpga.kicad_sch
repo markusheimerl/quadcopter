@@ -1859,7 +1859,7 @@
       )
       (project "drone"
         (path "/d34d8324-c983-4098-8d7e-5c2fbd34794d/41f449fb-b4c2-4d53-966f-b49577e16db6"
-          (reference "U1") (unit 1)
+          (reference "U2") (unit 1)
         )
       )
     )
@@ -2222,7 +2222,7 @@
       )
       (project "drone"
         (path "/d34d8324-c983-4098-8d7e-5c2fbd34794d/41f449fb-b4c2-4d53-966f-b49577e16db6"
-          (reference "U1") (unit 3)
+          (reference "U2") (unit 3)
         )
       )
     )
@@ -2585,7 +2585,7 @@
       )
       (project "drone"
         (path "/d34d8324-c983-4098-8d7e-5c2fbd34794d/41f449fb-b4c2-4d53-966f-b49577e16db6"
-          (reference "U1") (unit 7)
+          (reference "U2") (unit 7)
         )
       )
     )
@@ -2948,7 +2948,7 @@
       )
       (project "drone"
         (path "/d34d8324-c983-4098-8d7e-5c2fbd34794d/41f449fb-b4c2-4d53-966f-b49577e16db6"
-          (reference "U1") (unit 2)
+          (reference "U2") (unit 2)
         )
       )
     )
@@ -2957,7 +2957,7 @@
   (symbol (lib_id "power:VCCQ") (at 22.86 165.1 0) (unit 1)
     (in_bom yes) (on_board yes) (dnp no) (fields_autoplaced)
     (uuid a59d439c-d792-45ef-8647-1d233106b47a)
-    (property "Reference" "#PWR040" (at 22.86 168.91 0)
+    (property "Reference" "#PWR026" (at 22.86 168.91 0)
       (effects (font (size 1.27 1.27)) hide)
     )
     (property "Value" "VCCQ" (at 22.86 160.02 0)
@@ -2973,7 +2973,7 @@
     (instances
       (project "drone"
         (path "/d34d8324-c983-4098-8d7e-5c2fbd34794d/41f449fb-b4c2-4d53-966f-b49577e16db6"
-          (reference "#PWR040") (unit 1)
+          (reference "#PWR026") (unit 1)
         )
       )
     )
@@ -3336,7 +3336,7 @@
       )
       (project "drone"
         (path "/d34d8324-c983-4098-8d7e-5c2fbd34794d/41f449fb-b4c2-4d53-966f-b49577e16db6"
-          (reference "U1") (unit 5)
+          (reference "U2") (unit 5)
         )
       )
     )
@@ -3699,7 +3699,7 @@
       )
       (project "drone"
         (path "/d34d8324-c983-4098-8d7e-5c2fbd34794d/41f449fb-b4c2-4d53-966f-b49577e16db6"
-          (reference "U1") (unit 6)
+          (reference "U2") (unit 6)
         )
       )
     )
@@ -4062,7 +4062,7 @@
       )
       (project "drone"
         (path "/d34d8324-c983-4098-8d7e-5c2fbd34794d/41f449fb-b4c2-4d53-966f-b49577e16db6"
-          (reference "U1") (unit 4)
+          (reference "U2") (unit 4)
         )
       )
     )
@@ -4097,7 +4097,7 @@
       )
       (project "drone"
         (path "/d34d8324-c983-4098-8d7e-5c2fbd34794d/41f449fb-b4c2-4d53-966f-b49577e16db6"
-          (reference "#PWR036") (unit 1)
+          (reference "#PWR027") (unit 1)
         )
       )
     )
@@ -4460,7 +4460,7 @@
       )
       (project "drone"
         (path "/d34d8324-c983-4098-8d7e-5c2fbd34794d/41f449fb-b4c2-4d53-966f-b49577e16db6"
-          (reference "U1") (unit 8)
+          (reference "U2") (unit 8)
         )
       )
     )
