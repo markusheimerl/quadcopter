@@ -4,6 +4,10 @@
 
   (paper "A3")
 
+  (title_block
+    (title "Field-programmable gate array")
+  )
+
   (lib_symbols
     (symbol "FPGA_CologneChip_GateMate:CCGM1A1" (in_bom yes) (on_board yes)
       (property "Reference" "U" (at -12.7 8.89 0)

@@ -4,6 +4,10 @@
 
   (paper "A4")
 
+  (title_block
+    (title "Radio Frequency Communication")
+  )
+
   (lib_symbols
     (symbol "ABM3B-16.000MHZ-B2-T_1" (in_bom yes) (on_board yes)
       (property "Reference" "Y1" (at 16.51 7.62 0)

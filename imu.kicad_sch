@@ -4,6 +4,10 @@
 
   (paper "A5")
 
+  (title_block
+    (title "Inertial measurement unit")
+  )
+
   (lib_symbols
     (symbol "PCM_4ms_Capacitor:100nF_0603_16V" (pin_numbers hide) (pin_names (offset 0.254) hide) (in_bom yes) (on_board yes)
       (property "Reference" "C" (at 1.905 1.27 0)

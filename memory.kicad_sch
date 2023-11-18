@@ -1,0 +1,14 @@
+(kicad_sch (version 20230121) (generator eeschema)
+
+  (uuid 3a0e4662-b623-45d5-9e53-aeed632baf8f)
+
+  (paper "A4")
+
+  (title_block
+    (title "Memory")
+  )
+
+  (lib_symbols
+  )
+
+)
