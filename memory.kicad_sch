@@ -539,568 +539,10 @@
 				)
 			)
 		)
-		(symbol "SamacSys_Parts:S70KL1282GABHV020"
-			(exclude_from_sim no)
-			(in_bom yes)
-			(on_board yes)
-			(property "Reference" "IC"
-				(at 29.21 7.62 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(justify left top)
-				)
-			)
-			(property "Value" "S70KL1282GABHV020"
-				(at 29.21 5.08 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(justify left top)
-				)
-			)
-			(property "Footprint" "BGA24C100P5X5_600X800X100"
-				(at 29.21 -94.92 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(justify left top)
-					(hide yes)
-				)
-			)
-			(property "Datasheet" "https://www.cypress.com/file/501841/download"
-				(at 29.21 -194.92 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(justify left top)
-					(hide yes)
-				)
-			)
-			(property "Description" "DRAM HyperRAM"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "Height" "1"
-				(at 29.21 -394.92 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(justify left top)
-					(hide yes)
-				)
-			)
-			(property "Mouser Part Number" "727-S70KL1282GABHV2"
-				(at 29.21 -494.92 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(justify left top)
-					(hide yes)
-				)
-			)
-			(property "Mouser Price/Stock" "https://www.mouser.co.uk/ProductDetail/Infineon-Technologies/S70KL1282GABHV020?qs=sPbYRqrBIVnZUdfTED8OOQ%3D%3D"
-				(at 29.21 -594.92 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(justify left top)
-					(hide yes)
-				)
-			)
-			(property "Manufacturer_Name" "Infineon"
-				(at 29.21 -694.92 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(justify left top)
-					(hide yes)
-				)
-			)
-			(property "Manufacturer_Part_Number" "S70KL1282GABHV020"
-				(at 29.21 -794.92 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(justify left top)
-					(hide yes)
-				)
-			)
-			(symbol "S70KL1282GABHV020_1_1"
-				(rectangle
-					(start 5.08 2.54)
-					(end 27.94 -30.48)
-					(stroke
-						(width 0.254)
-						(type default)
-					)
-					(fill
-						(type background)
-					)
-				)
-				(pin passive line
-					(at 0 0 0)
-					(length 5.08)
-					(name "RFU_1"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "A2"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 0 -2.54 0)
-					(length 5.08)
-					(name "CS#"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "A3"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 0 -5.08 0)
-					(length 5.08)
-					(name "RESET#"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "A4"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 0 -7.62 0)
-					(length 5.08)
-					(name "RFU_2"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "A5"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 0 -10.16 0)
-					(length 5.08)
-					(name "CK#"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "B1"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 0 -12.7 0)
-					(length 5.08)
-					(name "CK"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "B2"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 0 -15.24 0)
-					(length 5.08)
-					(name "VSS"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "B3"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 0 -17.78 0)
-					(length 5.08)
-					(name "VCC"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "B4"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 0 -20.32 0)
-					(length 5.08)
-					(name "RFU_3"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "B5"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 0 -22.86 0)
-					(length 5.08)
-					(name "VSSQ_1"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "C1"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 0 -25.4 0)
-					(length 5.08)
-					(name "RFU_4"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "C2"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 0 -27.94 0)
-					(length 5.08)
-					(name "RWDS"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "C3"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 33.02 0 180)
-					(length 5.08)
-					(name "DQ2"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "C4"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 33.02 -2.54 180)
-					(length 5.08)
-					(name "RFU_5"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "C5"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 33.02 -5.08 180)
-					(length 5.08)
-					(name "VCCQ_1"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "D1"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 33.02 -7.62 180)
-					(length 5.08)
-					(name "DQ1"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "D2"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 33.02 -10.16 180)
-					(length 5.08)
-					(name "DQ0"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "D3"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 33.02 -12.7 180)
-					(length 5.08)
-					(name "DQ3"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "D4"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 33.02 -15.24 180)
-					(length 5.08)
-					(name "DQ4"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "D5"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 33.02 -17.78 180)
-					(length 5.08)
-					(name "DQ7"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "E1"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 33.02 -20.32 180)
-					(length 5.08)
-					(name "DQ6"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "E2"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 33.02 -22.86 180)
-					(length 5.08)
-					(name "DQ5"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "E3"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 33.02 -25.4 180)
-					(length 5.08)
-					(name "VCCQ_2"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "E4"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 33.02 -27.94 180)
-					(length 5.08)
-					(name "VSSQ_2"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "E5"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-			)
-		)
-	)
-	(text "HyperRAM (Fast DRAM)"
-		(exclude_from_sim no)
-		(at 57.15 62.23 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "53700085-cf13-40cc-ab79-98890677119b")
 	)
 	(text "FLASH"
 		(exclude_from_sim no)
-		(at 137.16 81.28 0)
+		(at 103.378 80.518 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -1110,194 +552,8 @@
 		(uuid "86bfa60b-c93e-45fe-be60-6adadccb362f")
 	)
 	(symbol
-		(lib_id "SamacSys_Parts:S70KL1282GABHV020")
-		(at 50.8 29.21 0)
-		(unit 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(fields_autoplaced yes)
-		(uuid "cb98ed55-4b52-41b4-b98c-39a439bbded8")
-		(property "Reference" "IC5"
-			(at 67.31 21.59 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "S70KL1282GABHV020"
-			(at 67.31 24.13 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" "BGA24C100P5X5_600X800X100"
-			(at 80.01 124.13 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left top)
-				(hide yes)
-			)
-		)
-		(property "Datasheet" "https://www.cypress.com/file/501841/download"
-			(at 80.01 224.13 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left top)
-				(hide yes)
-			)
-		)
-		(property "Description" ""
-			(at 50.8 29.21 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Height" "1"
-			(at 80.01 424.13 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left top)
-				(hide yes)
-			)
-		)
-		(property "Mouser Part Number" "727-S70KL1282GABHV2"
-			(at 80.01 524.13 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left top)
-				(hide yes)
-			)
-		)
-		(property "Mouser Price/Stock" "https://www.mouser.co.uk/ProductDetail/Infineon-Technologies/S70KL1282GABHV020?qs=sPbYRqrBIVnZUdfTED8OOQ%3D%3D"
-			(at 80.01 624.13 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left top)
-				(hide yes)
-			)
-		)
-		(property "Manufacturer_Name" "Infineon"
-			(at 80.01 724.13 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left top)
-				(hide yes)
-			)
-		)
-		(property "Manufacturer_Part_Number" "S70KL1282GABHV020"
-			(at 80.01 824.13 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left top)
-				(hide yes)
-			)
-		)
-		(pin "E4"
-			(uuid "e3200076-6112-48dd-9b51-aade081ab42a")
-		)
-		(pin "B5"
-			(uuid "06d9fa92-f88f-4728-b674-6ae4d693e2a5")
-		)
-		(pin "A2"
-			(uuid "047268ef-9e46-4f1b-b949-145a55cae531")
-		)
-		(pin "C5"
-			(uuid "f0bbddd1-7779-4575-ad63-faaa1c2deb15")
-		)
-		(pin "E5"
-			(uuid "fd51ec44-25fd-4d15-9c75-fc695d867591")
-		)
-		(pin "E2"
-			(uuid "fd4cea0d-1f20-4348-a420-ceaa0363343b")
-		)
-		(pin "C2"
-			(uuid "86f44453-865d-401c-a193-7b42a883fd51")
-		)
-		(pin "D2"
-			(uuid "4753bb91-1ec2-460a-ad29-cde98e9ef2dd")
-		)
-		(pin "A5"
-			(uuid "154b5a0d-7cd1-40e4-9d48-c3812f0ce922")
-		)
-		(pin "E1"
-			(uuid "f2f86c41-b433-4283-9172-1989263535a4")
-		)
-		(pin "D5"
-			(uuid "9f83eed9-68b4-4d65-9349-e5ed6d1fd18c")
-		)
-		(pin "B3"
-			(uuid "ee36890a-6198-4485-b290-1ec68675139f")
-		)
-		(pin "D3"
-			(uuid "02e9e3cf-8dac-4d81-8bb2-c6c52ca86151")
-		)
-		(pin "B4"
-			(uuid "07bb00e8-66df-47c6-aad5-f6d3e21b0eb9")
-		)
-		(pin "C4"
-			(uuid "e952682b-4896-4600-8134-8881342a314d")
-		)
-		(pin "B2"
-			(uuid "56236170-eb83-4163-a2a1-245a0f579fad")
-		)
-		(pin "D1"
-			(uuid "5759ee39-763f-4e0b-97fd-f023064dd3fc")
-		)
-		(pin "C1"
-			(uuid "2bfb0ed1-3e18-47a0-be1c-1e09407c0c22")
-		)
-		(pin "C3"
-			(uuid "489d4e6f-1e18-40b4-9cce-305ffd928e7d")
-		)
-		(pin "A4"
-			(uuid "6f43947d-c7b4-44e2-b66a-930545eb3dd6")
-		)
-		(pin "E3"
-			(uuid "79ac3d39-a6ae-41d6-abab-22cfe86f2f9c")
-		)
-		(pin "A3"
-			(uuid "b2d090f9-aea8-425c-bd74-a93eefdf6ec2")
-		)
-		(pin "B1"
-			(uuid "c1bf4e61-44e1-4a9a-b7c0-8542b54ca66a")
-		)
-		(pin "D4"
-			(uuid "141f42ad-5a83-4788-89da-21a6a42ea1db")
-		)
-		(instances
-			(project "drone"
-				(path "/d34d8324-c983-4098-8d7e-5c2fbd34794d/4100cf90-4d91-4a61-8724-d501936d5e21"
-					(reference "IC5")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
 		(lib_id "SamacSys_Parts:MX25R6435FBDIL0")
-		(at 119.38 50.8 0)
+		(at 85.09 49.53 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -1306,7 +562,7 @@
 		(fields_autoplaced yes)
 		(uuid "fd81f5a0-868e-4e00-9832-1e4b77a90457")
 		(property "Reference" "IC7"
-			(at 140.97 43.18 0)
+			(at 106.68 41.91 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1314,7 +570,7 @@
 			)
 		)
 		(property "Value" "MX25R6435FBDIL0"
-			(at 140.97 45.72 0)
+			(at 106.68 44.45 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1322,7 +578,7 @@
 			)
 		)
 		(property "Footprint" "MX25R6435FBDIL0"
-			(at 158.75 145.72 0)
+			(at 124.46 144.45 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1332,7 +588,7 @@
 			)
 		)
 		(property "Datasheet" "https://datasheet.datasheetarchive.com/originals/distributors/DKDS-14/274584.pdf"
-			(at 158.75 245.72 0)
+			(at 124.46 244.45 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1342,7 +598,7 @@
 			)
 		)
 		(property "Description" "IC FLASH 64MBIT"
-			(at 119.38 50.8 0)
+			(at 85.09 49.53 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1351,7 +607,7 @@
 			)
 		)
 		(property "Height" "0.52"
-			(at 158.75 445.72 0)
+			(at 124.46 444.45 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1361,7 +617,7 @@
 			)
 		)
 		(property "Manufacturer_Name" "Macronix"
-			(at 158.75 545.72 0)
+			(at 124.46 544.45 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1371,7 +627,7 @@
 			)
 		)
 		(property "Manufacturer_Part_Number" "MX25R6435FBDIL0"
-			(at 158.75 645.72 0)
+			(at 124.46 644.45 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1381,7 +637,7 @@
 			)
 		)
 		(property "Mouser Part Number" ""
-			(at 158.75 745.72 0)
+			(at 124.46 744.45 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1391,7 +647,7 @@
 			)
 		)
 		(property "Mouser Price/Stock" ""
-			(at 158.75 845.72 0)
+			(at 124.46 844.45 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1401,7 +657,7 @@
 			)
 		)
 		(property "Arrow Part Number" "MX25R6435FBDIL0"
-			(at 158.75 945.72 0)
+			(at 124.46 944.45 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -1411,7 +667,7 @@
 			)
 		)
 		(property "Arrow Price/Stock" "https://www.arrow.com/en/products/mx25r6435fbdil0/macronix-international?region=nac"
-			(at 158.75 1045.72 0)
+			(at 124.46 1044.45 0)
 			(effects
 				(font
 					(size 1.27 1.27)
