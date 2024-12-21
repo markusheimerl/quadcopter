@@ -5,7 +5,7 @@ LDFLAGS = -lm -flto
 
 # Target and source
 TARGET = a.out
-SRC = rasterizer.c
+SRC = sim.c
 
 # Build target
 $(TARGET): $(SRC)
