@@ -2,8 +2,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <unistd.h>
-
-// gcc -O3 dynamics.c -lm && ./a.out
+#include <string.h>
 
 // Vector and matrix operations
 void crossVec3f(const float v1[3], const float v2[3], float result[3]) {
