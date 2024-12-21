@@ -90,8 +90,6 @@ int main() {
                drone_state.angular_velocity_B[1],
                drone_state.angular_velocity_B[2]);
         printf("---\n");
-
-        usleep(dt * 1000000);  // Sleep for dt seconds
     }
 
     // Cleanup
