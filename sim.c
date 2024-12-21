@@ -14,13 +14,13 @@ int main() {
     ge_GIF *gif = ge_new_gif("drone_simulation.gif", WIDTH, HEIGHT, 4, -1, 0);
 
     // Initialize camera
-    double camera_pos[3] = {-2.0, 1.0, -2.0};
+    double camera_pos[3] = {-2.0, 2.0, -2.0};
     double camera_target[3] = {0.0, 0.0, 0.0};
     double camera_up[3] = {0.0, 1.0, 0.0};
 
     // Initialize drone state
     DroneState drone_state = {
-        .omega = {omega_stable, omega_stable, omega_stable, omega_stable},
+        .omega = {omega_stable+1.0, omega_stable+1.0, omega_stable+1.0, omega_stable+1.0},
         .angular_velocity_B = {0, 0, 0},
         .linear_velocity_W = {0, 0, 0},
         .linear_position_W = {0, 1, 0}
@@ -58,15 +58,6 @@ int main() {
         // Transform meshes
         transform_mesh(meshes[0], drone_pos, 0.5, rotation_y);
         transform_mesh(meshes[1], (double[3]){0.0, -0.5, 0.0}, 1.0, 0.0);
-
-        // Update camera to follow drone
-        camera_target[0] = drone_state.linear_position_W[0];
-        camera_target[1] = drone_state.linear_position_W[1];
-        camera_target[2] = drone_state.linear_position_W[2];
-        
-        camera_pos[0] = drone_state.linear_position_W[0] - 2.0;
-        camera_pos[1] = drone_state.linear_position_W[1] + 1.0;
-        camera_pos[2] = drone_state.linear_position_W[2] - 2.0;
 
         // Render frame
         for (int i = 0; i < 2; i++) {
