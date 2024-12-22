@@ -109,19 +109,19 @@ typedef struct {
     float linear_position_W[3];   // Position in world frame
     float R_W_B[9];              // Rotation matrix
     float I_mat[9];              // Inertia matrix
-} DroneState;
+} Quad;
 
-void update_dynamics(DroneState* state) {
+void update_dynamics(Quad* q) {
     // Limit motor speeds
     for(int i = 0; i < 4; i++) {
-        state->omega[i] = fminf(fmaxf(state->omega[i], omega_min), omega_max);
+        q->omega[i] = fminf(fmaxf(q->omega[i], omega_min), omega_max);
     }
 
     // Forces and moments
     float F[4], M[4];
     for(int i = 0; i < 4; i++) {
-        F[i] = k_f * state->omega[i] * fabsf(state->omega[i]);
-        M[i] = k_m * state->omega[i] * fabsf(state->omega[i]);
+        F[i] = k_f * q->omega[i] * fabsf(q->omega[i]);
+        M[i] = k_m * q->omega[i] * fabsf(q->omega[i]);
     }
 
     // Thrust
@@ -166,7 +166,7 @@ void update_dynamics(DroneState* state) {
     // Accelerations
     float gravity_force[3] = {0, -g * m, 0};
     float rotated_thrust[3];
-    multMatVec3f(state->R_W_B, f_B_thrust, rotated_thrust);
+    multMatVec3f(q->R_W_B, f_B_thrust, rotated_thrust);
     
     float linear_acceleration_W[3];
     addVec3f(gravity_force, rotated_thrust, linear_acceleration_W);
@@ -174,8 +174,8 @@ void update_dynamics(DroneState* state) {
 
     // Angular acceleration
     float temp_vec[3], temp_vec2[3], cross_result[3];
-    multMatVec3f(state->I_mat, state->angular_velocity_B, temp_vec);
-    multScalVec3f(-1.0f, state->angular_velocity_B, temp_vec2);
+    multMatVec3f(q->I_mat, q->angular_velocity_B, temp_vec);
+    multScalVec3f(-1.0f, q->angular_velocity_B, temp_vec2);
     crossVec3f(temp_vec2, temp_vec, cross_result);
     
     float angular_acceleration_B[3];
@@ -189,25 +189,25 @@ void update_dynamics(DroneState* state) {
     
     // Update linear velocity and position
     multScalVec3f(dt, linear_acceleration_W, temp_vel);
-    addVec3f(state->linear_velocity_W, temp_vel, state->linear_velocity_W);
+    addVec3f(q->linear_velocity_W, temp_vel, q->linear_velocity_W);
     
-    multScalVec3f(dt, state->linear_velocity_W, temp_pos);
-    addVec3f(state->linear_position_W, temp_pos, state->linear_position_W);
+    multScalVec3f(dt, q->linear_velocity_W, temp_pos);
+    addVec3f(q->linear_position_W, temp_pos, q->linear_position_W);
 
     // Prevent drone from going below the ground
-    if (state->linear_position_W[1] < -0.5f) {
-        state->linear_position_W[1] = -0.5f;
-        state->linear_velocity_W[1] = 0.0f;
+    if (q->linear_position_W[1] < -0.5f) {
+        q->linear_position_W[1] = -0.5f;
+        q->linear_velocity_W[1] = 0.0f;
     }
 
     // Update angular velocity
     multScalVec3f(dt, angular_acceleration_B, temp_ang);
-    addVec3f(state->angular_velocity_B, temp_ang, state->angular_velocity_B);
+    addVec3f(q->angular_velocity_B, temp_ang, q->angular_velocity_B);
 
     // Update rotation matrix
     float so3_result[9], temp_mat[9], temp_mat2[9];
-    so3hat(state->angular_velocity_B, so3_result);
-    multMat3f(state->R_W_B, so3_result, temp_mat);
+    so3hat(q->angular_velocity_B, so3_result);
+    multMat3f(q->R_W_B, so3_result, temp_mat);
     multScalMat3f(dt, temp_mat, temp_mat2);
-    addMat3f(state->R_W_B, temp_mat2, state->R_W_B);
+    addMat3f(q->R_W_B, temp_mat2, q->R_W_B);
 }
