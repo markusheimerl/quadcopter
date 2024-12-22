@@ -5,8 +5,8 @@
 int main() {
     // Initialize meshes
     Mesh* meshes[] = {
-        create_mesh("drone.obj", "drone.bmp"),
-        create_mesh("ground.obj", "ground.bmp")
+        create_mesh("rasterizer/drone.obj", "rasterizer/drone.bmp"),
+        create_mesh("rasterizer/ground.obj", "rasterizer/ground.bmp")
     };
 
     // Initialize visualization buffers
