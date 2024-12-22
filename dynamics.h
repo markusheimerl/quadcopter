@@ -89,6 +89,39 @@ void multScalMat3f(double s, const double m[9], double result[9]) {
     }
 }
 
+void orthonormalize_rotation_matrix(double R[9]) {
+    // Gram-Schmidt orthogonalization
+    double x[3] = {R[0], R[3], R[6]};
+    double y[3] = {R[1], R[4], R[7]};
+    double z[3] = {R[2], R[5], R[8]};
+    
+    // Normalize x
+    double len = sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2]);
+    if (len > 0) {
+        x[0] /= len; x[1] /= len; x[2] /= len;
+    }
+    
+    // Make y orthogonal to x
+    double dot = x[0]*y[0] + x[1]*y[1] + x[2]*y[2];
+    y[0] -= dot*x[0]; y[1] -= dot*x[1]; y[2] -= dot*x[2];
+    
+    // Normalize y
+    len = sqrt(y[0]*y[0] + y[1]*y[1] + y[2]*y[2]);
+    if (len > 0) {
+        y[0] /= len; y[1] /= len; y[2] /= len;
+    }
+    
+    // z = x × y
+    z[0] = x[1]*y[2] - x[2]*y[1];
+    z[1] = x[2]*y[0] - x[0]*y[2];
+    z[2] = x[0]*y[1] - x[1]*y[0];
+    
+    // Store back in matrix
+    R[0] = x[0]; R[3] = x[1]; R[6] = x[2];
+    R[1] = y[0]; R[4] = y[1]; R[7] = y[2];
+    R[2] = z[0]; R[5] = z[1]; R[8] = z[2];
+}
+
 // Constants
 const double k_f = 0.0004905f;
 const double k_m = 0.00004905f;
@@ -243,4 +276,7 @@ void update_dynamics(Quad* q) {
     multMat3f(q->R_W_B, so3_result, temp_mat);
     multScalMat3f(dt, temp_mat, temp_mat2);
     addMat3f(q->R_W_B, temp_mat2, q->R_W_B);
+
+    // Orthonormalize rotation matrix
+    orthonormalize_rotation_matrix(q->R_W_B);
 }
