@@ -41,33 +41,16 @@ int main() {
         
         // Print state
         printf("Frame %d/%d\n", frame + 1, FRAMES);
-        printf("Position: [%.3f, %.3f, %.3f]\n", 
-               quad->linear_position_W[0], 
-               quad->linear_position_W[1], 
-               quad->linear_position_W[2]);
-        printf("Angular Velocity: [%.3f, %.3f, %.3f]\n",
-               quad->angular_velocity_B[0],
-               quad->angular_velocity_B[1],
-               quad->angular_velocity_B[2]);
+        printf("Position: [%.3f, %.3f, %.3f]\n", quad->linear_position_W[0], quad->linear_position_W[1], quad->linear_position_W[2]);
+        printf("Angular Velocity: [%.3f, %.3f, %.3f]\n", quad->angular_velocity_B[0], quad->angular_velocity_B[1], quad->angular_velocity_B[2]);
         printf("---\n");
     }
 
     // Cleanup
     free(quad);
-    ge_close_gif(gif);
     free(frame_buffer);
+    free_meshes(meshes, 2);
+    ge_close_gif(gif);
     
-    for (int i = 0; i < 2; i++) {
-        if (meshes[i]) {
-            free(meshes[i]->vertices);
-            free(meshes[i]->initial_vertices);
-            free(meshes[i]->texcoords);
-            free(meshes[i]->triangles);
-            free(meshes[i]->texcoord_indices);
-            free(meshes[i]->texture_data);
-            free(meshes[i]);
-        }
-    }
-
     return 0;
 }

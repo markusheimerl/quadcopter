@@ -98,6 +98,20 @@ Mesh* create_mesh(const char* obj_file, const char* texture_file) {
     return mesh;
 }
 
+void free_meshes(Mesh** meshes, int num_meshes) {
+    for (int i = 0; i < num_meshes; i++) {
+        if (meshes[i]) {
+            free(meshes[i]->vertices);
+            free(meshes[i]->initial_vertices);
+            free(meshes[i]->texcoords);
+            free(meshes[i]->triangles);
+            free(meshes[i]->texcoord_indices);
+            free(meshes[i]->texture_data);
+            free(meshes[i]);
+        }
+    }
+}
+
 void vertex_shader(Mesh** meshes, int num_meshes, double camera_pos[3], double camera_target[3]) {
     // Calculate view matrix
     double forward[3] = {
