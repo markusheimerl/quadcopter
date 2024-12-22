@@ -217,6 +217,7 @@ void update_dynamics(DroneState* state) {
     multScalVec3f(dt, state->linear_velocity_W, temp_pos);
     addVec3f(state->linear_position_W, temp_pos, state->linear_position_W);
 
+    // Prevent drone from going below the ground
     if (state->linear_position_W[1] < -0.5f) {
         state->linear_position_W[1] = -0.5f;
         state->linear_velocity_W[1] = 0.0f;
