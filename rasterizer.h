@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <float.h>
-#include "gif.h"
+#include <stdint.h>
 #include "bmp.h"
 #include "obj.h"
 
