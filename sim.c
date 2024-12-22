@@ -21,7 +21,7 @@ int main() {
 
     // Initialize drone state
     Quad quad = {
-        .omega = {omega_stable+1.0, omega_stable+1.0, omega_stable+1.0, omega_stable+1.0},
+        .omega = {omega_stable, omega_stable, omega_stable, omega_stable},
         .angular_velocity_B = {0, 0, 0},
         .linear_velocity_W = {0, 0, 0},
         .linear_position_W = {0, 1, 0}
