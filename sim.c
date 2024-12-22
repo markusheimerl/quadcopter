@@ -28,17 +28,9 @@ int main() {
         // Update dynamics
         update_dynamics(quad);
         
-        // Update drone position and orientation for visualization
-        double drone_pos[3] = {
-            quad->linear_position_W[0],
-            quad->linear_position_W[1],
-            quad->linear_position_W[2]
-        };
-
-        // Transform meshes with full rotation matrix
-        transform_mesh(meshes[0], drone_pos, 0.5, quad->R_W_B);
-        double identity[9] = {1,0,0, 0,1,0, 0,0,1};
-        transform_mesh(meshes[1], (double[3]){0.0, -0.5, 0.0}, 1.0, identity);
+        // Transform meshes
+        transform_mesh(meshes[0], (double[3]){quad->linear_position_W[0], quad->linear_position_W[1], quad->linear_position_W[2]}, 0.5, quad->R_W_B);
+        transform_mesh(meshes[1], (double[3]){0.0, -0.5, 0.0}, 1.0, (double[9]){1,0,0, 0,1,0, 0,0,1});
 
         // Render frame
         vertex_shader(meshes, 2, camera_pos, camera_target);
