@@ -11,7 +11,6 @@ int main() {
 
     // Initialize visualization buffers
     uint8_t *frame_buffer = calloc(WIDTH * HEIGHT * 3, sizeof(uint8_t));
-    uint8_t *flipped_buffer = calloc(WIDTH * HEIGHT * 3, sizeof(uint8_t));
     ge_GIF *gif = ge_new_gif("drone_simulation.gif", WIDTH, HEIGHT, 4, -1, 0);
 
     // Initialize camera
@@ -61,24 +60,11 @@ int main() {
         transform_mesh(meshes[1], (double[3]){0.0, -0.5, 0.0}, 1.0, 0.0);
 
         // Render frame
-        for (int i = 0; i < 2; i++) {
-            vertex_shader(meshes[i], camera_pos, camera_target, camera_up);
-        }
+        vertex_shader(meshes, 2, camera_pos, camera_target, camera_up);
         rasterize(frame_buffer, meshes, 2);
 
-        // Flip buffer vertically
-        for (int y = 0; y < HEIGHT; y++) {
-            for (int x = 0; x < WIDTH; x++) {
-                int src_idx = (y * WIDTH + x) * 3;
-                int dst_idx = ((HEIGHT - 1 - y) * WIDTH + x) * 3;
-                flipped_buffer[dst_idx] = frame_buffer[src_idx];
-                flipped_buffer[dst_idx + 1] = frame_buffer[src_idx + 1];
-                flipped_buffer[dst_idx + 2] = frame_buffer[src_idx + 2];
-            }
-        }
-
         // Add frame to GIF
-        ge_add_frame(gif, flipped_buffer, 6);
+        ge_add_frame(gif, frame_buffer, 6);
         
         // Print state
         printf("Frame %d/%d\n", frame + 1, FRAMES);
@@ -96,7 +82,6 @@ int main() {
     // Cleanup
     ge_close_gif(gif);
     free(frame_buffer);
-    free(flipped_buffer);
     
     for (int i = 0; i < 2; i++) {
         if (meshes[i]) {

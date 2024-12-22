@@ -96,7 +96,7 @@ Mesh* create_mesh(const char* obj_file, const char* texture_file) {
     return mesh;
 }
 
-void vertex_shader(Mesh* mesh, double camera_pos[3], double camera_target[3], double camera_up[3]) {
+void vertex_shader(Mesh** meshes, int num_meshes, double camera_pos[3], double camera_target[3], double camera_up[3]) {
     // Calculate view matrix
     double forward[3] = {
         camera_target[0] - camera_pos[0],
@@ -131,50 +131,52 @@ void vertex_shader(Mesh* mesh, double camera_pos[3], double camera_target[3], do
     };
     
     // Transform all vertices
-    for (int i = 0; i < mesh->counts[0]; i++) {
-        // Apply model transform
-        double pos[4] = {
-            mesh->initial_vertices[i * 3],
-            mesh->initial_vertices[i * 3 + 1],
-            mesh->initial_vertices[i * 3 + 2],
-            1.0
-        };
-        double transformed[4] = {0};
-        
-        // Model transform
-        for (int row = 0; row < 4; row++) {
-            for (int col = 0; col < 4; col++) {
-                transformed[row] += mesh->transform[row][col] * pos[col];
+    for (int i = 0; i < num_meshes; i++) {
+        for (int j = 0; j < meshes[i]->counts[0]; j++) {
+            // Apply model transform
+            double pos[4] = {
+                meshes[i]->initial_vertices[j * 3],
+                meshes[i]->initial_vertices[j * 3 + 1],
+                meshes[i]->initial_vertices[j * 3 + 2],
+                1.0
+            };
+            double transformed[4] = {0};
+            
+            // Model transform
+            for (int row = 0; row < 4; row++) {
+                for (int col = 0; col < 4; col++) {
+                    transformed[row] += meshes[i]->transform[row][col] * pos[col];
+                }
             }
-        }
-        
-        // View transform
-        double viewed[4] = {0};
-        for (int row = 0; row < 4; row++) {
-            for (int col = 0; col < 4; col++) {
-                viewed[row] += view_matrix[row][col] * transformed[col];
+            
+            // View transform
+            double viewed[4] = {0};
+            for (int row = 0; row < 4; row++) {
+                for (int col = 0; col < 4; col++) {
+                    viewed[row] += view_matrix[row][col] * transformed[col];
+                }
             }
-        }
-        
-        // Projection transform
-        double projected[4] = {0};
-        for (int row = 0; row < 4; row++) {
-            for (int col = 0; col < 4; col++) {
-                projected[row] += projection_matrix[row][col] * viewed[col];
+            
+            // Projection transform
+            double projected[4] = {0};
+            for (int row = 0; row < 4; row++) {
+                for (int col = 0; col < 4; col++) {
+                    projected[row] += projection_matrix[row][col] * viewed[col];
+                }
             }
+            
+            // Perspective divide
+            if (projected[3] != 0) {
+                projected[0] /= projected[3];
+                projected[1] /= projected[3];
+                projected[2] /= projected[3];
+            }
+            
+            // Store NDC coordinates
+            meshes[i]->vertices[j * 3] = projected[0];
+            meshes[i]->vertices[j * 3 + 1] = projected[1];
+            meshes[i]->vertices[j * 3 + 2] = projected[2];
         }
-        
-        // Perspective divide
-        if (projected[3] != 0) {
-            projected[0] /= projected[3];
-            projected[1] /= projected[3];
-            projected[2] /= projected[3];
-        }
-        
-        // Store NDC coordinates
-        mesh->vertices[i * 3] = projected[0];
-        mesh->vertices[i * 3 + 1] = projected[1];
-        mesh->vertices[i * 3 + 2] = projected[2];
     }
 }
 
