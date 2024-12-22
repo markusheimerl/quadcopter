@@ -30,6 +30,7 @@ int main() {
         transform_mesh(meshes[0], (double[3]){quad->linear_position_W[0], quad->linear_position_W[1], quad->linear_position_W[2]}, 0.5, quad->R_W_B);
 
         // Render frame and add to GIF
+        memset(frame_buffer, 0, WIDTH * HEIGHT * 3);
         vertex_shader(meshes, 2, camera_pos, camera_target);
         rasterize(frame_buffer, meshes, 2);
         ge_add_frame(gif, frame_buffer, 6);
