@@ -20,17 +20,17 @@ int main() {
     // Create and initialize quad
     Quad* quad = create_quad(1.0f);
 
+    // Transform ground mesh
+    transform_mesh(meshes[1], (double[3]){0.0, -0.5, 0.0}, 1.0, (double[9]){1,0,0, 0,1,0, 0,0,1});
+
     // Main simulation loop
     for(int frame = 0; frame < FRAMES; frame++) {
         // Clear frame buffer
         memset(frame_buffer, 0, WIDTH * HEIGHT * 3);
 
-        // Update dynamics
+        // Update dynamics and transform drone mesh
         update_dynamics(quad);
-        
-        // Transform meshes
         transform_mesh(meshes[0], (double[3]){quad->linear_position_W[0], quad->linear_position_W[1], quad->linear_position_W[2]}, 0.5, quad->R_W_B);
-        transform_mesh(meshes[1], (double[3]){0.0, -0.5, 0.0}, 1.0, (double[9]){1,0,0, 0,1,0, 0,0,1});
 
         // Render frame
         vertex_shader(meshes, 2, camera_pos, camera_target);
