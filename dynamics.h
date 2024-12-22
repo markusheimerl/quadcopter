@@ -149,9 +149,9 @@ Quad* create_quad(double initial_height) {
     if (!quad) return NULL;
 
     // Initialize motor speeds to stable hover
-    quad->omega[0] = omega_stable;
+    quad->omega[0] = omega_stable + 0.6f;
     quad->omega[1] = omega_stable;
-    quad->omega[2] = omega_stable;
+    quad->omega[2] = omega_stable + 0.6f;
     quad->omega[3] = omega_stable;
 
     // Initialize velocities to zero
