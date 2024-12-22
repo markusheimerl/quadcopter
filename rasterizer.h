@@ -244,7 +244,7 @@ void rasterize(uint8_t *image, Mesh **meshes, int num_meshes) {
 
             // Triangle area
             double area = (x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0);
-            if (fabs(area) < 1e-8) continue;  // Skip degenerate triangles
+            if (fabs(area) < 1e-8) continue;  // Skip tiny triangles
 
             for (int y = min_y; y <= max_y; y++) {
                 for (int x = min_x; x <= max_x; x++) {
