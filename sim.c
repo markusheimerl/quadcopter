@@ -1,6 +1,6 @@
+#include "gif.h"
 #include "dynamics.h"
 #include "rasterizer.h"
-#include "gif.h"
 
 int main() {
     // Initialize meshes
