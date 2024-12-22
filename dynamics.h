@@ -111,6 +111,38 @@ typedef struct {
     float I_mat[9];              // Inertia matrix
 } Quad;
 
+Quad* create_quad(float initial_height) {
+    Quad* quad = (Quad*)malloc(sizeof(Quad));
+    if (!quad) return NULL;
+
+    // Initialize motor speeds to stable hover
+    for (int i = 0; i < 4; i++) {
+        quad->omega[i] = omega_stable;
+    }
+
+    // Initialize velocities to zero
+    memset(quad->angular_velocity_B, 0, 3 * sizeof(float));
+    memset(quad->linear_velocity_W, 0, 3 * sizeof(float));
+
+    // Set initial position
+    quad->linear_position_W[0] = 0.0f;  // x
+    quad->linear_position_W[1] = initial_height;  // y (height)
+    quad->linear_position_W[2] = 0.0f;  // z
+
+    // Initialize rotation matrix to identity (no initial rotation)
+    float temp1[9], temp2[9];
+    xRotMat3f(0, temp1);
+    yRotMat3f(0, temp2);
+    multMat3f(temp1, temp2, temp1);
+    zRotMat3f(0, temp2);
+    multMat3f(temp1, temp2, quad->R_W_B);
+
+    // Initialize inertia matrix
+    vecToDiagMat3f(I, quad->I_mat);
+
+    return quad;
+}
+
 void update_dynamics(Quad* q) {
     // Limit motor speeds
     for(int i = 0; i < 4; i++) {
