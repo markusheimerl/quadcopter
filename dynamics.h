@@ -47,29 +47,6 @@ void vecToDiagMat3f(const float v[3], float result[9]) {
     result[6] = 0.0f; result[7] = 0.0f; result[8] = v[2];
 }
 
-void invMat3f(const float m[9], float result[9]) {
-    float det = m[0] * (m[4] * m[8] - m[7] * m[5]) -
-                m[1] * (m[3] * m[8] - m[5] * m[6]) +
-                m[2] * (m[3] * m[7] - m[4] * m[6]);
-
-    if (det == 0) {
-        fprintf(stderr, "Matrix is not invertible\n");
-        exit(1);
-    }
-
-    float invDet = 1.0f / det;
-
-    result[0] = invDet * (m[4] * m[8] - m[7] * m[5]);
-    result[1] = invDet * (m[2] * m[7] - m[1] * m[8]);
-    result[2] = invDet * (m[1] * m[5] - m[2] * m[4]);
-    result[3] = invDet * (m[5] * m[6] - m[3] * m[8]);
-    result[4] = invDet * (m[0] * m[8] - m[2] * m[6]);
-    result[5] = invDet * (m[3] * m[2] - m[0] * m[5]);
-    result[6] = invDet * (m[3] * m[7] - m[6] * m[4]);
-    result[7] = invDet * (m[6] * m[1] - m[0] * m[7]);
-    result[8] = invDet * (m[0] * m[4] - m[3] * m[1]);
-}
-
 void xRotMat3f(float rads, float result[9]) {
     float s = sinf(rads);
     float c = cosf(rads);
