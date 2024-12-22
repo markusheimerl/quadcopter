@@ -35,15 +35,8 @@ int main() {
             quad->linear_position_W[2]
         };
 
-        // Convert R_W_B from float to double
-        double rotation_matrix[9];
-        for(int i = 0; i < 9; i++) {
-            rotation_matrix[i] = (double)quad->R_W_B[i];
-        }
-
         // Transform meshes with full rotation matrix
-        transform_mesh(meshes[0], drone_pos, 0.5, rotation_matrix);
-        // For the ground, we can use identity rotation matrix
+        transform_mesh(meshes[0], drone_pos, 0.5, quad->R_W_B);
         double identity[9] = {1,0,0, 0,1,0, 0,0,1};
         transform_mesh(meshes[1], (double[3]){0.0, -0.5, 0.0}, 1.0, identity);
 
