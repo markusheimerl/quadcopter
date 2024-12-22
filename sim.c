@@ -16,7 +16,6 @@ int main() {
     // Initialize camera
     double camera_pos[3] = {-2.0, 2.0, -2.0};
     double camera_target[3] = {0.0, 0.0, 0.0};
-    double camera_up[3] = {0.0, 1.0, 0.0};
 
     // Create and initialize quad
     Quad* quad = create_quad(1.0f);
@@ -49,7 +48,7 @@ int main() {
         transform_mesh(meshes[1], (double[3]){0.0, -0.5, 0.0}, 1.0, identity);
 
         // Render frame
-        vertex_shader(meshes, 2, camera_pos, camera_target, camera_up);
+        vertex_shader(meshes, 2, camera_pos, camera_target);
         rasterize(frame_buffer, meshes, 2);
 
         // Add frame to GIF

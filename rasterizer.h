@@ -98,7 +98,7 @@ Mesh* create_mesh(const char* obj_file, const char* texture_file) {
     return mesh;
 }
 
-void vertex_shader(Mesh** meshes, int num_meshes, double camera_pos[3], double camera_target[3], double camera_up[3]) {
+void vertex_shader(Mesh** meshes, int num_meshes, double camera_pos[3], double camera_target[3]) {
     // Calculate view matrix
     double forward[3] = {
         camera_target[0] - camera_pos[0],
@@ -108,6 +108,7 @@ void vertex_shader(Mesh** meshes, int num_meshes, double camera_pos[3], double c
     VEC_NORM(forward);
     
     double right[3];
+    double camera_up[3] = {0, 1, 0};
     VEC_CROSS(forward, camera_up, right);
     VEC_NORM(right);
     
