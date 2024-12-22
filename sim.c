@@ -25,18 +25,13 @@ int main() {
 
     // Main simulation loop
     for(int frame = 0; frame < FRAMES; frame++) {
-        // Clear frame buffer
-        memset(frame_buffer, 0, WIDTH * HEIGHT * 3);
-
         // Update dynamics and transform drone mesh
         update_dynamics(quad);
         transform_mesh(meshes[0], (double[3]){quad->linear_position_W[0], quad->linear_position_W[1], quad->linear_position_W[2]}, 0.5, quad->R_W_B);
 
-        // Render frame
+        // Render frame and add to GIF
         vertex_shader(meshes, 2, camera_pos, camera_target);
         rasterize(frame_buffer, meshes, 2);
-
-        // Add frame to GIF
         ge_add_frame(gif, frame_buffer, 6);
         
         // Print state
