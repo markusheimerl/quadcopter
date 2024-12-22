@@ -1,0 +1,3 @@
+[submodule "rasterizer"]
+	path = rasterizer
+	url = https://github.com/markusheimerl/rasterizer.git
