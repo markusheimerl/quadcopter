@@ -30,20 +30,22 @@ typedef struct {
     int texture_dims[2];
 } Mesh;
 
-void transform_mesh(Mesh* mesh, double translate[3], double scale, double rotate_y) {
-    // Create rotation matrix around Y axis
-    double cos_y = cos(rotate_y);
-    double sin_y = sin(rotate_y);
-    
+void transform_mesh(Mesh* mesh, double translate[3], double scale, double rotation_matrix[9]) {
     // Build transformation matrix
     memset(mesh->transform, 0, 16 * sizeof(double));
     
-    // Scale
-    mesh->transform[0][0] = scale * cos_y;
-    mesh->transform[0][2] = scale * sin_y;
-    mesh->transform[1][1] = scale;
-    mesh->transform[2][0] = -scale * sin_y;
-    mesh->transform[2][2] = scale * cos_y;
+    // Scale and rotation combined
+    mesh->transform[0][0] = scale * rotation_matrix[0];
+    mesh->transform[0][1] = scale * rotation_matrix[1];
+    mesh->transform[0][2] = scale * rotation_matrix[2];
+    
+    mesh->transform[1][0] = scale * rotation_matrix[3];
+    mesh->transform[1][1] = scale * rotation_matrix[4];
+    mesh->transform[1][2] = scale * rotation_matrix[5];
+    
+    mesh->transform[2][0] = scale * rotation_matrix[6];
+    mesh->transform[2][1] = scale * rotation_matrix[7];
+    mesh->transform[2][2] = scale * rotation_matrix[8];
     
     // Translation
     mesh->transform[0][3] = translate[0];

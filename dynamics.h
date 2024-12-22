@@ -116,9 +116,10 @@ Quad* create_quad(float initial_height) {
     if (!quad) return NULL;
 
     // Initialize motor speeds to stable hover
-    for (int i = 0; i < 4; i++) {
-        quad->omega[i] = omega_stable;
-    }
+    quad->omega[0] = omega_stable;
+    quad->omega[1] = omega_stable;
+    quad->omega[2] = omega_stable;
+    quad->omega[3] = omega_stable;
 
     // Initialize velocities to zero
     memset(quad->angular_velocity_B, 0, 3 * sizeof(float));

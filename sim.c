@@ -35,13 +35,18 @@ int main() {
             quad->linear_position_W[1],
             quad->linear_position_W[2]
         };
-        
-        // Extract rotation angle from R_W_B matrix
-        double rotation_y = atan2(quad->R_W_B[2], quad->R_W_B[0]);
-        
-        // Transform meshes
-        transform_mesh(meshes[0], drone_pos, 0.5, rotation_y);
-        transform_mesh(meshes[1], (double[3]){0.0, -0.5, 0.0}, 1.0, 0.0);
+
+        // Convert R_W_B from float to double
+        double rotation_matrix[9];
+        for(int i = 0; i < 9; i++) {
+            rotation_matrix[i] = (double)quad->R_W_B[i];
+        }
+
+        // Transform meshes with full rotation matrix
+        transform_mesh(meshes[0], drone_pos, 0.5, rotation_matrix);
+        // For the ground, we can use identity rotation matrix
+        double identity[9] = {1,0,0, 0,1,0, 0,0,1};
+        transform_mesh(meshes[1], (double[3]){0.0, -0.5, 0.0}, 1.0, identity);
 
         // Render frame
         vertex_shader(meshes, 2, camera_pos, camera_target, camera_up);
