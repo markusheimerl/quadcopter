@@ -3,10 +3,21 @@
 
 int main() {
     // Initialize meshes
-    Mesh* meshes[] = {
-        create_mesh("drone.obj", "drone.bmp"),
-        create_mesh("ground.obj", "ground.bmp")
-    };
+    Mesh* drone_mesh = create_mesh("drone.obj", "drone.bmp");
+    
+    // Create array of ground meshes for 10x10 grid
+    const int GROUND_COUNT = 100;  // 10x10 grid
+    Mesh* ground_meshes[GROUND_COUNT];
+    for(int i = 0; i < GROUND_COUNT; i++) {
+        ground_meshes[i] = create_mesh("ground.obj", "ground.bmp");
+    }
+
+    // Create array of all meshes (1 drone + 100 ground tiles)
+    Mesh* all_meshes[GROUND_COUNT + 1];
+    all_meshes[0] = drone_mesh;
+    for(int i = 0; i < GROUND_COUNT; i++) {
+        all_meshes[i + 1] = ground_meshes[i];
+    }
 
     // Initialize visualization buffers
     uint8_t *frame_buffer = calloc(WIDTH * HEIGHT * 3, sizeof(uint8_t));
@@ -55,15 +66,26 @@ int main() {
         // Extract rotation angle from R_W_B matrix
         double rotation_y = atan2(drone_state.R_W_B[2], drone_state.R_W_B[0]);
         
-        // Transform meshes
-        transform_mesh(meshes[0], drone_pos, 0.5, rotation_y);
-        transform_mesh(meshes[1], (double[3]){0.0, -0.5, 0.0}, 1.0, 0.0);
+        // Transform drone mesh
+        transform_mesh(drone_mesh, drone_pos, 0.5, rotation_y);
 
-        // Render frame
-        for (int i = 0; i < 2; i++) {
-            vertex_shader(meshes[i], camera_pos, camera_target, camera_up);
+        // Transform ground meshes in a 10x10 grid
+        for(int z = 0; z < 10; z++) {
+            for(int x = 0; x < 10; x++) {
+                int idx = z * 10 + x;
+                double ground_pos[3] = {(x - 5) * 2.0, -0.5, (z - 5) * 2.0};
+                transform_mesh(ground_meshes[idx], ground_pos, 1.0, 0.0);
+            }
         }
-        rasterize(frame_buffer, meshes, 2);
+
+        // Apply vertex shader to all meshes
+        vertex_shader(drone_mesh, camera_pos, camera_target, camera_up);
+        for(int i = 0; i < GROUND_COUNT; i++) {
+            vertex_shader(ground_meshes[i], camera_pos, camera_target, camera_up);
+        }
+
+        // Rasterize all meshes at once
+        rasterize(frame_buffer, all_meshes, GROUND_COUNT + 1);
 
         // Flip buffer vertically
         for (int y = 0; y < HEIGHT; y++) {
@@ -97,16 +119,24 @@ int main() {
     free(frame_buffer);
     free(flipped_buffer);
     
-    for (int i = 0; i < 2; i++) {
-        if (meshes[i]) {
-            free(meshes[i]->vertices);
-            free(meshes[i]->initial_vertices);
-            free(meshes[i]->texcoords);
-            free(meshes[i]->triangles);
-            free(meshes[i]->texcoord_indices);
-            free(meshes[i]->texture_data);
-            free(meshes[i]);
-        }
+    // Free drone mesh
+    free(drone_mesh->vertices);
+    free(drone_mesh->initial_vertices);
+    free(drone_mesh->texcoords);
+    free(drone_mesh->triangles);
+    free(drone_mesh->texcoord_indices);
+    free(drone_mesh->texture_data);
+    free(drone_mesh);
+    
+    // Free ground meshes
+    for(int i = 0; i < GROUND_COUNT; i++) {
+        free(ground_meshes[i]->vertices);
+        free(ground_meshes[i]->initial_vertices);
+        free(ground_meshes[i]->texcoords);
+        free(ground_meshes[i]->triangles);
+        free(ground_meshes[i]->texcoord_indices);
+        free(ground_meshes[i]->texture_data);
+        free(ground_meshes[i]);
     }
 
     return 0;
