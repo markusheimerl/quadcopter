@@ -5,6 +5,93 @@
 #include <string.h>
 
 // Vector and matrix operations
+void normalizeVec3f(double v[3]) {
+    double len = sqrt(v[0]*v[0] + v[1]*v[1] + v[2]*v[2]);
+    if (len > 0) {
+        v[0] /= len;
+        v[1] /= len;
+        v[2] /= len;
+    }
+}
+
+void transpMat3f(const double m[9], double result[9]) {
+    result[0] = m[0]; result[1] = m[3]; result[2] = m[6];
+    result[3] = m[1]; result[4] = m[4]; result[5] = m[7];
+    result[6] = m[2]; result[7] = m[5]; result[8] = m[8];
+}
+
+void subMat3f(const double a[9], const double b[9], double result[9]) {
+    for(int i = 0; i < 9; i++) {
+        result[i] = a[i] - b[i];
+    }
+}
+
+void subVec3f(const double v1[3], const double v2[3], double result[3]) {
+    result[0] = v1[0] - v2[0];
+    result[1] = v1[1] - v2[1];
+    result[2] = v1[2] - v2[2];
+}
+
+// Convert skew-symmetric matrix to vector (inverse of so3hat)
+void so3vee(const double m[9], double result[3]) {
+    result[0] = (m[7] - m[5]) / 2.0;
+    result[1] = (m[2] - m[6]) / 2.0;
+    result[2] = (m[3] - m[1]) / 2.0;
+}
+
+void inv4Mat4f(const double m[16], double result[16]) {
+    double s0 = m[0] * m[5] - m[4] * m[1];
+    double s1 = m[0] * m[6] - m[4] * m[2];
+    double s2 = m[0] * m[7] - m[4] * m[3];
+    double s3 = m[1] * m[6] - m[5] * m[2];
+    double s4 = m[1] * m[7] - m[5] * m[3];
+    double s5 = m[2] * m[7] - m[6] * m[3];
+
+    double c5 = m[10] * m[15] - m[14] * m[11];
+    double c4 = m[9] * m[15] - m[13] * m[11];
+    double c3 = m[9] * m[14] - m[13] * m[10];
+    double c2 = m[8] * m[15] - m[12] * m[11];
+    double c1 = m[8] * m[14] - m[12] * m[10];
+    double c0 = m[8] * m[13] - m[12] * m[9];
+
+    double det = s0 * c5 - s1 * c4 + s2 * c3 + s3 * c2 - s4 * c1 + s5 * c0;
+
+    if (fabs(det) < 1e-10) {
+        // Handle non-invertible matrix
+        memset(result, 0, 16 * sizeof(double));
+        return;
+    }
+
+    double invdet = 1.0 / det;
+
+    result[0] = (m[5] * c5 - m[6] * c4 + m[7] * c3) * invdet;
+    result[1] = (-m[1] * c5 + m[2] * c4 - m[3] * c3) * invdet;
+    result[2] = (m[13] * s5 - m[14] * s4 + m[15] * s3) * invdet;
+    result[3] = (-m[9] * s5 + m[10] * s4 - m[11] * s3) * invdet;
+
+    result[4] = (-m[4] * c5 + m[6] * c2 - m[7] * c1) * invdet;
+    result[5] = (m[0] * c5 - m[2] * c2 + m[3] * c1) * invdet;
+    result[6] = (-m[12] * s5 + m[14] * s2 - m[15] * s1) * invdet;
+    result[7] = (m[8] * s5 - m[10] * s2 + m[11] * s1) * invdet;
+
+    result[8] = (m[4] * c4 - m[5] * c2 + m[7] * c0) * invdet;
+    result[9] = (-m[0] * c4 + m[1] * c2 - m[3] * c0) * invdet;
+    result[10] = (m[12] * s4 - m[13] * s2 + m[15] * s0) * invdet;
+    result[11] = (-m[8] * s4 + m[9] * s2 - m[11] * s0) * invdet;
+
+    result[12] = (-m[4] * c3 + m[5] * c1 - m[6] * c0) * invdet;
+    result[13] = (m[0] * c3 - m[1] * c1 + m[2] * c0) * invdet;
+    result[14] = (-m[12] * s3 + m[13] * s1 - m[14] * s0) * invdet;
+    result[15] = (m[8] * s3 - m[9] * s1 + m[10] * s0) * invdet;
+}
+
+void multMatVec4f(const double m[16], const double v[4], double result[4]) {
+    result[0] = m[0]*v[0] + m[1]*v[1] + m[2]*v[2] + m[3]*v[3];
+    result[1] = m[4]*v[0] + m[5]*v[1] + m[6]*v[2] + m[7]*v[3];
+    result[2] = m[8]*v[0] + m[9]*v[1] + m[10]*v[2] + m[11]*v[3];
+    result[3] = m[12]*v[0] + m[13]*v[1] + m[14]*v[2] + m[15]*v[3];
+}
+
 void crossVec3f(const double v1[3], const double v2[3], double result[3]) {
     result[0] = v1[1] * v2[2] - v1[2] * v2[1];
     result[1] = v1[2] * v2[0] - v1[0] * v2[2];
@@ -149,9 +236,9 @@ Quad* create_quad(double initial_height) {
     if (!quad) return NULL;
 
     // Initialize motor speeds to stable hover
-    quad->omega[0] = omega_stable + 0.6f;
+    quad->omega[0] = omega_stable;
     quad->omega[1] = omega_stable;
-    quad->omega[2] = omega_stable + 0.6f;
+    quad->omega[2] = omega_stable;
     quad->omega[3] = omega_stable;
 
     // Initialize velocities to zero
