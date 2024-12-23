@@ -32,7 +32,6 @@ void subVec3f(const double v1[3], const double v2[3], double result[3]) {
     result[2] = v1[2] - v2[2];
 }
 
-// Convert skew-symmetric matrix to vector (inverse of so3hat)
 void so3vee(const double m[9], double result[3]) {
     result[0] = (m[7] - m[5]) / 2.0;
     result[1] = (m[2] - m[6]) / 2.0;
