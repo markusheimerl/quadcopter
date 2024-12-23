@@ -199,3 +199,56 @@ void yRotMat3f(float rads, float* result) {
 void zRotMat3f(float rads, float* result) {
     rotMat3f('z', rads, result);
 }
+
+// Constants
+#define K_F 0.0004905f
+#define K_M 0.00004905f
+#define L 0.25f
+#define L_SQRT2 (L / sqrtf(2.0f))
+#define G 9.81f
+#define M 0.5f
+#define DT 0.01f
+#define OMEGA_MIN 30.0f
+#define OMEGA_MAX 70.0f
+#define OMEGA_STABLE 50.0f
+
+// State variables
+float omega[4];
+float angular_velocity_B[3];
+float linear_velocity_W[3];
+float linear_position_W[3];
+float R_W_B[3][3];  // 3x3 rotation matrix
+float I[3] = {0.01f, 0.02f, 0.01f};
+
+void init_drone_state(void) {
+    // Initialize omegas
+    for(int i = 0; i < 4; i++) {
+        omega[i] = OMEGA_STABLE;
+    }
+    
+    // Initialize angular velocity
+    for(int i = 0; i < 3; i++) {
+        angular_velocity_B[i] = 0.0f;
+    }
+    
+    // Initialize linear velocity
+    for(int i = 0; i < 3; i++) {
+        linear_velocity_W[i] = 0.0f;
+    }
+    
+    // Initialize position (0, 1, 0)
+    linear_position_W[0] = 0.0f;
+    linear_position_W[1] = 1.0f;
+    linear_position_W[2] = 0.0f;
+    
+    // Initialize rotation matrix (identity matrix from rotation of 0 around all axes)
+    float temp[3][3];
+    float result[3][3];
+    
+    // Get rotation matrices for 0 rotation around each axis and multiply them
+    xRotMat3f(0.0f, temp);
+    yRotMat3f(0.0f, result);
+    multMat3f(temp, result, R_W_B);
+    zRotMat3f(0.0f, temp);
+    multMat3f(R_W_B, temp, R_W_B);
+}
