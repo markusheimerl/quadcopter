@@ -3,229 +3,58 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <math.h>
-#include <unistd.h>
-#include <string.h>
+#include "vmath.h"
 
-// Vector and matrix operations
-void normalizeVec3f(double v[3]) {
-    double len = sqrt(v[0]*v[0] + v[1]*v[1] + v[2]*v[2]);
-    if (len > 0) {
-        v[0] /= len;
-        v[1] /= len;
-        v[2] /= len;
+void orthonormalize_rotation_matrix(double* R) {
+    double x[3], y[3], z[3];
+    double temp[3];
+    
+    // Extract columns
+    for(int i = 0; i < 3; i++) {
+        x[i] = R[i];      // First column
+        y[i] = R[i + 3];  // Second column
+        z[i] = R[i + 6];  // Third column
     }
-}
-
-void transpMat3f(const double m[9], double result[9]) {
-    result[0] = m[0]; result[1] = m[3]; result[2] = m[6];
-    result[3] = m[1]; result[4] = m[4]; result[5] = m[7];
-    result[6] = m[2]; result[7] = m[5]; result[8] = m[8];
-}
-
-void subMat3f(const double a[9], const double b[9], double result[9]) {
-    for(int i = 0; i < 9; i++) {
-        result[i] = a[i] - b[i];
-    }
-}
-
-void subVec3f(const double v1[3], const double v2[3], double result[3]) {
-    result[0] = v1[0] - v2[0];
-    result[1] = v1[1] - v2[1];
-    result[2] = v1[2] - v2[2];
-}
-
-void so3vee(const double m[9], double result[3]) {
-    result[0] = (m[7] - m[5]) / 2.0;
-    result[1] = (m[2] - m[6]) / 2.0;
-    result[2] = (m[3] - m[1]) / 2.0;
-}
-
-void inv4Mat4f(const double m[16], double result[16]) {
-    double s0 = m[0] * m[5] - m[4] * m[1];
-    double s1 = m[0] * m[6] - m[4] * m[2];
-    double s2 = m[0] * m[7] - m[4] * m[3];
-    double s3 = m[1] * m[6] - m[5] * m[2];
-    double s4 = m[1] * m[7] - m[5] * m[3];
-    double s5 = m[2] * m[7] - m[6] * m[3];
-
-    double c5 = m[10] * m[15] - m[14] * m[11];
-    double c4 = m[9] * m[15] - m[13] * m[11];
-    double c3 = m[9] * m[14] - m[13] * m[10];
-    double c2 = m[8] * m[15] - m[12] * m[11];
-    double c1 = m[8] * m[14] - m[12] * m[10];
-    double c0 = m[8] * m[13] - m[12] * m[9];
-
-    double det = s0 * c5 - s1 * c4 + s2 * c3 + s3 * c2 - s4 * c1 + s5 * c0;
-
-    if (fabs(det) < 1e-10) {
-        // Handle non-invertible matrix
-        memset(result, 0, 16 * sizeof(double));
-        return;
-    }
-
-    double invdet = 1.0 / det;
-
-    result[0] = (m[5] * c5 - m[6] * c4 + m[7] * c3) * invdet;
-    result[1] = (-m[1] * c5 + m[2] * c4 - m[3] * c3) * invdet;
-    result[2] = (m[13] * s5 - m[14] * s4 + m[15] * s3) * invdet;
-    result[3] = (-m[9] * s5 + m[10] * s4 - m[11] * s3) * invdet;
-
-    result[4] = (-m[4] * c5 + m[6] * c2 - m[7] * c1) * invdet;
-    result[5] = (m[0] * c5 - m[2] * c2 + m[3] * c1) * invdet;
-    result[6] = (-m[12] * s5 + m[14] * s2 - m[15] * s1) * invdet;
-    result[7] = (m[8] * s5 - m[10] * s2 + m[11] * s1) * invdet;
-
-    result[8] = (m[4] * c4 - m[5] * c2 + m[7] * c0) * invdet;
-    result[9] = (-m[0] * c4 + m[1] * c2 - m[3] * c0) * invdet;
-    result[10] = (m[12] * s4 - m[13] * s2 + m[15] * s0) * invdet;
-    result[11] = (-m[8] * s4 + m[9] * s2 - m[11] * s0) * invdet;
-
-    result[12] = (-m[4] * c3 + m[5] * c1 - m[6] * c0) * invdet;
-    result[13] = (m[0] * c3 - m[1] * c1 + m[2] * c0) * invdet;
-    result[14] = (-m[12] * s3 + m[13] * s1 - m[14] * s0) * invdet;
-    result[15] = (m[8] * s3 - m[9] * s1 + m[10] * s0) * invdet;
-}
-
-void multMatVec4f(const double m[16], const double v[4], double result[4]) {
-    result[0] = m[0]*v[0] + m[1]*v[1] + m[2]*v[2] + m[3]*v[3];
-    result[1] = m[4]*v[0] + m[5]*v[1] + m[6]*v[2] + m[7]*v[3];
-    result[2] = m[8]*v[0] + m[9]*v[1] + m[10]*v[2] + m[11]*v[3];
-    result[3] = m[12]*v[0] + m[13]*v[1] + m[14]*v[2] + m[15]*v[3];
-}
-
-void crossVec3f(const double v1[3], const double v2[3], double result[3]) {
-    result[0] = v1[1] * v2[2] - v1[2] * v2[1];
-    result[1] = v1[2] * v2[0] - v1[0] * v2[2];
-    result[2] = v1[0] * v2[1] - v1[1] * v2[0];
-}
-
-void multScalVec3f(double s, const double v[3], double result[3]) {
-    result[0] = v[0] * s;
-    result[1] = v[1] * s;
-    result[2] = v[2] * s;
-}
-
-void addVec3f(const double v1[3], const double v2[3], double result[3]) {
-    result[0] = v1[0] + v2[0];
-    result[1] = v1[1] + v2[1];
-    result[2] = v1[2] + v2[2];
-}
-
-void multMat3f(const double a[9], const double b[9], double result[9]) {
-    result[0] = a[0] * b[0] + a[1] * b[3] + a[2] * b[6];
-    result[1] = a[0] * b[1] + a[1] * b[4] + a[2] * b[7];
-    result[2] = a[0] * b[2] + a[1] * b[5] + a[2] * b[8];
-    result[3] = a[3] * b[0] + a[4] * b[3] + a[5] * b[6];
-    result[4] = a[3] * b[1] + a[4] * b[4] + a[5] * b[7];
-    result[5] = a[3] * b[2] + a[4] * b[5] + a[5] * b[8];
-    result[6] = a[6] * b[0] + a[7] * b[3] + a[8] * b[6];
-    result[7] = a[6] * b[1] + a[7] * b[4] + a[8] * b[7];
-    result[8] = a[6] * b[2] + a[7] * b[5] + a[8] * b[8];
-}
-
-void multMatVec3f(const double m[9], const double v[3], double result[3]) {
-    result[0] = m[0] * v[0] + m[1] * v[1] + m[2] * v[2];
-    result[1] = m[3] * v[0] + m[4] * v[1] + m[5] * v[2];
-    result[2] = m[6] * v[0] + m[7] * v[1] + m[8] * v[2];
-}
-
-void vecToDiagMat3f(const double v[3], double result[9]) {
-    result[0] = v[0]; result[1] = 0.0f; result[2] = 0.0f;
-    result[3] = 0.0f; result[4] = v[1]; result[5] = 0.0f;
-    result[6] = 0.0f; result[7] = 0.0f; result[8] = v[2];
-}
-
-void xRotMat3f(double rads, double result[9]) {
-    double s = sinf(rads);
-    double c = cosf(rads);
-    result[0] = 1.0f; result[1] = 0.0f; result[2] = 0.0f;
-    result[3] = 0.0f; result[4] = c;    result[5] = -s;
-    result[6] = 0.0f; result[7] = s;    result[8] = c;
-}
-
-void yRotMat3f(double rads, double result[9]) {
-    double s = sinf(rads);
-    double c = cosf(rads);
-    result[0] = c;    result[1] = 0.0f; result[2] = s;
-    result[3] = 0.0f; result[4] = 1.0f; result[5] = 0.0f;
-    result[6] = -s;   result[7] = 0.0f; result[8] = c;
-}
-
-void zRotMat3f(double rads, double result[9]) {
-    double s = sinf(rads);
-    double c = cosf(rads);
-    result[0] = c;    result[1] = -s;   result[2] = 0.0f;
-    result[3] = s;    result[4] = c;    result[5] = 0.0f;
-    result[6] = 0.0f; result[7] = 0.0f; result[8] = 1.0f;
-}
-
-void so3hat(const double v[3], double result[9]) {
-    result[0] = 0.0f;  result[1] = -v[2]; result[2] = v[1];
-    result[3] = v[2];  result[4] = 0.0f;  result[5] = -v[0];
-    result[6] = -v[1]; result[7] = v[0];  result[8] = 0.0f;
-}
-
-void addMat3f(const double a[9], const double b[9], double result[9]) {
-    for(int i = 0; i < 9; i++) {
-        result[i] = a[i] + b[i];
-    }
-}
-
-void multScalMat3f(double s, const double m[9], double result[9]) {
-    for(int i = 0; i < 9; i++) {
-        result[i] = s * m[i];
-    }
-}
-
-void orthonormalize_rotation_matrix(double R[9]) {
-    // Gram-Schmidt orthogonalization
-    double x[3] = {R[0], R[3], R[6]};
-    double y[3] = {R[1], R[4], R[7]};
-    double z[3] = {R[2], R[5], R[8]};
     
     // Normalize x
-    double len = sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2]);
-    if (len > 0) {
-        x[0] /= len; x[1] /= len; x[2] /= len;
-    }
+    double norm_x = sqrt(dotVec3f(x, x));
+    multScalVec3f(1.0/norm_x, x, x);
     
     // Make y orthogonal to x
-    double dot = x[0]*y[0] + x[1]*y[1] + x[2]*y[2];
-    y[0] -= dot*x[0]; y[1] -= dot*x[1]; y[2] -= dot*x[2];
-    
+    double dot_xy = dotVec3f(x, y);
+    multScalVec3f(dot_xy, x, temp);
+    subVec3f(y, temp, y);
     // Normalize y
-    len = sqrt(y[0]*y[0] + y[1]*y[1] + y[2]*y[2]);
-    if (len > 0) {
-        y[0] /= len; y[1] /= len; y[2] /= len;
+    double norm_y = sqrt(dotVec3f(y, y));
+    multScalVec3f(1.0/norm_y, y, y);
+    
+    // Make z orthogonal to x and y using cross product
+    crossVec3f(x, y, z);
+    // z is automatically normalized since x and y are orthonormal
+    
+    // Put back into matrix
+    for(int i = 0; i < 3; i++) {
+        R[i] = x[i];      // First column
+        R[i + 3] = y[i];  // Second column
+        R[i + 6] = z[i];  // Third column
     }
-    
-    // z = x × y
-    z[0] = x[1]*y[2] - x[2]*y[1];
-    z[1] = x[2]*y[0] - x[0]*y[2];
-    z[2] = x[0]*y[1] - x[1]*y[0];
-    
-    // Store back in matrix
-    R[0] = x[0]; R[3] = x[1]; R[6] = x[2];
-    R[1] = y[0]; R[4] = y[1]; R[7] = y[2];
-    R[2] = z[0]; R[5] = z[1]; R[8] = z[2];
 }
 
 // Constants
-const double k_f = 0.0004905f;
-const double k_m = 0.00004905f;
-const double L = 0.25f;
-const double l = L / sqrtf(2);
-const double I[3] = {0.01f, 0.02f, 0.01f};
-const double g = 9.81f;
-const double m = 0.5f;
-const double dt = 0.01f;
-const double omega_min = 30.0f;
-const double omega_max = 70.0f;
-const double omega_stable = 50.0f;
+const double k_f = 0.0004905;
+const double k_m = 0.00004905;
+const double L = 0.25;
+const double l = L / sqrt(2);
+const double I[3] = {0.01, 0.02, 0.01};
+const double g = 9.81;
+const double m = 0.5;
+const double dt = 0.01;
+const double omega_min = 30.0;
+const double omega_max = 70.0;
+const double omega_stable = 50.0;
 
 typedef struct {
-    double omega[4];  // Motor speeds
+    double omega[4];              // Motor speeds
     double angular_velocity_B[3];  // Angular velocity in body frame
     double linear_velocity_W[3];   // Linear velocity in world frame
     double linear_position_W[3];   // Position in world frame
@@ -234,137 +63,112 @@ typedef struct {
 } Quad;
 
 Quad* create_quad(double initial_height) {
-    Quad* quad = (Quad*)malloc(sizeof(Quad));
-    if (!quad) return NULL;
-
-    // Initialize motor speeds to stable hover
-    quad->omega[0] = omega_stable;
-    quad->omega[1] = omega_stable;
-    quad->omega[2] = omega_stable;
-    quad->omega[3] = omega_stable;
-
-    // Initialize velocities to zero
-    memset(quad->angular_velocity_B, 0, 3 * sizeof(double));
-    memset(quad->linear_velocity_W, 0, 3 * sizeof(double));
-
-    // Set initial position
-    quad->linear_position_W[0] = 0.0f;  // x
-    quad->linear_position_W[1] = initial_height;  // y (height)
-    quad->linear_position_W[2] = 0.0f;  // z
-
-    // Initialize rotation matrix to identity (no initial rotation)
-    double temp1[9], temp2[9];
-    xRotMat3f(0, temp1);
-    yRotMat3f(0, temp2);
-    multMat3f(temp1, temp2, temp1);
-    zRotMat3f(0, temp2);
-    multMat3f(temp1, temp2, quad->R_W_B);
-
+    Quad* q = (Quad*)malloc(sizeof(Quad));
+    
+    // Initialize motor speeds
+    for(int i = 0; i < 4; i++) {
+        q->omega[i] = omega_stable;
+    }
+    
+    // Initialize velocities and position
+    for(int i = 0; i < 3; i++) {
+        q->angular_velocity_B[i] = 0.0;
+        q->linear_velocity_W[i] = 0.0;
+        q->linear_position_W[i] = 0.0;
+    }
+    q->linear_position_W[1] = initial_height;  // Y is up
+    
+    // Initialize rotation matrix to identity
+    identMat3f(q->R_W_B);
+    
     // Initialize inertia matrix
-    vecToDiagMat3f(I, quad->I_mat);
-
-    return quad;
+    vecToDiagMat3f(I, q->I_mat);
+    
+    return q;
 }
 
 void update_dynamics(Quad* q) {
     // Limit motor speeds
     for(int i = 0; i < 4; i++) {
-        q->omega[i] = fminf(fmaxf(q->omega[i], omega_min), omega_max);
+        if(q->omega[i] > omega_max) q->omega[i] = omega_max;
+        if(q->omega[i] < omega_min) q->omega[i] = omega_min;
     }
-
+    
     // Forces and moments
     double F[4], M[4];
     for(int i = 0; i < 4; i++) {
-        F[i] = k_f * q->omega[i] * fabsf(q->omega[i]);
-        M[i] = k_m * q->omega[i] * fabsf(q->omega[i]);
+        F[i] = k_f * q->omega[i] * fabs(q->omega[i]);
+        M[i] = k_m * q->omega[i] * fabs(q->omega[i]);
     }
-
+    
     // Thrust
-    double f_B_thrust[3] = {0, F[0] + F[1] + F[2] + F[3], 0};
-
-    // Torque
-    double tau_B_drag[3] = {0, M[0] - M[1] + M[2] - M[3], 0};
+    double f_B_thrust[3] = {0.0, F[0] + F[1] + F[2] + F[3], 0.0};
     
-    // Motor positions and forces
-    double positions[4][3] = {
-        {-L, 0, L},   // Motor 1
-        {L, 0, L},    // Motor 2
-        {L, 0, -L},   // Motor 3
-        {-L, 0, -L}   // Motor 4
-    };
+    // Torques
+    double tau_B_drag[3] = {0.0, M[0] - M[1] + M[2] - M[3], 0.0};
     
-    double forces[4][3] = {
-        {0, F[0], 0}, // Force 1
-        {0, F[1], 0}, // Force 2
-        {0, F[2], 0}, // Force 3
-        {0, F[3], 0}  // Force 4
-    };
-
-    // Calculate thrust torques
-    double tau_B_thrust[3] = {0, 0, 0};
-    double temp_thrust[3];
-    for(int i = 0; i < 4; i++) {
-        double tau_temp[3];
-        crossVec3f(positions[i], forces[i], tau_temp);
-        if(i == 0) {
-            memcpy(tau_B_thrust, tau_temp, 3 * sizeof(double));
-        } else {
-            addVec3f(tau_B_thrust, tau_temp, temp_thrust);
-            memcpy(tau_B_thrust, temp_thrust, 3 * sizeof(double));
-        }
-    }
-
+    // Compute thrust torques
+    double pos1[3] = {-L, 0.0, L};
+    double pos2[3] = {L, 0.0, L};
+    double pos3[3] = {L, 0.0, -L};
+    double pos4[3] = {-L, 0.0, -L};
+    
+    double force1[3] = {0.0, F[0], 0.0};
+    double force2[3] = {0.0, F[1], 0.0};
+    double force3[3] = {0.0, F[2], 0.0};
+    double force4[3] = {0.0, F[3], 0.0};
+    
+    double tau_B_thrust[3], temp[3], temp2[3];
+    
+    crossVec3f(pos1, force1, temp);
+    crossVec3f(pos2, force2, temp2);
+    addVec3f(temp, temp2, tau_B_thrust);
+    
+    crossVec3f(pos3, force3, temp);
+    addVec3f(tau_B_thrust, temp, temp2);
+    
+    crossVec3f(pos4, force4, temp);
+    addVec3f(temp2, temp, tau_B_thrust);
+    
     // Total torque
     double tau_B[3];
     addVec3f(tau_B_drag, tau_B_thrust, tau_B);
-
+    
     // Accelerations
-    double gravity_force[3] = {0, -g * m, 0};
-    double rotated_thrust[3];
-    multMatVec3f(q->R_W_B, f_B_thrust, rotated_thrust);
+    double gravity[3] = {0.0, -g * m, 0.0};
+    double temp3[3], linear_acceleration_W[3];
+    multMatVec3f(q->R_W_B, f_B_thrust, temp);
+    addVec3f(gravity, temp, temp2);
+    multScalVec3f(1.0 / m, temp2, linear_acceleration_W);
     
-    double linear_acceleration_W[3];
-    addVec3f(gravity_force, rotated_thrust, linear_acceleration_W);
-    multScalVec3f(1.0f / m, linear_acceleration_W, linear_acceleration_W);
-
     // Angular acceleration
-    double temp_vec[3], temp_vec2[3], cross_result[3];
-    multMatVec3f(q->I_mat, q->angular_velocity_B, temp_vec);
-    multScalVec3f(-1.0f, q->angular_velocity_B, temp_vec2);
-    crossVec3f(temp_vec2, temp_vec, cross_result);
+    double temp4[3], temp5[3], angular_acceleration_B[3];
+    multMatVec3f(q->I_mat, q->angular_velocity_B, temp);
+    multScalVec3f(-1.0, q->angular_velocity_B, temp2);
+    crossVec3f(temp2, temp, temp3);
+    addVec3f(temp3, tau_B, angular_acceleration_B);
     
-    double angular_acceleration_B[3];
-    addVec3f(cross_result, tau_B, angular_acceleration_B);
-    angular_acceleration_B[0] /= I[0];
-    angular_acceleration_B[1] /= I[1];
-    angular_acceleration_B[2] /= I[2];
-
-    // State integration
-    double temp_vel[3], temp_pos[3], temp_ang[3];
-    
-    // Update linear velocity and position
-    multScalVec3f(dt, linear_acceleration_W, temp_vel);
-    addVec3f(q->linear_velocity_W, temp_vel, q->linear_velocity_W);
-    
-    multScalVec3f(dt, q->linear_velocity_W, temp_pos);
-    addVec3f(q->linear_position_W, temp_pos, q->linear_position_W);
-
-    // Prevent drone from going below the ground
-    if (q->linear_position_W[1] < -0.5f) {
-        q->linear_position_W[1] = -0.5f;
-        q->linear_velocity_W[1] = 0.0f;
+    for(int i = 0; i < 3; i++) {
+        angular_acceleration_B[i] /= I[i];
     }
-
-    // Update angular velocity
-    multScalVec3f(dt, angular_acceleration_B, temp_ang);
-    addVec3f(q->angular_velocity_B, temp_ang, q->angular_velocity_B);
-
+    
+    // Advance state
+    double temp6[3];
+    multScalVec3f(dt, linear_acceleration_W, temp);
+    addVec3f(q->linear_velocity_W, temp, q->linear_velocity_W);
+    
+    multScalVec3f(dt, q->linear_velocity_W, temp);
+    addVec3f(q->linear_position_W, temp, q->linear_position_W);
+    
+    multScalVec3f(dt, angular_acceleration_B, temp);
+    addVec3f(q->angular_velocity_B, temp, q->angular_velocity_B);
+    
     // Update rotation matrix
-    double so3_result[9], temp_mat[9], temp_mat2[9];
-    so3hat(q->angular_velocity_B, so3_result);
-    multMat3f(q->R_W_B, so3_result, temp_mat);
-    multScalMat3f(dt, temp_mat, temp_mat2);
-    addMat3f(q->R_W_B, temp_mat2, q->R_W_B);
+    double skew[9], temp7[9], temp8[9];
+    so3hat(q->angular_velocity_B, skew);
+    multMat3f(q->R_W_B, skew, temp7);
+    multScalMat3f(dt, temp7, temp8);
+    addMat3f(q->R_W_B, temp8, q->R_W_B);
 
     // Orthonormalize rotation matrix
     orthonormalize_rotation_matrix(q->R_W_B);
