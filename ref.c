@@ -424,10 +424,10 @@ double angular_velocity_d_B[3] = {0.0f, 0.0f, 0.0f};
 double angular_acceleration_d_B[3] = {0.0f, 0.0f, 0.0f};
 double yaw_d = 0.0f;
 
-const double k_p = 0.05f;
-const double k_v = 0.5f;
-const double k_R = 0.5f;
-const double k_w = 0.5f;
+const double k_p = 8.0;    // Position gain (was 2.0)
+const double k_v = 6.0;    // Velocity gain (was 4.0)
+const double k_R = 8.0;    // Attitude gain (was 2.0)
+const double k_w = 4.0;    // Angular velocity gain (was 1.0)
 
 void update_control() {
     // --- LINEAR CONTROL ---
@@ -507,9 +507,9 @@ void update_control() {
     subVec3f(tau_B_control, temp_vec2, tau_B_control);
 
     // Scale factors to improve numerical conditioning
-    const double SCALE_F = 1e6;  // Scale factor for forces
-    const double SCALE_M = 1e6;  // Scale factor for moments
-    const double SCALE_W = 1e2;  // Scale factor for omega calculation
+    const double SCALE_F = 1e6;   // Scale factor for forces
+    const double SCALE_M = 1e6;   // Scale factor for moments
+    const double SCALE_W = 1e3;   // Scale factor for omega calculation (was 1e2)
 
     // Construct scaled F_bar matrix
     double F_bar[16] = {
