@@ -6,90 +6,158 @@
 #include <time.h>
 #include <unistd.h>
 
-void multScalMat3f(float s, const float* m, float* result) {
+void multScalMat3f(double s, const double* m, double* result) {
     for(int i = 0; i < 9; i++) {
         result[i] = s * m[i];
     }
 }
 
-void addMat3f(const float* a, const float* b, float* result) {
+void addMat3f(const double* a, const double* b, double* result) {
     for(int i = 0; i < 9; i++) {
         result[i] = a[i] + b[i];
     }
 }
 
-void subMat3f(const float* a, const float* b, float* result) {
+void subMat3f(const double* a, const double* b, double* result) {
     for(int i = 0; i < 9; i++) {
         result[i] = a[i] - b[i];
     }
 }
 
-int inv4Mat4f(const float* m, float* result) {
-    float s0 = m[0] * m[5] - m[4] * m[1];
-    float s1 = m[0] * m[6] - m[4] * m[2];
-    float s2 = m[0] * m[7] - m[4] * m[3];
-    float s3 = m[1] * m[6] - m[5] * m[2];
-    float s4 = m[1] * m[7] - m[5] * m[3];
-    float s5 = m[2] * m[7] - m[6] * m[3];
+int inv4Mat4f(const double* m, double* result) {
+    double det = m[0] * (
+        m[5] * (m[10] * m[15] - m[11] * m[14]) -
+        m[9] * (m[6] * m[15] - m[7] * m[14]) +
+        m[13] * (m[6] * m[11] - m[7] * m[10])
+    ) - m[4] * (
+        m[1] * (m[10] * m[15] - m[11] * m[14]) -
+        m[9] * (m[2] * m[15] - m[3] * m[14]) +
+        m[13] * (m[2] * m[11] - m[3] * m[10])
+    ) + m[8] * (
+        m[1] * (m[6] * m[15] - m[7] * m[14]) -
+        m[5] * (m[2] * m[15] - m[3] * m[14]) +
+        m[13] * (m[2] * m[7] - m[3] * m[6])
+    ) - m[12] * (
+        m[1] * (m[6] * m[11] - m[7] * m[10]) -
+        m[5] * (m[2] * m[11] - m[3] * m[10]) +
+        m[9] * (m[2] * m[7] - m[3] * m[6])
+    );
 
-    float c5 = m[10] * m[15] - m[14] * m[11];
-    float c4 = m[9] * m[15] - m[13] * m[11];
-    float c3 = m[9] * m[14] - m[13] * m[10];
-    float c2 = m[8] * m[15] - m[12] * m[11];
-    float c1 = m[8] * m[14] - m[12] * m[10];
-    float c0 = m[8] * m[13] - m[12] * m[9];
-
-    float det = s0 * c5 - s1 * c4 + s2 * c3 + s3 * c2 - s4 * c1 + s5 * c0;
-    
-    if (fabsf(det) < 1e-6f) {
-        return 0;  // Matrix is not invertible
+    if (fabs(det) < 1e-10) {
+        printf("Matrix is singular or nearly singular: det=%e\n", det);
+        return 0;
     }
 
-    float invdet = 1.0f / det;
+    double invDet = 1.0 / det;
 
-    result[0] = (m[5] * c5 - m[6] * c4 + m[7] * c3) * invdet;
-    result[1] = (-m[1] * c5 + m[2] * c4 - m[3] * c3) * invdet;
-    result[2] = (m[13] * s5 - m[14] * s4 + m[15] * s3) * invdet;
-    result[3] = (-m[9] * s5 + m[10] * s4 - m[11] * s3) * invdet;
+    // Adjugate matrix
+    result[0] = invDet * (
+        m[5] * (m[10] * m[15] - m[11] * m[14]) -
+        m[9] * (m[6] * m[15] - m[7] * m[14]) +
+        m[13] * (m[6] * m[11] - m[7] * m[10])
+    );
+    result[1] = -invDet * (
+        m[1] * (m[10] * m[15] - m[11] * m[14]) -
+        m[9] * (m[2] * m[15] - m[3] * m[14]) +
+        m[13] * (m[2] * m[11] - m[3] * m[10])
+    );
+    result[2] = invDet * (
+        m[1] * (m[6] * m[15] - m[7] * m[14]) -
+        m[5] * (m[2] * m[15] - m[3] * m[14]) +
+        m[13] * (m[2] * m[7] - m[3] * m[6])
+    );
+    result[3] = -invDet * (
+        m[1] * (m[6] * m[11] - m[7] * m[10]) -
+        m[5] * (m[2] * m[11] - m[3] * m[10]) +
+        m[9] * (m[2] * m[7] - m[3] * m[6])
+    );
 
-    result[4] = (-m[4] * c5 + m[6] * c2 - m[7] * c1) * invdet;
-    result[5] = (m[0] * c5 - m[2] * c2 + m[3] * c1) * invdet;
-    result[6] = (-m[12] * s5 + m[14] * s2 - m[15] * s1) * invdet;
-    result[7] = (m[8] * s5 - m[10] * s2 + m[11] * s1) * invdet;
+    result[4] = -invDet * (
+        m[4] * (m[10] * m[15] - m[11] * m[14]) -
+        m[8] * (m[6] * m[15] - m[7] * m[14]) +
+        m[12] * (m[6] * m[11] - m[7] * m[10])
+    );
+    result[5] = invDet * (
+        m[0] * (m[10] * m[15] - m[11] * m[14]) -
+        m[8] * (m[2] * m[15] - m[3] * m[14]) +
+        m[12] * (m[2] * m[11] - m[3] * m[10])
+    );
+    result[6] = -invDet * (
+        m[0] * (m[6] * m[15] - m[7] * m[14]) -
+        m[4] * (m[2] * m[15] - m[3] * m[14]) +
+        m[12] * (m[2] * m[7] - m[3] * m[6])
+    );
+    result[7] = invDet * (
+        m[0] * (m[6] * m[11] - m[7] * m[10]) -
+        m[4] * (m[2] * m[11] - m[3] * m[10]) +
+        m[8] * (m[2] * m[7] - m[3] * m[6])
+    );
 
-    result[8] = (m[4] * c4 - m[5] * c2 + m[7] * c0) * invdet;
-    result[9] = (-m[0] * c4 + m[1] * c2 - m[3] * c0) * invdet;
-    result[10] = (m[12] * s4 - m[13] * s2 + m[15] * s0) * invdet;
-    result[11] = (-m[8] * s4 + m[9] * s2 - m[11] * s0) * invdet;
+    result[8] = invDet * (
+        m[4] * (m[9] * m[15] - m[11] * m[13]) -
+        m[8] * (m[5] * m[15] - m[7] * m[13]) +
+        m[12] * (m[5] * m[11] - m[7] * m[9])
+    );
+    result[9] = -invDet * (
+        m[0] * (m[9] * m[15] - m[11] * m[13]) -
+        m[8] * (m[1] * m[15] - m[3] * m[13]) +
+        m[12] * (m[1] * m[11] - m[3] * m[9])
+    );
+    result[10] = invDet * (
+        m[0] * (m[5] * m[15] - m[7] * m[13]) -
+        m[4] * (m[1] * m[15] - m[3] * m[13]) +
+        m[12] * (m[1] * m[7] - m[3] * m[5])
+    );
+    result[11] = -invDet * (
+        m[0] * (m[5] * m[11] - m[7] * m[9]) -
+        m[4] * (m[1] * m[11] - m[3] * m[9]) +
+        m[8] * (m[1] * m[7] - m[3] * m[5])
+    );
 
-    result[12] = (-m[4] * c3 + m[5] * c1 - m[6] * c0) * invdet;
-    result[13] = (m[0] * c3 - m[1] * c1 + m[2] * c0) * invdet;
-    result[14] = (-m[12] * s3 + m[13] * s1 - m[14] * s0) * invdet;
-    result[15] = (m[8] * s3 - m[9] * s1 + m[10] * s0) * invdet;
+    result[12] = -invDet * (
+        m[4] * (m[9] * m[14] - m[10] * m[13]) -
+        m[8] * (m[5] * m[14] - m[6] * m[13]) +
+        m[12] * (m[5] * m[10] - m[6] * m[9])
+    );
+    result[13] = invDet * (
+        m[0] * (m[9] * m[14] - m[10] * m[13]) -
+        m[8] * (m[1] * m[14] - m[2] * m[13]) +
+        m[12] * (m[1] * m[10] - m[2] * m[9])
+    );
+    result[14] = -invDet * (
+        m[0] * (m[5] * m[14] - m[6] * m[13]) -
+        m[4] * (m[1] * m[14] - m[2] * m[13]) +
+        m[12] * (m[1] * m[6] - m[2] * m[5])
+    );
+    result[15] = invDet * (
+        m[0] * (m[5] * m[10] - m[6] * m[9]) -
+        m[4] * (m[1] * m[10] - m[2] * m[9]) +
+        m[8] * (m[1] * m[6] - m[2] * m[5])
+    );
 
-    return 1;  // Success
+    return 1;
 }
 
-void multMatVec4f(const float* m, const float* v, float* result) {
+void multMatVec4f(const double* m, const double* v, double* result) {
     for(int i = 0; i < 4; i++) {
         result[i] = m[i*4] * v[0] + m[i*4+1] * v[1] + 
                     m[i*4+2] * v[2] + m[i*4+3] * v[3];
     }
 }
 
-void so3hat(const float* v, float* result) {
+void so3hat(const double* v, double* result) {
     result[0] = 0.0f;   result[1] = -v[2];  result[2] = v[1];
     result[3] = v[2];   result[4] = 0.0f;   result[5] = -v[0];
     result[6] = -v[1];  result[7] = v[0];   result[8] = 0.0f;
 }
 
-void so3vee(const float* m, float* result) {
+void so3vee(const double* m, double* result) {
     result[0] = m[7];
     result[1] = m[2];
     result[2] = m[3];
 }
 
-void multMat3f(const float* a, const float* b, float* result) {
+void multMat3f(const double* a, const double* b, double* result) {
     result[0] = a[0] * b[0] + a[1] * b[3] + a[2] * b[6];
     result[1] = a[0] * b[1] + a[1] * b[4] + a[2] * b[7];
     result[2] = a[0] * b[2] + a[1] * b[5] + a[2] * b[8];
@@ -103,20 +171,20 @@ void multMat3f(const float* a, const float* b, float* result) {
     result[8] = a[6] * b[2] + a[7] * b[5] + a[8] * b[8];
 }
 
-void multMatVec3f(const float* m, const float* v, float* result) {
+void multMatVec3f(const double* m, const double* v, double* result) {
     result[0] = m[0] * v[0] + m[1] * v[1] + m[2] * v[2];
     result[1] = m[3] * v[0] + m[4] * v[1] + m[5] * v[2];
     result[2] = m[6] * v[0] + m[7] * v[1] + m[8] * v[2];
 }
 
-void vecToDiagMat3f(const float* v, float* result) {
+void vecToDiagMat3f(const double* v, double* result) {
     result[0] = v[0]; result[1] = 0.0f; result[2] = 0.0f;
     result[3] = 0.0f; result[4] = v[1]; result[5] = 0.0f;
     result[6] = 0.0f; result[7] = 0.0f; result[8] = v[2];
 }
 
-int invMat3f(const float* m, float* result) {
-    float det = 
+int invMat3f(const double* m, double* result) {
+    double det = 
         m[0] * (m[4] * m[8] - m[7] * m[5]) -
         m[1] * (m[3] * m[8] - m[5] * m[6]) +
         m[2] * (m[3] * m[7] - m[4] * m[6]);
@@ -125,7 +193,7 @@ int invMat3f(const float* m, float* result) {
         return 0;  // Matrix is not invertible
     }
 
-    float invDet = 1.0f / det;
+    double invDet = 1.0f / det;
 
     result[0] = invDet * (m[4] * m[8] - m[7] * m[5]);
     result[1] = invDet * (m[2] * m[7] - m[1] * m[8]);
@@ -140,99 +208,99 @@ int invMat3f(const float* m, float* result) {
     return 1;  // Success
 }
 
-void transpMat3f(const float* m, float* result) {
+void transpMat3f(const double* m, double* result) {
     result[0] = m[0]; result[1] = m[3]; result[2] = m[6];
     result[3] = m[1]; result[4] = m[4]; result[5] = m[7];
     result[6] = m[2]; result[7] = m[5]; result[8] = m[8];
 }
 
-void identMat3f(float* result) {
+void identMat3f(double* result) {
     result[0] = 1.0f; result[1] = 0.0f; result[2] = 0.0f;
     result[3] = 0.0f; result[4] = 1.0f; result[5] = 0.0f;
     result[6] = 0.0f; result[7] = 0.0f; result[8] = 1.0f;
 }
 
-void xRotMat3f(float rads, float* result) {
-    float s = sinf(rads);
-    float c = cosf(rads);
+void xRotMat3f(double rads, double* result) {
+    double s = sinf(rads);
+    double c = cosf(rads);
     result[0] = 1.0f; result[1] = 0.0f; result[2] = 0.0f;
     result[3] = 0.0f; result[4] = c;    result[5] = -s;
     result[6] = 0.0f; result[7] = s;    result[8] = c;
 }
 
-void yRotMat3f(float rads, float* result) {
-    float s = sinf(rads);
-    float c = cosf(rads);
+void yRotMat3f(double rads, double* result) {
+    double s = sinf(rads);
+    double c = cosf(rads);
     result[0] = c;    result[1] = 0.0f; result[2] = s;
     result[3] = 0.0f; result[4] = 1.0f; result[5] = 0.0f;
     result[6] = -s;   result[7] = 0.0f; result[8] = c;
 }
 
-void zRotMat3f(float rads, float* result) {
-    float s = sinf(rads);
-    float c = cosf(rads);
+void zRotMat3f(double rads, double* result) {
+    double s = sinf(rads);
+    double c = cosf(rads);
     result[0] = c;    result[1] = -s;   result[2] = 0.0f;
     result[3] = s;    result[4] = c;    result[5] = 0.0f;
     result[6] = 0.0f; result[7] = 0.0f; result[8] = 1.0f;
 }
 
 // Vector operations
-void crossVec3f(const float* v1, const float* v2, float* result) {
+void crossVec3f(const double* v1, const double* v2, double* result) {
     result[0] = v1[1] * v2[2] - v1[2] * v2[1];
     result[1] = v1[2] * v2[0] - v1[0] * v2[2];
     result[2] = v1[0] * v2[1] - v1[1] * v2[0];
 }
 
-void multScalVec3f(float s, const float* v, float* result) {
+void multScalVec3f(double s, const double* v, double* result) {
     result[0] = v[0] * s;
     result[1] = v[1] * s;
     result[2] = v[2] * s;
 }
 
-void addVec3f(const float* v1, const float* v2, float* result) {
+void addVec3f(const double* v1, const double* v2, double* result) {
     result[0] = v1[0] + v2[0];
     result[1] = v1[1] + v2[1];
     result[2] = v1[2] + v2[2];
 }
 
-void subVec3f(const float* v1, const float* v2, float* result) {
+void subVec3f(const double* v1, const double* v2, double* result) {
     result[0] = v1[0] - v2[0];
     result[1] = v1[1] - v2[1];
     result[2] = v1[2] - v2[2];
 }
 
-float dotVec3f(const float* v1, const float* v2) {
+double dotVec3f(const double* v1, const double* v2) {
     return v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2];
 }
 
-void normVec3f(const float* v, float* result) {
-    float magnitude = sqrtf(dotVec3f(v, v));
+void normVec3f(const double* v, double* result) {
+    double magnitude = sqrtf(dotVec3f(v, v));
     result[0] = v[0] / magnitude;
     result[1] = v[1] / magnitude;
     result[2] = v[2] / magnitude;
 }
 
 // Constants
-const float k_f = 0.0004905f;
-const float k_m = 0.00004905f;
-const float L = 0.25f;
-const float l = (L / sqrtf(2.0f));
-const float I[3] = {0.01f, 0.02f, 0.01f};
-const float g = 9.81f;
-const float m = 0.5f;
-const float dt = 0.01f;
-const float omega_min = 30.0f;
-const float omega_max = 70.0f;
-const float omega_stable = 50.0f;
+const double k_f = 0.0004905f;
+const double k_m = 0.00004905f;
+const double L = 0.25f;
+const double l = (L / sqrtf(2.0f));
+const double I[3] = {0.01f, 0.02f, 0.01f};
+const double g = 9.81f;
+const double m = 0.5f;
+const double dt = 0.01f;
+const double omega_min = 30.0f;
+const double omega_max = 70.0f;
+const double omega_stable = 50.0f;
 
 // Global state variables
-float omega_1, omega_2, omega_3, omega_4;
-float angular_velocity_B[3];
-float linear_velocity_W[3];
-float linear_position_W[3];
-float R_W_B[9];
-float loc_I_mat[9];
-float loc_I_mat_inv[9];
+double omega_1, omega_2, omega_3, omega_4;
+double angular_velocity_B[3];
+double linear_velocity_W[3];
+double linear_position_W[3];
+double R_W_B[9];
+double loc_I_mat[9];
+double loc_I_mat_inv[9];
 
 void init_state() {
     // Initialize motor speeds
@@ -250,7 +318,7 @@ void init_state() {
     linear_position_W[1] = 1.0f;  // Initial height
 
     // Initialize rotation matrix
-    float temp_x[9], temp_y[9], temp_z[9], temp[9];
+    double temp_x[9], temp_y[9], temp_z[9], temp[9];
     xRotMat3f(0.0f, temp_x);
     yRotMat3f(0.0f, temp_y);
     zRotMat3f(0.0f, temp_z);
@@ -270,34 +338,34 @@ void update_dynamics() {
     omega_4 = fmaxf(fminf(omega_4, omega_max), omega_min);
 
     // Forces and moments
-    float F1 = k_f * omega_1 * fabsf(omega_1);
-    float F2 = k_f * omega_2 * fabsf(omega_2);
-    float F3 = k_f * omega_3 * fabsf(omega_3);
-    float F4 = k_f * omega_4 * fabsf(omega_4);
+    double F1 = k_f * omega_1 * fabsf(omega_1);
+    double F2 = k_f * omega_2 * fabsf(omega_2);
+    double F3 = k_f * omega_3 * fabsf(omega_3);
+    double F4 = k_f * omega_4 * fabsf(omega_4);
 
-    float M1 = k_m * omega_1 * fabsf(omega_1);
-    float M2 = k_m * omega_2 * fabsf(omega_2);
-    float M3 = k_m * omega_3 * fabsf(omega_3);
-    float M4 = k_m * omega_4 * fabsf(omega_4);
+    double M1 = k_m * omega_1 * fabsf(omega_1);
+    double M2 = k_m * omega_2 * fabsf(omega_2);
+    double M3 = k_m * omega_3 * fabsf(omega_3);
+    double M4 = k_m * omega_4 * fabsf(omega_4);
 
     // Thrust
-    float f_B_thrust[3] = {0.0f, F1 + F2 + F3 + F4, 0.0f};
+    double f_B_thrust[3] = {0.0f, F1 + F2 + F3 + F4, 0.0f};
 
     // Torque calculations
-    float tau_B_drag[3] = {0.0f, M1 - M2 + M3 - M4, 0.0f};
+    double tau_B_drag[3] = {0.0f, M1 - M2 + M3 - M4, 0.0f};
     
-    float p1[3] = {-L, 0.0f, L};
-    float p2[3] = {L, 0.0f, L};
-    float p3[3] = {L, 0.0f, -L};
-    float p4[3] = {-L, 0.0f, -L};
+    double p1[3] = {-L, 0.0f, L};
+    double p2[3] = {L, 0.0f, L};
+    double p3[3] = {L, 0.0f, -L};
+    double p4[3] = {-L, 0.0f, -L};
     
-    float f1[3] = {0.0f, F1, 0.0f};
-    float f2[3] = {0.0f, F2, 0.0f};
-    float f3[3] = {0.0f, F3, 0.0f};
-    float f4[3] = {0.0f, F4, 0.0f};
+    double f1[3] = {0.0f, F1, 0.0f};
+    double f2[3] = {0.0f, F2, 0.0f};
+    double f3[3] = {0.0f, F3, 0.0f};
+    double f4[3] = {0.0f, F4, 0.0f};
 
-    float tau_B_thrust_1[3], tau_B_thrust_2[3], tau_B_thrust_3[3], tau_B_thrust_4[3];
-    float tau_B_thrust[3], tau_B[3];
+    double tau_B_thrust_1[3], tau_B_thrust_2[3], tau_B_thrust_3[3], tau_B_thrust_4[3];
+    double tau_B_thrust[3], tau_B[3];
 
     crossVec3f(p1, f1, tau_B_thrust_1);
     crossVec3f(p2, f2, tau_B_thrust_2);
@@ -305,21 +373,21 @@ void update_dynamics() {
     crossVec3f(p4, f4, tau_B_thrust_4);
 
     addVec3f(tau_B_thrust_1, tau_B_thrust_2, tau_B_thrust);
-    float temp[3];
+    double temp[3];
     addVec3f(tau_B_thrust_3, tau_B_thrust_4, temp);
     addVec3f(tau_B_thrust, temp, tau_B_thrust);
     addVec3f(tau_B_drag, tau_B_thrust, tau_B);
 
     // Accelerations
-    float gravity_force[3] = {0.0f, -g * m, 0.0f};
-    float thrust_W[3];
+    double gravity_force[3] = {0.0f, -g * m, 0.0f};
+    double thrust_W[3];
     multMatVec3f(R_W_B, f_B_thrust, thrust_W);
-    float linear_acceleration_W[3];
+    double linear_acceleration_W[3];
     addVec3f(gravity_force, thrust_W, linear_acceleration_W);
     multScalVec3f(1.0f/m, linear_acceleration_W, linear_acceleration_W);
 
     // Angular acceleration
-    float temp1[3], temp2[3], angular_acceleration_B[3];
+    double temp1[3], temp2[3], angular_acceleration_B[3];
     multMatVec3f(loc_I_mat, angular_velocity_B, temp1);
     crossVec3f(angular_velocity_B, temp1, temp2);
     multScalVec3f(-1.0f, temp2, temp2);
@@ -330,7 +398,7 @@ void update_dynamics() {
     angular_acceleration_B[2] /= I[2];
 
     // State update
-    float vel_increment[3], pos_increment[3], ang_vel_increment[3];
+    double vel_increment[3], pos_increment[3], ang_vel_increment[3];
     multScalVec3f(dt, linear_acceleration_W, vel_increment);
     addVec3f(linear_velocity_W, vel_increment, linear_velocity_W);
 
@@ -341,7 +409,7 @@ void update_dynamics() {
     addVec3f(angular_velocity_B, ang_vel_increment, angular_velocity_B);
 
     // Rotation matrix update
-    float omega_hat[9], temp_mat[9], increment[9];
+    double omega_hat[9], temp_mat[9], increment[9];
     so3hat(angular_velocity_B, omega_hat);
     multMat3f(R_W_B, omega_hat, temp_mat);
     multScalMat3f(dt, temp_mat, increment);
@@ -349,22 +417,22 @@ void update_dynamics() {
 }
 
 // Control parameters
-float linear_position_d_W[3] = {2.0f, 2.0f, 2.0f};
-float linear_velocity_d_W[3] = {0.0f, 0.0f, 0.0f};
-float linear_acceleration_d_W[3] = {0.0f, 0.0f, 0.0f};
-float angular_velocity_d_B[3] = {0.0f, 0.0f, 0.0f};
-float angular_acceleration_d_B[3] = {0.0f, 0.0f, 0.0f};
-float yaw_d = 0.0f;
+double linear_position_d_W[3] = {2.0f, 2.0f, 2.0f};
+double linear_velocity_d_W[3] = {0.0f, 0.0f, 0.0f};
+double linear_acceleration_d_W[3] = {0.0f, 0.0f, 0.0f};
+double angular_velocity_d_B[3] = {0.0f, 0.0f, 0.0f};
+double angular_acceleration_d_B[3] = {0.0f, 0.0f, 0.0f};
+double yaw_d = 0.0f;
 
-const float k_p = 0.05f;
-const float k_v = 0.5f;
-const float k_R = 0.5f;
-const float k_w = 0.5f;
+const double k_p = 0.05f;
+const double k_v = 0.5f;
+const double k_R = 0.5f;
+const double k_w = 0.5f;
 
 void update_control() {
     // --- LINEAR CONTROL ---
-    float error_p[3], error_v[3], z_W_d[3], z_W_B[3];
-    float temp_vec[3];
+    double error_p[3], error_v[3], z_W_d[3], z_W_B[3];
+    double temp_vec[3], temp_vec2[3];
 
     subVec3f(linear_position_W, linear_position_d_W, error_p);
     subVec3f(linear_velocity_W, linear_velocity_d_W, error_v);
@@ -373,19 +441,19 @@ void update_control() {
     multScalVec3f(-k_p, error_p, z_W_d);
     multScalVec3f(-k_v, error_v, temp_vec);
     addVec3f(z_W_d, temp_vec, z_W_d);
-    addVec3f(z_W_d, (float[3]){0.0f, m * g, 0.0f}, z_W_d);
+    addVec3f(z_W_d, (double[3]){0.0f, m * g, 0.0f}, z_W_d);
     multScalVec3f(m, linear_acceleration_d_W, temp_vec);
     addVec3f(z_W_d, temp_vec, z_W_d);
 
     // Calculate f_z_B_control
-    float y_axis_B[3] = {0.0f, 1.0f, 0.0f};
+    double y_axis_B[3] = {0.0f, 1.0f, 0.0f};
     multMatVec3f(R_W_B, y_axis_B, z_W_B);
-    float f_z_B_control = dotVec3f(z_W_d, z_W_B);
+    double f_z_B_control = dotVec3f(z_W_d, z_W_B);
 
     // --- ATTITUDE CONTROL ---
-    float x_tilde_d_W[3] = {sinf(yaw_d), 0.0f, cosf(yaw_d)};
-    float R_W_d_column_0[3], R_W_d_column_1[3], R_W_d_column_2[3];
-    float temp_cross1[3], temp_cross2[3];
+    double x_tilde_d_W[3] = {sinf(yaw_d), 0.0f, cosf(yaw_d)};
+    double R_W_d_column_0[3], R_W_d_column_1[3], R_W_d_column_2[3];
+    double temp_cross1[3], temp_cross2[3];
 
     crossVec3f(z_W_d, x_tilde_d_W, temp_cross1);
     crossVec3f(temp_cross1, z_W_d, temp_cross2);
@@ -393,15 +461,15 @@ void update_control() {
     normVec3f(temp_cross1, R_W_d_column_1);
     normVec3f(z_W_d, R_W_d_column_2);
 
-    float R_W_d[9] = {
+    double R_W_d[9] = {
         R_W_d_column_1[0], R_W_d_column_2[0], R_W_d_column_0[0],
         R_W_d_column_1[1], R_W_d_column_2[1], R_W_d_column_0[1],
         R_W_d_column_1[2], R_W_d_column_2[2], R_W_d_column_0[2]
     };
 
     // Calculate error_r and error_w
-    float R_W_d_T[9], R_W_B_T[9], temp_mat1[9], temp_mat2[9], diff_mat[9];
-    float error_r[3], error_w[3];
+    double R_W_d_T[9], R_W_B_T[9], temp_mat1[9], temp_mat2[9], diff_mat[9];
+    double error_r[3], error_w[3];
 
     transpMat3f(R_W_d, R_W_d_T);
     transpMat3f(R_W_B, R_W_B_T);
@@ -416,8 +484,7 @@ void update_control() {
     subVec3f(angular_velocity_B, temp_vec, error_w);
 
     // Calculate tau_B_control
-    float tau_B_control[3], temp_vec2[3];
-    
+    double tau_B_control[3];
     multScalVec3f(-k_R, error_r, tau_B_control);
     multScalVec3f(-k_w, error_w, temp_vec);
     addVec3f(tau_B_control, temp_vec, tau_B_control);
@@ -427,7 +494,7 @@ void update_control() {
     addVec3f(tau_B_control, temp_vec2, tau_B_control);
 
     // Calculate term_0 and term_1
-    float term_0[3], term_1[3];
+    double term_0[3], term_1[3];
     multMatVec3f(R_W_d, angular_acceleration_d_B, temp_vec);
     multMatVec3f(R_W_B_T, temp_vec, term_0);
 
@@ -439,50 +506,80 @@ void update_control() {
     multMatVec3f(loc_I_mat, temp_vec, temp_vec2);
     subVec3f(tau_B_control, temp_vec2, tau_B_control);
 
-    // --- ROTOR SPEEDS ---
-    float F_bar_column_0[3], F_bar_column_1[3], F_bar_column_2[3], F_bar_column_3[3];
-    float pos_0[3] = {-L, 0.0f, L};
-    float pos_1[3] = {L, 0.0f, L};
-    float pos_2[3] = {L, 0.0f, -L};
-    float pos_3[3] = {-L, 0.0f, -L};
-    float y_axis[3] = {0.0f, 1.0f, 0.0f};
+    // Scale factors to improve numerical conditioning
+    const double SCALE_F = 1e6;  // Scale factor for forces
+    const double SCALE_M = 1e6;  // Scale factor for moments
+    const double SCALE_W = 1e2;  // Scale factor for omega calculation
 
-    // Calculate F_bar columns
-    multScalVec3f(k_f, pos_0, temp_vec);
-    crossVec3f(temp_vec, y_axis, temp_vec2);
-    addVec3f((float[3]){0.0f, k_m, 0.0f}, temp_vec2, F_bar_column_0);
-
-    multScalVec3f(k_f, pos_1, temp_vec);
-    crossVec3f(temp_vec, y_axis, temp_vec2);
-    addVec3f((float[3]){0.0f, -k_m, 0.0f}, temp_vec2, F_bar_column_1);
-
-    multScalVec3f(k_f, pos_2, temp_vec);
-    crossVec3f(temp_vec, y_axis, temp_vec2);
-    addVec3f((float[3]){0.0f, k_m, 0.0f}, temp_vec2, F_bar_column_2);
-
-    multScalVec3f(k_f, pos_3, temp_vec);
-    crossVec3f(temp_vec, y_axis, temp_vec2);
-    addVec3f((float[3]){0.0f, -k_m, 0.0f}, temp_vec2, F_bar_column_3);
-
-    float F_bar[16] = {
-        k_f, k_f, k_f, k_f,
-        F_bar_column_0[0], F_bar_column_1[0], F_bar_column_2[0], F_bar_column_3[0],
-        F_bar_column_0[1], F_bar_column_1[1], F_bar_column_2[1], F_bar_column_3[1],
-        F_bar_column_0[2], F_bar_column_1[2], F_bar_column_2[2], F_bar_column_3[2]
+    // Construct scaled F_bar matrix
+    double F_bar[16] = {
+        k_f * SCALE_F,    k_f * SCALE_F,    k_f * SCALE_F,    k_f * SCALE_F,
+        L*k_f * SCALE_M,  L*k_f * SCALE_M, -L*k_f * SCALE_M, -L*k_f * SCALE_M,
+        -L*k_f * SCALE_M, L*k_f * SCALE_M,  L*k_f * SCALE_M, -L*k_f * SCALE_M,
+        k_m * SCALE_M,   -k_m * SCALE_M,    k_m * SCALE_M,   -k_m * SCALE_M
     };
 
-    float F_bar_inv[16];
-    inv4Mat4f(F_bar, F_bar_inv);
+    // Scale the control input vector
+    double scaled_control_input[4] = {
+        f_z_B_control * SCALE_F,
+        tau_B_control[0] * SCALE_M,
+        tau_B_control[1] * SCALE_M,
+        tau_B_control[2] * SCALE_M
+    };
 
-    float control_input[4] = {f_z_B_control, tau_B_control[0], tau_B_control[1], tau_B_control[2]};
-    float omega_sign_square[4];
-    multMatVec4f(F_bar_inv, control_input, omega_sign_square);
+    // Print debug information
+    printf("Control inputs before scaling: f_z=%f, tau=[%f, %f, %f]\n",
+           f_z_B_control, tau_B_control[0], tau_B_control[1], tau_B_control[2]);
 
-    // Update motor speeds
-    omega_1 = sqrtf(fabsf(omega_sign_square[0]));
-    omega_2 = sqrtf(fabsf(omega_sign_square[1]));
-    omega_3 = sqrtf(fabsf(omega_sign_square[2]));
-    omega_4 = sqrtf(fabsf(omega_sign_square[3]));
+    printf("Scaled F_bar matrix:\n");
+    for(int i = 0; i < 16; i++) {
+        printf("%f ", F_bar[i]);
+        if((i+1) % 4 == 0) printf("\n");
+    }
+
+    // Calculate and print determinant
+    double det = F_bar[0] * (F_bar[5] * F_bar[10] * F_bar[15] - F_bar[5] * F_bar[11] * F_bar[14] -
+                            F_bar[9] * F_bar[6] * F_bar[15] + F_bar[9] * F_bar[7] * F_bar[14] +
+                            F_bar[13] * F_bar[6] * F_bar[11] - F_bar[13] * F_bar[7] * F_bar[10]);
+    printf("F_bar determinant: %e\n", det);
+
+    // Invert F_bar matrix
+    double F_bar_inv[16];
+    if (!inv4Mat4f(F_bar, F_bar_inv)) {
+        printf("Matrix inversion failed!\n");
+        omega_1 = omega_2 = omega_3 = omega_4 = omega_stable;
+        return;
+    }
+
+    // Calculate omega_sign_square with scaling compensation
+    double omega_sign_square[4];
+    multMatVec4f(F_bar_inv, scaled_control_input, omega_sign_square);
+
+    // Compensate for scaling and add base speed offset
+    const double omega_base = omega_stable * omega_stable;  // Square of base speed
+    for(int i = 0; i < 4; i++) {
+        omega_sign_square[i] = omega_base + (omega_sign_square[i] / SCALE_F) * SCALE_W;
+    }
+
+    printf("Final omega_sign_square: %f %f %f %f\n", 
+           omega_sign_square[0], omega_sign_square[1], 
+           omega_sign_square[2], omega_sign_square[3]);
+
+    // Calculate final rotor speeds
+    omega_1 = sqrt(fabs(omega_sign_square[0]));
+    omega_2 = sqrt(fabs(omega_sign_square[1]));
+    omega_3 = sqrt(fabs(omega_sign_square[2]));
+    omega_4 = sqrt(fabs(omega_sign_square[3]));
+
+    // Print rotor speeds before limiting
+    printf("Rotor speeds before limiting: %f %f %f %f\n", 
+           omega_1, omega_2, omega_3, omega_4);
+
+    // Limit rotor speeds
+    omega_1 = fmax(fmin(omega_1, omega_max), omega_min);
+    omega_2 = fmax(fmin(omega_2, omega_max), omega_min);
+    omega_3 = fmax(fmin(omega_3, omega_max), omega_min);
+    omega_4 = fmax(fmin(omega_4, omega_max), omega_min);
 }
 
 // Global variables for timing
