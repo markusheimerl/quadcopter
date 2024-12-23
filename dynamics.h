@@ -1,3 +1,6 @@
+#ifndef DYNAMICS_H
+#define DYNAMICS_H
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -366,3 +369,5 @@ void update_dynamics(Quad* q) {
     // Orthonormalize rotation matrix
     orthonormalize_rotation_matrix(q->R_W_B);
 }
+
+#endif // DYNAMICS_H
