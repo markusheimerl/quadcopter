@@ -166,29 +166,90 @@ let R_W_B = multMat3f(multMat3f(xRotMat3f(0), yRotMat3f(0)), zRotMat3f(0));
 
 setInterval(() => {
     // Limit motor speeds
-    [omega_1, omega_2, omega_3, omega_4] = [omega_1, omega_2, omega_3, omega_4].map(w => Math.max(Math.min(w, omega_max), omega_min));
+    omega_1 = Math.max(Math.min(omega_1, omega_max), omega_min);
+    omega_2 = Math.max(Math.min(omega_2, omega_max), omega_min);
+    omega_3 = Math.max(Math.min(omega_3, omega_max), omega_min);
+    omega_4 = Math.max(Math.min(omega_4, omega_max), omega_min);
 
-    // Calculate forces and moments
-    const forces = [omega_1, omega_2, omega_3, omega_4].map(w => k_f * w * Math.abs(w));
-    const moments = [omega_1, omega_2, omega_3, omega_4].map(w => k_m * w * Math.abs(w));
-    
-    // Thrust and torque calculations
-    const f_B_thrust = [0, forces.reduce((a, b) => a + b), 0];
-    
-    const tau_B_drag = [0, moments[0] - moments[1] + moments[2] - moments[3], 0];
-    const thrust_points = [[-L, 0, L], [L, 0, L], [L, 0, -L], [-L, 0, -L]];
-    const tau_B_thrust = thrust_points.reduce((acc, point, i) => addVec3f(acc, crossVec3f(point, [0, forces[i], 0])), [0, 0, 0]);
-    const tau_B = addVec3f(tau_B_drag, tau_B_thrust);
+    // Calculate individual rotor forces and moments
+    let f1 = k_f * omega_1 * Math.abs(omega_1);
+    let f2 = k_f * omega_2 * Math.abs(omega_2);
+    let f3 = k_f * omega_3 * Math.abs(omega_3);
+    let f4 = k_f * omega_4 * Math.abs(omega_4);
 
+    let m1 = k_m * omega_1 * Math.abs(omega_1);
+    let m2 = k_m * omega_2 * Math.abs(omega_2);
+    let m3 = k_m * omega_3 * Math.abs(omega_3);
+    let m4 = k_m * omega_4 * Math.abs(omega_4);
+    
+    // Total thrust force in body frame
+    let f_B_thrust = [0, f1 + f2 + f3 + f4, 0];
+    
+    // Torques from drag and thrust
+    let tau_B_drag = [0, m1 - m2 + m3 - m4, 0];
+    
+    // Torques from thrust forces
+    let tau_1 = crossVec3f([-L, 0, L], [0, f1, 0]);
+    let tau_2 = crossVec3f([L, 0, L], [0, f2, 0]);
+    let tau_3 = crossVec3f([L, 0, -L], [0, f3, 0]);
+    let tau_4 = crossVec3f([-L, 0, -L], [0, f4, 0]);
+    
+    let tau_B_thrust = [
+        tau_1[0] + tau_2[0] + tau_3[0] + tau_4[0],
+        tau_1[1] + tau_2[1] + tau_3[1] + tau_4[1],
+        tau_1[2] + tau_2[2] + tau_3[2] + tau_4[2]
+    ];
+
+    let tau_B = [
+        tau_B_drag[0] + tau_B_thrust[0],
+        tau_B_drag[1] + tau_B_thrust[1],
+        tau_B_drag[2] + tau_B_thrust[2]
+    ];
+
+    // Transform thrust to world frame and add gravity
+    let f_thrust_W = multMatVec3f(R_W_B, f_B_thrust);
+    let f_gravity_W = [0, -g * m, 0];
+    
     // Calculate accelerations
-    const linear_acceleration_W = multScalVec3f(1/m, addVec3f([0, -g * m, 0], multMatVec3f(R_W_B, f_B_thrust)));
-    const angular_acceleration_B = addVec3f(crossVec3f(multScalVec3f(-1, angular_velocity_B), multMatVec3f(loc_I_mat, angular_velocity_B)), tau_B).map((val, i) => val / I[i]);
+    let linear_acceleration_W = [
+        (f_thrust_W[0] + f_gravity_W[0]) / m,
+        (f_thrust_W[1] + f_gravity_W[1]) / m,
+        (f_thrust_W[2] + f_gravity_W[2]) / m
+    ];
 
-    // Update state
-    linear_velocity_W = addVec3f(linear_velocity_W, multScalVec3f(dt, linear_acceleration_W));
-    linear_position_W = addVec3f(linear_position_W, multScalVec3f(dt, linear_velocity_W));
-    angular_velocity_B = addVec3f(angular_velocity_B, multScalVec3f(dt, angular_acceleration_B));
-    R_W_B = addMat3f(R_W_B, multScalMat3f(dt, multMat3f(R_W_B, so3hat(angular_velocity_B))));
+    // Angular momentum terms
+    let h_B = multMatVec3f(loc_I_mat, angular_velocity_B);
+    let w_cross_h = crossVec3f(multScalVec3f(-1, angular_velocity_B), h_B);
+    
+    let angular_acceleration_B = [
+        (w_cross_h[0] + tau_B[0]) / I[0],
+        (w_cross_h[1] + tau_B[1]) / I[1],
+        (w_cross_h[2] + tau_B[2]) / I[2]
+    ];
+
+    // Update state variables
+    linear_velocity_W = [
+        linear_velocity_W[0] + dt * linear_acceleration_W[0],
+        linear_velocity_W[1] + dt * linear_acceleration_W[1],
+        linear_velocity_W[2] + dt * linear_acceleration_W[2]
+    ];
+
+    linear_position_W = [
+        linear_position_W[0] + dt * linear_velocity_W[0],
+        linear_position_W[1] + dt * linear_velocity_W[1],
+        linear_position_W[2] + dt * linear_velocity_W[2]
+    ];
+
+    angular_velocity_B = [
+        angular_velocity_B[0] + dt * angular_acceleration_B[0],
+        angular_velocity_B[1] + dt * angular_acceleration_B[1],
+        angular_velocity_B[2] + dt * angular_acceleration_B[2]
+    ];
+
+    // Update rotation matrix
+    let w_hat = so3hat(angular_velocity_B);
+    let R_dot = multMat3f(R_W_B, w_hat);
+    R_W_B = addMat3f(R_W_B, multScalMat3f(dt, R_dot));
 }, dt);
 
 // ----------------------------------- CONTROL PARAMETERS -----------------------------------
