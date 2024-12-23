@@ -50,7 +50,7 @@ void transpMat3f(const double* m, double* result) {
 
 void identMat3f(double* result) {
     for(int i = 0; i < 9; i++) result[i] = 0;
-    result[0] = result[4] = result[8] = 1.0f;
+    result[0] = result[4] = result[8] = 1.0;
 }
 
 void rotMat3f(char axis, double rads, double* result) {
@@ -152,12 +152,12 @@ void inv4Mat4f(const double* m, double* result) {
 
     double det = s0*c5 - s1*c4 + s2*c3 + s3*c2 - s4*c1 + s5*c0;
     
-    if (det == 0.0f) {
+    if (det == 0.0) {
         // Handle error case
         return;
     }
 
-    double invdet = 1.0f/det;
+    double invdet = 1.0/det;
 
     result[0] = (m[5]*c5 - m[6]*c4 + m[7]*c3)*invdet;
     result[1] = (-m[1]*c5 + m[2]*c4 - m[3]*c3)*invdet;
@@ -201,16 +201,16 @@ void zRotMat3f(double rads, double* result) {
 }
 
 // Constants
-#define K_F 0.0004905f
-#define K_M 0.00004905f
-#define L 0.25f
-#define L_SQRT2 (L / sqrtf(2.0f))
-#define G 9.81f
-#define M 0.5f
-#define DT 0.01f
-#define OMEGA_MIN 30.0f
-#define OMEGA_MAX 70.0f
-#define OMEGA_STABLE 50.0f
+#define K_F 0.0004905
+#define K_M 0.00004905
+#define L 0.25
+#define L_SQRT2 (L / sqrtf(2.0))
+#define G 9.81
+#define M 0.5
+#define DT 0.01
+#define OMEGA_MIN 30.0
+#define OMEGA_MAX 70.0
+#define OMEGA_STABLE 50.0
 
 // State variables
 double omega[4];
@@ -218,7 +218,20 @@ double angular_velocity_B[3];
 double linear_velocity_W[3];
 double linear_position_W[3];
 double R_W_B[3][3];  // 3x3 rotation matrix
-double I[3] = {0.01f, 0.02f, 0.01f};
+double I[3] = {0.01, 0.02, 0.01};
+
+// Control variables
+double linear_position_d_W[3] = {2.0, 2.0, 2.0};
+double linear_velocity_d_W[3] = {0.0, 0.0, 0.0};
+double linear_acceleration_d_W[3] = {0.0, 0.0, 0.0};
+double angular_velocity_d_B[3] = {0.0, 0.0, 0.0};
+double angular_acceleration_d_B[3] = {0.0, 0.0, 0.0};
+double yaw_d = 0.0;
+
+const double k_p = 0.05;
+const double k_v = 0.5;
+const double k_R = 0.5;
+const double k_w = 0.5;
 
 void init_drone_state(void) {
     // Initialize omegas
@@ -228,28 +241,28 @@ void init_drone_state(void) {
     
     // Initialize angular velocity
     for(int i = 0; i < 3; i++) {
-        angular_velocity_B[i] = 0.0f;
+        angular_velocity_B[i] = 0.0;
     }
     
     // Initialize linear velocity
     for(int i = 0; i < 3; i++) {
-        linear_velocity_W[i] = 0.0f;
+        linear_velocity_W[i] = 0.0;
     }
     
     // Initialize position (0, 1, 0)
-    linear_position_W[0] = 0.0f;
-    linear_position_W[1] = 1.0f;
-    linear_position_W[2] = 0.0f;
+    linear_position_W[0] = 0.0;
+    linear_position_W[1] = 1.0;
+    linear_position_W[2] = 0.0;
     
     // Initialize rotation matrix (identity matrix from rotation of 0 around all axes)
     double temp[3][3];
     double result[3][3];
     
     // Get rotation matrices for 0 rotation around each axis and multiply them
-    xRotMat3f(0.0f, temp);
-    yRotMat3f(0.0f, result);
+    xRotMat3f(0.0, temp);
+    yRotMat3f(0.0, result);
     multMat3f(temp, result, R_W_B);
-    zRotMat3f(0.0f, temp);
+    zRotMat3f(0.0, temp);
     multMat3f(R_W_B, temp, R_W_B);
 }
 
