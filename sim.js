@@ -1,284 +1,151 @@
+// 3x3 Matrix Operations
 function multMat3f(a, b) {
-    return [
-        a[0] * b[0] + a[1] * b[3] + a[2] * b[6],
-        a[0] * b[1] + a[1] * b[4] + a[2] * b[7],
-        a[0] * b[2] + a[1] * b[5] + a[2] * b[8],
-
-        a[3] * b[0] + a[4] * b[3] + a[5] * b[6],
-        a[3] * b[1] + a[4] * b[4] + a[5] * b[7],
-        a[3] * b[2] + a[4] * b[5] + a[5] * b[8],
-
-        a[6] * b[0] + a[7] * b[3] + a[8] * b[6],
-        a[6] * b[1] + a[7] * b[4] + a[8] * b[7],
-        a[6] * b[2] + a[7] * b[5] + a[8] * b[8]
-    ];
+    const m = [];
+    for(let i = 0; i < 3; i++)
+        for(let j = 0; j < 3; j++)
+            m[i*3 + j] = a[i*3]*b[j] + a[i*3+1]*b[j+3] + a[i*3+2]*b[j+6];
+    return m;
 }
 
 function multMatVec3f(m, v) {
     return [
-        m[0] * v[0] + m[1] * v[1] + m[2] * v[2],
-        m[3] * v[0] + m[4] * v[1] + m[5] * v[2],
-        m[6] * v[0] + m[7] * v[1] + m[8] * v[2]
+        m[0]*v[0] + m[1]*v[1] + m[2]*v[2],
+        m[3]*v[0] + m[4]*v[1] + m[5]*v[2],
+        m[6]*v[0] + m[7]*v[1] + m[8]*v[2]
     ];
 }
 
 function vecToDiagMat3f(v) {
-    return [
-        v[0], 0.0, 0.0,
-        0.0, v[1], 0.0,
-        0.0, 0.0, v[2]
-    ];
+    return [v[0],0,0, 0,v[1],0, 0,0,v[2]];
 }
 
 function invMat3f(m) {
-    let det =
-        m[0] * (m[4] * m[8] - m[7] * m[5]) -
-        m[1] * (m[3] * m[8] - m[5] * m[6]) +
-        m[2] * (m[3] * m[7] - m[4] * m[6]);
-
-    if (det === 0) {
-        throw new Error("Matrix is not invertible");
-    }
-
-    let invDet = 1.0 / det;
-
+    const det = m[0]*(m[4]*m[8] - m[7]*m[5]) - 
+                m[1]*(m[3]*m[8] - m[5]*m[6]) + 
+                m[2]*(m[3]*m[7] - m[4]*m[6]);
+    
+    if (det === 0) throw new Error("Matrix is not invertible");
+    
+    const invDet = 1/det;
     return [
-        invDet * (m[4] * m[8] - m[7] * m[5]),
-        invDet * (m[2] * m[7] - m[1] * m[8]),
-        invDet * (m[1] * m[5] - m[2] * m[4]),
-
-        invDet * (m[5] * m[6] - m[3] * m[8]),
-        invDet * (m[0] * m[8] - m[2] * m[6]),
-        invDet * (m[3] * m[2] - m[0] * m[5]),
-
-        invDet * (m[3] * m[7] - m[6] * m[4]),
-        invDet * (m[6] * m[1] - m[0] * m[7]),
-        invDet * (m[0] * m[4] - m[3] * m[1])
+        invDet*(m[4]*m[8] - m[7]*m[5]), invDet*(m[2]*m[7] - m[1]*m[8]), invDet*(m[1]*m[5] - m[2]*m[4]),
+        invDet*(m[5]*m[6] - m[3]*m[8]), invDet*(m[0]*m[8] - m[2]*m[6]), invDet*(m[3]*m[2] - m[0]*m[5]),
+        invDet*(m[3]*m[7] - m[6]*m[4]), invDet*(m[6]*m[1] - m[0]*m[7]), invDet*(m[0]*m[4] - m[3]*m[1])
     ];
 }
 
 function transpMat3f(m) {
-    return [
-        m[0], m[3], m[6],
-        m[1], m[4], m[7],
-        m[2], m[5], m[8]
-    ];
+    return [m[0],m[3],m[6], m[1],m[4],m[7], m[2],m[5],m[8]];
 }
 
 function identMat3f() {
-    return [
-        1.0, 0.0, 0.0,
-        0.0, 1.0, 0.0,
-        0.0, 0.0, 1.0,
-    ];
+    return [1,0,0, 0,1,0, 0,0,1];
 }
 
-function xRotMat3f(rads) {
-    let s = Math.sin(rads);
-    let c = Math.cos(rads);
-    return [
-        1.0, 0.0, 0.0,
-        0.0, c, -s,
-        0.0, s, c
-    ];
+function rotMat3f(axis, rads) {
+    const s = Math.sin(rads), c = Math.cos(rads);
+    switch(axis) {
+        case 'x': return [1,0,0, 0,c,-s, 0,s,c];
+        case 'y': return [c,0,s, 0,1,0, -s,0,c];
+        case 'z': return [c,-s,0, s,c,0, 0,0,1];
+    }
 }
 
-function yRotMat3f(rads) {
-    let s = Math.sin(rads);
-    let c = Math.cos(rads);
-    return [
-        c, 0.0, s,
-        0.0, 1.0, 0.0,
-        -s, 0.0, c
-    ];
-}
-
-function zRotMat3f(rads) {
-    let s = Math.sin(rads);
-    let c = Math.cos(rads);
-    return [
-        c, -s, 0.0,
-        s, c, 0.0,
-        0.0, 0.0, 1.0
-    ];
-}
+const xRotMat3f = rads => rotMat3f('x', rads);
+const yRotMat3f = rads => rotMat3f('y', rads);
+const zRotMat3f = rads => rotMat3f('z', rads);
 
 function so3hat(v) {
-    return [
-        0.0, -v[2], v[1],
-        v[2], 0.0, -v[0],
-        -v[1], v[0], 0.0,
-    ];
+    return [0,-v[2],v[1], v[2],0,-v[0], -v[1],v[0],0];
 }
 
 function so3vee(m) {
-    return [
-        m[7], m[2], m[3]
-    ];
+    return [m[7], m[2], m[3]];
 }
 
-function addMat3f(a, b) {
-    return [
-        a[0] + b[0], a[1] + b[1], a[2] + b[2],
-        a[3] + b[3], a[4] + b[4], a[5] + b[5],
-        a[6] + b[6], a[7] + b[7], a[8] + b[8]
-    ];
-}
+// Matrix arithmetic
+const addMat3f = (a, b) => a.map((v, i) => v + b[i]);
+const subMat3f = (a, b) => a.map((v, i) => v - b[i]);
+const multScalMat3f = (s, m) => m.map(v => v * s);
 
-function multScalMat3f(s, m) {
-    return [
-        s * m[0], s * m[1], s * m[2],
-        s * m[3], s * m[4], s * m[5],
-        s * m[6], s * m[7], s * m[8]
-    ];
-}
-
-function xRotMat3f(rads) {
-    let s = Math.sin(rads);
-    let c = Math.cos(rads);
-    return [
-        1.0, 0.0, 0.0,
-        0.0, c, -s,
-        0.0, s, c
-    ];
-}
-
-function yRotMat3f(rads) {
-    let s = Math.sin(rads);
-    let c = Math.cos(rads);
-    return [
-        c, 0.0, s,
-        0.0, 1.0, 0.0,
-        -s, 0.0, c
-    ];
-}
-
-function zRotMat3f(rads) {
-    let s = Math.sin(rads);
-    let c = Math.cos(rads);
-    return [
-        c, -s, 0.0,
-        s, c, 0.0,
-        0.0, 0.0, 1.0
-    ];
-}
-
-function subMat3f(a, b) {
-    return [
-        a[0] - b[0], a[1] - b[1], a[2] - b[2],
-        a[3] - b[3], a[4] - b[4], a[5] - b[5],
-        a[6] - b[6], a[7] - b[7], a[8] - b[8]
-    ];
-}
-
-
+// 4x4 Matrix Operations
 function multMat4f(a, b) {
-    return [
-        a[0] * b[0] + a[1] * b[4] + a[2] * b[8] + a[3] * b[12],
-        a[0] * b[1] + a[1] * b[5] + a[2] * b[9] + a[3] * b[13],
-        a[0] * b[2] + a[1] * b[6] + a[2] * b[10] + a[3] * b[14],
-        a[0] * b[3] + a[1] * b[7] + a[2] * b[11] + a[3] * b[15],
+    const m = [];
+    for(let i = 0; i < 4; i++)
+        for(let j = 0; j < 4; j++)
+            m[i*4 + j] = a[i*4]*b[j] + a[i*4+1]*b[j+4] + 
+                         a[i*4+2]*b[j+8] + a[i*4+3]*b[j+12];
+    return m;
+}
 
-        a[4] * b[0] + a[5] * b[4] + a[6] * b[8] + a[7] * b[12],
-        a[4] * b[1] + a[5] * b[5] + a[6] * b[9] + a[7] * b[13],
-        a[4] * b[2] + a[5] * b[6] + a[6] * b[10] + a[7] * b[14],
-        a[4] * b[3] + a[5] * b[7] + a[6] * b[11] + a[7] * b[15],
+// Vector Operations
+const crossVec3f = (a, b) => [
+    a[1]*b[2] - a[2]*b[1],
+    a[2]*b[0] - a[0]*b[2],
+    a[0]*b[1] - a[1]*b[0]
+];
 
-        a[8] * b[0] + a[9] * b[4] + a[10] * b[8] + a[11] * b[12],
-        a[8] * b[1] + a[9] * b[5] + a[10] * b[9] + a[11] * b[13],
-        a[8] * b[2] + a[9] * b[6] + a[10] * b[10] + a[11] * b[14],
-        a[8] * b[3] + a[9] * b[7] + a[10] * b[11] + a[11] * b[15],
+const multScalVec3f = (s, v) => v.map(x => x * s);
+const addVec3f = (a, b) => a.map((v, i) => v + b[i]);
+const subVec3f = (a, b) => a.map((v, i) => v - b[i]);
+const dotVec3f = (a, b) => a.reduce((sum, v, i) => sum + v * b[i], 0);
 
-        a[12] * b[0] + a[13] * b[4] + a[14] * b[8] + a[15] * b[12],
-        a[12] * b[1] + a[13] * b[5] + a[14] * b[9] + a[15] * b[13],
-        a[12] * b[2] + a[13] * b[6] + a[14] * b[10] + a[15] * b[14],
-        a[12] * b[3] + a[13] * b[7] + a[14] * b[11] + a[15] * b[15]];
+function normVec3f(v) {
+    const mag = Math.sqrt(dotVec3f(v, v));
+    return v.map(x => x/mag);
 }
 
 function inv4Mat4f(m) {
-    let s0 = m[0] * m[5] - m[4] * m[1];
-    let s1 = m[0] * m[6] - m[4] * m[2];
-    let s2 = m[0] * m[7] - m[4] * m[3];
-    let s3 = m[1] * m[6] - m[5] * m[2];
-    let s4 = m[1] * m[7] - m[5] * m[3];
-    let s5 = m[2] * m[7] - m[6] * m[3];
+    const s0 = m[0]*m[5] - m[4]*m[1];
+    const s1 = m[0]*m[6] - m[4]*m[2];
+    const s2 = m[0]*m[7] - m[4]*m[3];
+    const s3 = m[1]*m[6] - m[5]*m[2];
+    const s4 = m[1]*m[7] - m[5]*m[3];
+    const s5 = m[2]*m[7] - m[6]*m[3];
 
-    let c5 = m[10] * m[15] - m[14] * m[11];
-    let c4 = m[9] * m[15] - m[13] * m[11];
-    let c3 = m[9] * m[14] - m[13] * m[10];
-    let c2 = m[8] * m[15] - m[12] * m[11];
-    let c1 = m[8] * m[14] - m[12] * m[10];
-    let c0 = m[8] * m[13] - m[12] * m[9];
+    const c5 = m[10]*m[15] - m[14]*m[11];
+    const c4 = m[9]*m[15] - m[13]*m[11];
+    const c3 = m[9]*m[14] - m[13]*m[10];
+    const c2 = m[8]*m[15] - m[12]*m[11];
+    const c1 = m[8]*m[14] - m[12]*m[10];
+    const c0 = m[8]*m[13] - m[12]*m[9];
 
-    let det = s0 * c5 - s1 * c4 + s2 * c3 + s3 * c2 - s4 * c1 + s5 * c0;
+    const det = s0*c5 - s1*c4 + s2*c3 + s3*c2 - s4*c1 + s5*c0;
     
-    if (det === 0) {
-        throw new Error("Matrix is not invertible");
-    }
+    if (det === 0) throw new Error("Matrix is not invertible");
 
-    let invdet = 1.0 / det;
+    const invdet = 1/det;
 
-    let b = [
-        (m[5] * c5 - m[6] * c4 + m[7] * c3) * invdet,
-        (-m[1] * c5 + m[2] * c4 - m[3] * c3) * invdet,
-        (m[13] * s5 - m[14] * s4 + m[15] * s3) * invdet,
-        (-m[9] * s5 + m[10] * s4 - m[11] * s3) * invdet,
+    return [
+        (m[5]*c5 - m[6]*c4 + m[7]*c3)*invdet,
+        (-m[1]*c5 + m[2]*c4 - m[3]*c3)*invdet,
+        (m[13]*s5 - m[14]*s4 + m[15]*s3)*invdet,
+        (-m[9]*s5 + m[10]*s4 - m[11]*s3)*invdet,
 
-        (-m[4] * c5 + m[6] * c2 - m[7] * c1) * invdet,
-        (m[0] * c5 - m[2] * c2 + m[3] * c1) * invdet,
-        (-m[12] * s5 + m[14] * s2 - m[15] * s1) * invdet,
-        (m[8] * s5 - m[10] * s2 + m[11] * s1) * invdet,
+        (-m[4]*c5 + m[6]*c2 - m[7]*c1)*invdet,
+        (m[0]*c5 - m[2]*c2 + m[3]*c1)*invdet,
+        (-m[12]*s5 + m[14]*s2 - m[15]*s1)*invdet,
+        (m[8]*s5 - m[10]*s2 + m[11]*s1)*invdet,
 
-        (m[4] * c4 - m[5] * c2 + m[7] * c0) * invdet,
-        (-m[0] * c4 + m[1] * c2 - m[3] * c0) * invdet,
-        (m[12] * s4 - m[13] * s2 + m[15] * s0) * invdet,
-        (-m[8] * s4 + m[9] * s2 - m[11] * s0) * invdet,
+        (m[4]*c4 - m[5]*c2 + m[7]*c0)*invdet,
+        (-m[0]*c4 + m[1]*c2 - m[3]*c0)*invdet,
+        (m[12]*s4 - m[13]*s2 + m[15]*s0)*invdet,
+        (-m[8]*s4 + m[9]*s2 - m[11]*s0)*invdet,
 
-        (-m[4] * c3 + m[5] * c1 - m[6] * c0) * invdet,
-        (m[0] * c3 - m[1] * c1 + m[2] * c0) * invdet,
-        (-m[12] * s3 + m[13] * s1 - m[14] * s0) * invdet,
-        (m[8] * s3 - m[9] * s1 + m[10] * s0) * invdet
+        (-m[4]*c3 + m[5]*c1 - m[6]*c0)*invdet,
+        (m[0]*c3 - m[1]*c1 + m[2]*c0)*invdet,
+        (-m[12]*s3 + m[13]*s1 - m[14]*s0)*invdet,
+        (m[8]*s3 - m[9]*s1 + m[10]*s0)*invdet
     ];
-
-    return b;
 }
 
 function multMatVec4f(m, v) {
     return [
-        m[0] * v[0] + m[1] * v[1] + m[2] * v[2] + m[3] * v[3],
-        m[4] * v[0] + m[5] * v[1] + m[6] * v[2] + m[7] * v[3],
-        m[8] * v[0] + m[9] * v[1] + m[10] * v[2] + m[11] * v[3],
-        m[12] * v[0] + m[13] * v[1] + m[14] * v[2] + m[15] * v[3]
+        m[0]*v[0] + m[1]*v[1] + m[2]*v[2] + m[3]*v[3],
+        m[4]*v[0] + m[5]*v[1] + m[6]*v[2] + m[7]*v[3],
+        m[8]*v[0] + m[9]*v[1] + m[10]*v[2] + m[11]*v[3],
+        m[12]*v[0] + m[13]*v[1] + m[14]*v[2] + m[15]*v[3]
     ];
-}
-
-function crossVec3f(v1, v2) {
-    return [
-        v1[1] * v2[2] - v1[2] * v2[1],
-        v1[2] * v2[0] - v1[0] * v2[2],
-        v1[0] * v2[1] - v1[1] * v2[0]
-    ];
-}
-
-function multScalVec3f(s, v) {
-    return [v[0] * s, v[1] * s, v[2] * s];
-}
-
-function addVec3f(v1, v2) {
-    return [v1[0] + v2[0], v1[1] + v2[1], v1[2] + v2[2]];
-}
-
-function subVec3f(v1, v2) {
-    return [v1[0] - v2[0], v1[1] - v2[1], v1[2] - v2[2]];
-}
-
-function dotVec3f(v1, v2) {
-    return v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2];
-}
-
-function normVec3f(v) {
-    let magnitude = Math.sqrt(dotVec3f(v, v));
-    return [v[0] / magnitude, v[1] / magnitude, v[2] / magnitude];
 }
 
 // ----------------------------------- CONSTANTS -----------------------------------
