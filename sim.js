@@ -225,7 +225,7 @@ setInterval(function () {
     let R_W_d = [
         R_W_d_column_1[0], R_W_d_column_2[0], R_W_d_column_0[0],
         R_W_d_column_1[1], R_W_d_column_2[1], R_W_d_column_0[1],
-        R_W_d_column_1[2], R_W_d_column_2[2], R_W_d_column_0[2],
+        R_W_d_column_1[2], R_W_d_column_2[2], R_W_d_column_0[2]
     ];
 
     let error_r = multScalVec3f(0.5, so3vee(subMat3f(multMat3f(transpMat3f(R_W_d), R_W_B), multMat3f(transpMat3f(R_W_B), R_W_d))));
