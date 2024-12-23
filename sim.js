@@ -259,26 +259,23 @@ setInterval(function () {
 
 }, dt * 10);
 
-// Print the state of the drone once every 100 ms
-setInterval(function () {
-    console.log("Time: " + new Date().toISOString());
-    console.log("Linear Position: " + linear_position_W);
-    console.log("Linear Velocity: " + linear_velocity_W);
-    console.log("Angular Velocity: " + angular_velocity_B);
-    console.log("Rotor Speeds: " + omega_1 + ", " + omega_2 + ", " + omega_3 + ", " + omega_4);
-    console.log(" ");
+// Print drone state every 100ms
+setInterval(() => {
+    console.log(`Time: ${new Date().toISOString()}
+Linear Position: ${linear_position_W}
+Linear Velocity: ${linear_velocity_W}
+Angular Velocity: ${angular_velocity_B}
+Rotor Speeds: ${omega_1}, ${omega_2}, ${omega_3}, ${omega_4}
+`);
 }, 100);
 
-// Stop once the drone has reached the desired position
-setInterval(function () {
-    if (Math.abs(linear_position_W[0] - linear_position_d_W[0]) < 0.1 &&
-        Math.abs(linear_position_W[1] - linear_position_d_W[1]) < 0.1 &&
-        Math.abs(linear_position_W[2] - linear_position_d_W[2]) < 0.1) {
-        process.exit();
-    }
+// Check position and stop conditions
+setInterval(() => {
+    const isAtTarget = linear_position_W.every((pos, i) => 
+        Math.abs(pos - linear_position_d_W[i]) < 0.1
+    );
+    if (isAtTarget) process.exit();
 }, dt * 1000);
 
-// or 50 seconds have passed, whichever comes first
-setTimeout(function () {
-    process.exit();
-}, 50000);
+// Timeout after 10 seconds
+setTimeout(() => process.exit(), 10000);
