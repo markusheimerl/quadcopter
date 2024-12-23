@@ -583,14 +583,15 @@ setInterval(function () {
 
 }, dt * 10);
 
-// Print the state of the drone
+// Print the state of the drone once every 100 ms
 setInterval(function () {
+    console.log("Time: " + new Date().toISOString());
     console.log("Linear Position: " + linear_position_W);
     console.log("Linear Velocity: " + linear_velocity_W);
     console.log("Angular Velocity: " + angular_velocity_B);
     console.log("Rotor Speeds: " + omega_1 + ", " + omega_2 + ", " + omega_3 + ", " + omega_4);
     console.log(" ");
-}, dt * 100);
+}, 100);
 
 // Stop once the drone has reached the desired position
 setInterval(function () {
@@ -600,3 +601,8 @@ setInterval(function () {
         process.exit();
     }
 }, dt * 1000);
+
+// or 50 seconds have passed, whichever comes first
+setTimeout(function () {
+    process.exit();
+}, 50000);
