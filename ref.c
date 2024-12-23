@@ -1,27 +1,27 @@
 #include <math.h>
 
 // 3x3 Matrix Operations
-void multMat3f(const float* a, const float* b, float* result) {
+void multMat3f(const double* a, const double* b, double* result) {
     for(int i = 0; i < 3; i++)
         for(int j = 0; j < 3; j++)
             result[i*3 + j] = a[i*3]*b[j] + a[i*3+1]*b[j+3] + a[i*3+2]*b[j+6];
 }
 
-void multMatVec3f(const float* m, const float* v, float* result) {
+void multMatVec3f(const double* m, const double* v, double* result) {
     result[0] = m[0]*v[0] + m[1]*v[1] + m[2]*v[2];
     result[1] = m[3]*v[0] + m[4]*v[1] + m[5]*v[2];
     result[2] = m[6]*v[0] + m[7]*v[1] + m[8]*v[2];
 }
 
-void vecToDiagMat3f(const float* v, float* result) {
+void vecToDiagMat3f(const double* v, double* result) {
     for(int i = 0; i < 9; i++) result[i] = 0;
     result[0] = v[0];
     result[4] = v[1];
     result[8] = v[2];
 }
 
-void invMat3f(const float* m, float* result) {
-    float det = m[0]*(m[4]*m[8] - m[7]*m[5]) - 
+void invMat3f(const double* m, double* result) {
+    double det = m[0]*(m[4]*m[8] - m[7]*m[5]) - 
                 m[1]*(m[3]*m[8] - m[5]*m[6]) + 
                 m[2]*(m[3]*m[7] - m[4]*m[6]);
     
@@ -30,7 +30,7 @@ void invMat3f(const float* m, float* result) {
         return;
     }
     
-    float invDet = 1.0f/det;
+    double invDet = 1.0f/det;
     result[0] = invDet*(m[4]*m[8] - m[7]*m[5]);
     result[1] = invDet*(m[2]*m[7] - m[1]*m[8]);
     result[2] = invDet*(m[1]*m[5] - m[2]*m[4]);
@@ -42,19 +42,19 @@ void invMat3f(const float* m, float* result) {
     result[8] = invDet*(m[0]*m[4] - m[3]*m[1]);
 }
 
-void transpMat3f(const float* m, float* result) {
+void transpMat3f(const double* m, double* result) {
     result[0] = m[0]; result[1] = m[3]; result[2] = m[6];
     result[3] = m[1]; result[4] = m[4]; result[5] = m[7];
     result[6] = m[2]; result[7] = m[5]; result[8] = m[8];
 }
 
-void identMat3f(float* result) {
+void identMat3f(double* result) {
     for(int i = 0; i < 9; i++) result[i] = 0;
     result[0] = result[4] = result[8] = 1.0f;
 }
 
-void rotMat3f(char axis, float rads, float* result) {
-    float s = sinf(rads), c = cosf(rads);
+void rotMat3f(char axis, double rads, double* result) {
+    double s = sinf(rads), c = cosf(rads);
     switch(axis) {
         case 'x':
             result[0]=1; result[1]=0; result[2]=0;
@@ -74,33 +74,33 @@ void rotMat3f(char axis, float rads, float* result) {
     }
 }
 
-void so3hat(const float* v, float* result) {
+void so3hat(const double* v, double* result) {
     result[0]=0; result[1]=-v[2]; result[2]=v[1];
     result[3]=v[2]; result[4]=0; result[5]=-v[0];
     result[6]=-v[1]; result[7]=v[0]; result[8]=0;
 }
 
-void so3vee(const float* m, float* result) {
+void so3vee(const double* m, double* result) {
     result[0] = m[7];
     result[1] = m[2];
     result[2] = m[3];
 }
 
 // Matrix arithmetic
-void addMat3f(const float* a, const float* b, float* result) {
+void addMat3f(const double* a, const double* b, double* result) {
     for(int i = 0; i < 9; i++) result[i] = a[i] + b[i];
 }
 
-void subMat3f(const float* a, const float* b, float* result) {
+void subMat3f(const double* a, const double* b, double* result) {
     for(int i = 0; i < 9; i++) result[i] = a[i] - b[i];
 }
 
-void multScalMat3f(float s, const float* m, float* result) {
+void multScalMat3f(double s, const double* m, double* result) {
     for(int i = 0; i < 9; i++) result[i] = s * m[i];
 }
 
 // 4x4 Matrix Operations
-void multMat4f(const float* a, const float* b, float* result) {
+void multMat4f(const double* a, const double* b, double* result) {
     for(int i = 0; i < 4; i++)
         for(int j = 0; j < 4; j++)
             result[i*4 + j] = a[i*4]*b[j] + a[i*4+1]*b[j+4] + 
@@ -108,56 +108,56 @@ void multMat4f(const float* a, const float* b, float* result) {
 }
 
 // Vector Operations
-void crossVec3f(const float* a, const float* b, float* result) {
+void crossVec3f(const double* a, const double* b, double* result) {
     result[0] = a[1]*b[2] - a[2]*b[1];
     result[1] = a[2]*b[0] - a[0]*b[2];
     result[2] = a[0]*b[1] - a[1]*b[0];
 }
 
-void multScalVec3f(float s, const float* v, float* result) {
+void multScalVec3f(double s, const double* v, double* result) {
     for(int i = 0; i < 3; i++) result[i] = s * v[i];
 }
 
-void addVec3f(const float* a, const float* b, float* result) {
+void addVec3f(const double* a, const double* b, double* result) {
     for(int i = 0; i < 3; i++) result[i] = a[i] + b[i];
 }
 
-void subVec3f(const float* a, const float* b, float* result) {
+void subVec3f(const double* a, const double* b, double* result) {
     for(int i = 0; i < 3; i++) result[i] = a[i] - b[i];
 }
 
-float dotVec3f(const float* a, const float* b) {
+double dotVec3f(const double* a, const double* b) {
     return a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
 }
 
-void normVec3f(const float* v, float* result) {
-    float mag = sqrtf(dotVec3f(v, v));
+void normVec3f(const double* v, double* result) {
+    double mag = sqrtf(dotVec3f(v, v));
     for(int i = 0; i < 3; i++) result[i] = v[i]/mag;
 }
 
-void inv4Mat4f(const float* m, float* result) {
-    float s0 = m[0]*m[5] - m[4]*m[1];
-    float s1 = m[0]*m[6] - m[4]*m[2];
-    float s2 = m[0]*m[7] - m[4]*m[3];
-    float s3 = m[1]*m[6] - m[5]*m[2];
-    float s4 = m[1]*m[7] - m[5]*m[3];
-    float s5 = m[2]*m[7] - m[6]*m[3];
+void inv4Mat4f(const double* m, double* result) {
+    double s0 = m[0]*m[5] - m[4]*m[1];
+    double s1 = m[0]*m[6] - m[4]*m[2];
+    double s2 = m[0]*m[7] - m[4]*m[3];
+    double s3 = m[1]*m[6] - m[5]*m[2];
+    double s4 = m[1]*m[7] - m[5]*m[3];
+    double s5 = m[2]*m[7] - m[6]*m[3];
 
-    float c5 = m[10]*m[15] - m[14]*m[11];
-    float c4 = m[9]*m[15] - m[13]*m[11];
-    float c3 = m[9]*m[14] - m[13]*m[10];
-    float c2 = m[8]*m[15] - m[12]*m[11];
-    float c1 = m[8]*m[14] - m[12]*m[10];
-    float c0 = m[8]*m[13] - m[12]*m[9];
+    double c5 = m[10]*m[15] - m[14]*m[11];
+    double c4 = m[9]*m[15] - m[13]*m[11];
+    double c3 = m[9]*m[14] - m[13]*m[10];
+    double c2 = m[8]*m[15] - m[12]*m[11];
+    double c1 = m[8]*m[14] - m[12]*m[10];
+    double c0 = m[8]*m[13] - m[12]*m[9];
 
-    float det = s0*c5 - s1*c4 + s2*c3 + s3*c2 - s4*c1 + s5*c0;
+    double det = s0*c5 - s1*c4 + s2*c3 + s3*c2 - s4*c1 + s5*c0;
     
     if (det == 0.0f) {
         // Handle error case
         return;
     }
 
-    float invdet = 1.0f/det;
+    double invdet = 1.0f/det;
 
     result[0] = (m[5]*c5 - m[6]*c4 + m[7]*c3)*invdet;
     result[1] = (-m[1]*c5 + m[2]*c4 - m[3]*c3)*invdet;
@@ -180,7 +180,7 @@ void inv4Mat4f(const float* m, float* result) {
     result[15] = (m[8]*s3 - m[9]*s1 + m[10]*s0)*invdet;
 }
 
-void multMatVec4f(const float* m, const float* v, float* result) {
+void multMatVec4f(const double* m, const double* v, double* result) {
     result[0] = m[0]*v[0] + m[1]*v[1] + m[2]*v[2] + m[3]*v[3];
     result[1] = m[4]*v[0] + m[5]*v[1] + m[6]*v[2] + m[7]*v[3];
     result[2] = m[8]*v[0] + m[9]*v[1] + m[10]*v[2] + m[11]*v[3];
@@ -188,15 +188,15 @@ void multMatVec4f(const float* m, const float* v, float* result) {
 }
 
 // Helper functions for rotation matrices
-void xRotMat3f(float rads, float* result) {
+void xRotMat3f(double rads, double* result) {
     rotMat3f('x', rads, result);
 }
 
-void yRotMat3f(float rads, float* result) {
+void yRotMat3f(double rads, double* result) {
     rotMat3f('y', rads, result);
 }
 
-void zRotMat3f(float rads, float* result) {
+void zRotMat3f(double rads, double* result) {
     rotMat3f('z', rads, result);
 }
 
@@ -213,12 +213,12 @@ void zRotMat3f(float rads, float* result) {
 #define OMEGA_STABLE 50.0f
 
 // State variables
-float omega[4];
-float angular_velocity_B[3];
-float linear_velocity_W[3];
-float linear_position_W[3];
-float R_W_B[3][3];  // 3x3 rotation matrix
-float I[3] = {0.01f, 0.02f, 0.01f};
+double omega[4];
+double angular_velocity_B[3];
+double linear_velocity_W[3];
+double linear_position_W[3];
+double R_W_B[3][3];  // 3x3 rotation matrix
+double I[3] = {0.01f, 0.02f, 0.01f};
 
 void init_drone_state(void) {
     // Initialize omegas
@@ -242,8 +242,8 @@ void init_drone_state(void) {
     linear_position_W[2] = 0.0f;
     
     // Initialize rotation matrix (identity matrix from rotation of 0 around all axes)
-    float temp[3][3];
-    float result[3][3];
+    double temp[3][3];
+    double result[3][3];
     
     // Get rotation matrices for 0 rotation around each axis and multiply them
     xRotMat3f(0.0f, temp);
