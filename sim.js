@@ -243,119 +243,6 @@ function inv4Mat4f(m) {
     return b;
 }
 
-function inv3Mat4f(m) {
-    let a = m[0], b = m[1], c = m[2];
-    let d = m[4], e = m[5], f = m[6];
-    let g = m[8], h = m[9], i = m[10];
-
-    let det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
-
-    if (det === 0) {
-        throw new Error("Matrix is not invertible");
-    }
-
-    let invDet = 1.0 / det;
-
-    return [
-        invDet * (e * i - f * h), invDet * (c * h - b * i), invDet * (b * f - c * e), 0,
-        invDet * (f * g - d * i), invDet * (a * i - c * g), invDet * (c * d - a * f), 0,
-        invDet * (d * h - e * g), invDet * (b * g - a * h), invDet * (a * e - b * d), 0,
-        0, 0, 0, 1
-    ];
-}
-
-function transp4Mat4f(m) {
-    return [
-        m[0], m[4], m[8], m[12],
-        m[1], m[5], m[9], m[13],
-        m[2], m[6], m[10], m[14],
-        m[3], m[7], m[11], m[15]
-    ];
-}
-
-function transp3Mat4f(m) {
-    return [
-        m[0], m[4], m[8], m[3],
-        m[1], m[5], m[9], m[7],
-        m[2], m[6], m[10], m[11],
-        m[12], m[13], m[14], m[15]
-    ];
-}
-
-function identMat4f() {
-    return [
-        1.0, 0.0, 0.0, 0.0,
-        0.0, 1.0, 0.0, 0.0,
-        0.0, 0.0, 1.0, 0.0,
-        0.0, 0.0, 0.0, 1.0];
-}
-
-function translMat4f(tx, ty, tz) {
-    return [
-        1.0, 0.0, 0.0, 0.0,
-        0.0, 1.0, 0.0, 0.0,
-        0.0, 0.0, 1.0, 0.0,
-        tx, ty, tz, 1.0];
-}
-
-function xRotMat4f(rads) {
-    let s = Math.sin(rads);
-    let c = Math.cos(rads);
-    return [
-        1.0, 0.0, 0.0, 0.0,
-        0.0, c, -s, 0.0,
-        0.0, s, c, 0.0,
-        0.0, 0.0, 0.0, 1.0];
-}
-
-function yRotMat4f(rads) {
-    let s = Math.sin(rads);
-    let c = Math.cos(rads);
-    return [
-        c, 0.0, s, 0.0,
-        0.0, 1.0, 0.0, 0.0,
-        -s, 0.0, c, 0.0,
-        0.0, 0.0, 0.0, 1.0];
-}
-
-function zRotMat4f(rads) {
-    let s = Math.sin(rads);
-    let c = Math.cos(rads);
-    return [
-        c, -s, 0.0, 0.0,
-        s, c, 0.0, 0.0,
-        0.0, 0.0, 1.0, 0.0,
-        0.0, 0.0, 0.0, 1.0];
-}
-
-function scaleMat4f(sx, sy, sz) {
-    return [
-        sx, 0.0, 0.0, 0.0,
-        0.0, sy, 0.0, 0.0,
-        0.0, 0.0, sz, 0.0,
-        0.0, 0.0, 0.0, 1.0];
-}
-
-function modelMat4f(tx, ty, tz, rx, ry, rz, sx, sy, sz) {
-    let modelmatrix = identMat4f();
-    modelmatrix = multMat4f(translMat4f(tx, ty, tz), modelmatrix);
-    modelmatrix = multMat4f(multMat4f(multMat4f(xRotMat4f(rx), yRotMat4f(ry)), zRotMat4f(rz)), modelmatrix);
-    modelmatrix = multMat4f(scaleMat4f(sx, sy, sz), modelmatrix);
-    return modelmatrix;
-}
-
-function perspecMat4f(fov, aspect, near, far) {
-    let f = Math.tan(Math.PI * 0.5 - 0.5 * fov);
-    let rangeInv = 1.0 / (near - far);
-
-    return [
-        f / aspect, 0, 0, 0,
-        0, f, 0, 0,
-        0, 0, (near + far) * rangeInv, -1,
-        0, 0, near * far * rangeInv * 2, 0
-    ];
-}
-
 function multMatVec4f(m, v) {
     return [
         m[0] * v[0] + m[1] * v[1] + m[2] * v[2] + m[3] * v[3],
@@ -365,59 +252,12 @@ function multMatVec4f(m, v) {
     ];
 }
 
-function setRot3Mat4f(m, r) {
-    m[0] = r[0];
-    m[1] = r[1];
-    m[2] = r[2];
-    m[4] = r[3];
-    m[5] = r[4];
-    m[6] = r[5];
-    m[8] = r[6];
-    m[9] = r[7];
-    m[10] = r[8];
-}
-
-function lookAtMat4f(eye, center, up) {
-    let f = subVec3f(center, eye);
-    f = normVec3f(f);
-
-    let s = crossVec3f(f, up);
-    s = normVec3f(s);
-
-    let u = crossVec3f(s, f);
-
-    return [
-        s[0], u[0], -f[0], 0,
-        s[1], u[1], -f[1], 0,
-        s[2], u[2], -f[2], 0,
-        -dotVec3f(s, eye), -dotVec3f(u, eye), dotVec3f(f, eye), 1
-    ];
-}
-
-function orthoMat4f(left, right, bottom, top, near, far) {
-    let lr = 1.0 / (left - right);
-    let bt = 1.0 / (bottom - top);
-    let nf = 1.0 / (near - far);
-
-    return [
-        -2.0 * lr, 0.0, 0.0, 0.0,
-        0.0, -2.0 * bt, 0.0, 0.0,
-        0.0, 0.0, 2.0 * nf, 0.0,
-        (left + right) * lr, (top + bottom) * bt, (far + near) * nf, 1.0
-    ];
-}
-
-
 function crossVec3f(v1, v2) {
     return [
         v1[1] * v2[2] - v1[2] * v2[1],
         v1[2] * v2[0] - v1[0] * v2[2],
         v1[0] * v2[1] - v1[1] * v2[0]
     ];
-}
-
-function addScalVec3f(s, v) {
-    return [v[0] + s, v[1] + s, v[2] + s];
 }
 
 function multScalVec3f(s, v) {
