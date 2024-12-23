@@ -152,8 +152,6 @@ function multMatVec4f(m, v) {
 const k_f = 0.0004905, k_m = 0.00004905, L = 0.25;
 const l = L / Math.sqrt(2);
 const I = [0.01, 0.02, 0.01];
-const loc_I_mat = vecToDiagMat3f(I);
-const loc_I_mat_inv = invMat3f(loc_I_mat);
 const g = 9.81, m = 0.5, dt = 0.01;
 const omega_min = 30, omega_max = 70, omega_stable = 50;
 
@@ -218,7 +216,7 @@ setInterval(() => {
     ];
 
     // Angular momentum terms
-    let h_B = multMatVec3f(loc_I_mat, angular_velocity_B);
+    let h_B = multMatVec3f(vecToDiagMat3f(I), angular_velocity_B);
     let w_cross_h = crossVec3f(multScalVec3f(-1, angular_velocity_B), h_B);
     
     let angular_acceleration_B = [
@@ -294,10 +292,10 @@ setInterval(function () {
 
     let tau_B_control = multScalVec3f(-k_R, error_r);
     tau_B_control = addVec3f(tau_B_control, multScalVec3f(-k_w, error_w));
-    tau_B_control = addVec3f(tau_B_control, crossVec3f(angular_velocity_B, multMatVec3f(loc_I_mat, angular_velocity_B)));
+    tau_B_control = addVec3f(tau_B_control, crossVec3f(angular_velocity_B, multMatVec3f(vecToDiagMat3f(I), angular_velocity_B)));
     let term_0 = multMatVec3f(transpMat3f(R_W_B), multMatVec3f(R_W_d, angular_acceleration_d_B));
     let term_1 = crossVec3f(angular_velocity_B, multMatVec3f(transpMat3f(R_W_B), multMatVec3f(R_W_d, angular_velocity_d_B)));
-    tau_B_control = subVec3f(tau_B_control, multMatVec3f(loc_I_mat, subVec3f(term_1, term_0)));
+    tau_B_control = subVec3f(tau_B_control, multMatVec3f(vecToDiagMat3f(I), subVec3f(term_1, term_0)));
 
     // --- ROTOR SPEEDS ---
     let F_bar_column_0 = addVec3f([0, k_m, 0], crossVec3f(multScalVec3f(k_f, [-L, 0, L]), [0, 1, 0]));
