@@ -4,7 +4,6 @@
 
 #define STEPS 600
 
-
 // Constants
 #define K_F 0.0004905
 #define K_M 0.00004905
@@ -12,7 +11,7 @@
 #define L_SQRT2 (L / sqrtf(2.0))
 #define G 9.81
 #define M 0.5
-#define DT 0.01
+#define DT (1.0 / 60.0)
 #define OMEGA_MIN 30.0
 #define OMEGA_MAX 70.0
 #define OMEGA_STABLE 50.0
