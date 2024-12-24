@@ -25,7 +25,7 @@ double R_W_B[9];  // 3x3 rotation matrix
 double I[3] = {0.01, 0.02, 0.01};
 
 // Control variables
-double linear_position_d_W[3] = {1.0, 0.5, -1.0};
+double linear_position_d_W[3] = {-1.0, 0.5, -0.5};
 double linear_velocity_d_W[3] = {0.0, 0.0, 0.0};
 double linear_acceleration_d_W[3] = {0.0, 0.0, 0.0};
 double angular_velocity_d_B[3] = {0.0, 0.0, 0.0};
