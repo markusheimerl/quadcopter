@@ -25,17 +25,17 @@ double R_W_B[9];  // 3x3 rotation matrix
 double I[3] = {0.01, 0.02, 0.01};
 
 // Control variables
-double linear_position_d_W[3] = {1.0, 0.5, 1.0};
+double linear_position_d_W[3] = {1.0, 0.5, -1.0};
 double linear_velocity_d_W[3] = {0.0, 0.0, 0.0};
 double linear_acceleration_d_W[3] = {0.0, 0.0, 0.0};
 double angular_velocity_d_B[3] = {0.0, 0.0, 0.0};
 double angular_acceleration_d_B[3] = {0.0, 0.0, 0.0};
 double yaw_d = 0.0;
 
-const double k_p = 0.05;
-const double k_v = 0.5;
-const double k_R = 0.5;
-const double k_w = 0.5;
+const double k_p = 0.5;
+const double k_v = 1.0;
+const double k_R = 1.0;
+const double k_w = 1.0;
 
 void init_drone_state(void) {
     // Initialize omegas
