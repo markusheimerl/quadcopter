@@ -200,6 +200,41 @@ void zRotMat3f(double rads, double* result) {
     rotMat3f('z', rads, result);
 }
 
+void orthonormalize_rotation_matrix(double* R) {
+    double x[3], y[3], z[3];
+    double temp[3];
+    
+    // Extract columns
+    for(int i = 0; i < 3; i++) {
+        x[i] = R[i];      // First column
+        y[i] = R[i + 3];  // Second column
+        z[i] = R[i + 6];  // Third column
+    }
+    
+    // Normalize x
+    double norm_x = sqrt(dotVec3f(x, x));
+    multScalVec3f(1.0/norm_x, x, x);
+    
+    // Make y orthogonal to x
+    double dot_xy = dotVec3f(x, y);
+    multScalVec3f(dot_xy, x, temp);
+    subVec3f(y, temp, y);
+    // Normalize y
+    double norm_y = sqrt(dotVec3f(y, y));
+    multScalVec3f(1.0/norm_y, y, y);
+    
+    // Make z orthogonal to x and y using cross product
+    crossVec3f(x, y, z);
+    // z is automatically normalized since x and y are orthonormal
+    
+    // Put back into matrix
+    for(int i = 0; i < 3; i++) {
+        R[i] = x[i];      // First column
+        R[i + 3] = y[i];  // Second column
+        R[i + 6] = z[i];  // Third column
+    }
+}
+
 // Constants
 #define K_F 0.0004905
 #define K_M 0.00004905
@@ -369,6 +404,8 @@ void update_drone_physics(void) {
             R_W_B[i*3 + j] = R_new[i*3 + j];
         }
     }
+
+    orthonormalize_rotation_matrix(R_W_B);
 }
 
 void update_drone_control(void) {
