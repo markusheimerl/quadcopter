@@ -217,11 +217,11 @@ double omega[4];
 double angular_velocity_B[3];
 double linear_velocity_W[3];
 double linear_position_W[3];
-double R_W_B[3][3];  // 3x3 rotation matrix
+double R_W_B[9];  // 3x3 rotation matrix
 double I[3] = {0.01, 0.02, 0.01};
 
 // Control variables
-double linear_position_d_W[3] = {2.0, 2.0, 2.0};
+double linear_position_d_W[3] = {3.0, 3.5, -4.0};
 double linear_velocity_d_W[3] = {0.0, 0.0, 0.0};
 double linear_acceleration_d_W[3] = {0.0, 0.0, 0.0};
 double angular_velocity_d_B[3] = {0.0, 0.0, 0.0};
@@ -255,8 +255,8 @@ void init_drone_state(void) {
     linear_position_W[2] = 0.0;
     
     // Initialize rotation matrix (identity matrix from rotation of 0 around all axes)
-    double temp[3][3];
-    double result[3][3];
+    double temp[9];
+    double result[9];
     
     // Get rotation matrices for 0 rotation around each axis and multiply them
     xRotMat3f(0.0, temp);
@@ -366,7 +366,7 @@ void update_drone_physics(void) {
     // Copy back to R_W_B
     for(int i = 0; i < 3; i++) {
         for(int j = 0; j < 3; j++) {
-            R_W_B[i][j] = R_new[i*3 + j];
+            R_W_B[i*3 + j] = R_new[i*3 + j];
         }
     }
 }
@@ -518,7 +518,7 @@ void update_drone_control(void) {
 // Function to check if drone is at target position
 bool is_at_target(void) {
     for(int i = 0; i < 3; i++) {
-        if(fabs(linear_position_W[i] - linear_position_d_W[i]) >= 0.1) {
+        if(fabs(linear_position_W[i] - linear_position_d_W[i]) >= 0.01) {
             return false;
         }
     }
@@ -561,11 +561,9 @@ int main(void) {
         update_drone_physics();
         update_drone_control();
         
-        // Print state every 100ms
-        if(current_time - last_print >= 0.1) {  // 100ms
-            print_drone_state();
-            last_print = current_time;
-        }
+        // Print state 
+        print_drone_state();
+        last_print = current_time;
         
         // Check if at target position
         if(is_at_target()) {
@@ -573,14 +571,11 @@ int main(void) {
             break;
         }
         
-        // Check timeout (10 seconds)
-        if(current_time - start_time >= 10) {
+        // Check timeout (50 seconds)
+        if(current_time - start_time >= 50) {
             printf("\nTimeout reached! Exiting...\n");
             break;
         }
-        
-        // Sleep for dt seconds
-        usleep((useconds_t)(DT * 1000000));  // Convert to microseconds
     }
     
     return 0;
