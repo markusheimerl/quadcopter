@@ -20,7 +20,7 @@ double omega[4];
 double angular_velocity_B[3];
 double linear_velocity_W[3];
 double linear_position_W[3];
-double R_W_B[9];  // 3x3 rotation matrix
+double R_W_B[9];
 double I[3] = {0.01, 0.02, 0.01};
 
 // Control variables
@@ -152,39 +152,39 @@ void update_drone_physics(void) {
 }
 
 void update_drone_control(void) {
-    // --- LINEAR CONTROL ---
+    // 1. Calculate position and velocity errors
     double error_p[3], error_v[3];
     subVec3f(linear_position_W, linear_position_d_W, error_p);
     subVec3f(linear_velocity_W, linear_velocity_d_W, error_v);
 
+    // 2. Calculate desired force vector in world frame
     double z_W_d[3], temp[3];
     multScalVec3f(-k_p, error_p, z_W_d);
     multScalVec3f(-k_v, error_v, temp);
     addVec3f(z_W_d, temp, z_W_d);
     
+    // Add gravity compensation and desired acceleration
     double gravity_term[3] = {0, M * G, 0};
     addVec3f(z_W_d, gravity_term, z_W_d);
     
     double accel_term[3];
     multScalVec3f(M, linear_acceleration_d_W, accel_term);
     addVec3f(z_W_d, accel_term, z_W_d);
-    
+
+    // 3. Calculate thrust magnitude
     double z_W_B[3];
     double y_body[3] = {0, 1, 0};
     multMatVec3f((double*)R_W_B, y_body, z_W_B);
-    
     double f_z_B_control = dotVec3f(z_W_d, z_W_B);
 
-    // --- ATTITUDE CONTROL ---
+    // 4. Calculate desired rotation matrix
     double x_tilde_d_W[3] = {sin(yaw_d), 0, cos(yaw_d)};
-    
     double temp_cross1[3], temp_cross2[3];
     double R_W_d_column_0[3], R_W_d_column_1[3], R_W_d_column_2[3];
     
     crossVec3f(z_W_d, x_tilde_d_W, temp_cross1);
     crossVec3f(temp_cross1, z_W_d, temp_cross2);
     normVec3f(temp_cross2, R_W_d_column_0);
-    
     normVec3f(temp_cross1, R_W_d_column_1);
     normVec3f(z_W_d, R_W_d_column_2);
 
@@ -194,11 +194,11 @@ void update_drone_control(void) {
         R_W_d_column_1[2], R_W_d_column_2[2], R_W_d_column_0[2]
     };
 
-    double R_W_d_T[9], R_W_B_T[9];
+    // 5. Calculate rotation error
+    double R_W_d_T[9], R_W_B_T[9], temp_mat1[9], temp_mat2[9], temp_mat3[9];
     transpMat3f(R_W_d, R_W_d_T);
     transpMat3f((double*)R_W_B, R_W_B_T);
-
-    double temp_mat1[9], temp_mat2[9], temp_mat3[9];
+    
     multMat3f(R_W_d_T, (double*)R_W_B, temp_mat1);
     multMat3f(R_W_B_T, R_W_d, temp_mat2);
     subMat3f(temp_mat1, temp_mat2, temp_mat3);
@@ -207,38 +207,39 @@ void update_drone_control(void) {
     so3vee(temp_mat3, error_r);
     multScalVec3f(0.5, error_r, error_r);
 
+    // 6. Calculate angular velocity error
     double temp_vec[3], error_w[3];
     multMat3f(R_W_d_T, (double*)R_W_B, temp_mat1);
     multMatVec3f(temp_mat1, angular_velocity_d_B, temp_vec);
     subVec3f(angular_velocity_B, temp_vec, error_w);
 
-    double tau_B_control[3];
+    // 7. Calculate control torque
+    double tau_B_control[3], temp_vec2[3];
     multScalVec3f(-k_R, error_r, tau_B_control);
-    
-    double temp_vec2[3];
     multScalVec3f(-k_w, error_w, temp_vec2);
     addVec3f(tau_B_control, temp_vec2, tau_B_control);
 
+    // Add angular momentum terms
     double I_mat[9], temp_vec3[3], temp_vec4[3];
     vecToDiagMat3f(I, I_mat);
     multMatVec3f(I_mat, angular_velocity_B, temp_vec3);
     crossVec3f(angular_velocity_B, temp_vec3, temp_vec4);
     addVec3f(tau_B_control, temp_vec4, tau_B_control);
 
-    double term_0[3], term_1[3];
+    // Add feedforward terms
+    double term_0[3], term_1[3], temp_vec5[3];
     multMatVec3f(R_W_d, angular_acceleration_d_B, temp_vec);
     multMatVec3f(R_W_B_T, temp_vec, term_0);
-
+    
     multMatVec3f(R_W_d, angular_velocity_d_B, temp_vec);
     multMatVec3f(R_W_B_T, temp_vec, temp_vec2);
     crossVec3f(angular_velocity_B, temp_vec2, term_1);
-
-    double temp_vec5[3];
+    
     subVec3f(term_1, term_0, temp_vec5);
     multMatVec3f(I_mat, temp_vec5, temp_vec);
     subVec3f(tau_B_control, temp_vec, tau_B_control);
 
-    // --- ROTOR SPEEDS ---
+    // 8. Calculate rotor speeds
     double F_bar[16];
     // First row
     F_bar[0] = K_F;
@@ -276,6 +277,7 @@ void update_drone_control(void) {
         F_bar[12 + i] = column[2];
     }
 
+    // 9. Calculate and update rotor speeds
     double F_bar_inv[16];
     inv4Mat4f(F_bar, F_bar_inv);
 
@@ -283,10 +285,9 @@ void update_drone_control(void) {
     double omega_sign_square[4];
     multMatVec4f(F_bar_inv, control_input, omega_sign_square);
 
-    omega[0] = sqrt(fabs(omega_sign_square[0]));
-    omega[1] = sqrt(fabs(omega_sign_square[1]));
-    omega[2] = sqrt(fabs(omega_sign_square[2]));
-    omega[3] = sqrt(fabs(omega_sign_square[3]));
+    for(int i = 0; i < 4; i++) {
+        omega[i] = sqrt(fabs(omega_sign_square[i]));
+    }
 }
 
 #endif // QUAD_H
