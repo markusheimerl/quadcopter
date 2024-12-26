@@ -20,7 +20,7 @@ double omega[4];
 double angular_velocity_B[3];
 double linear_velocity_W[3];
 double linear_position_W[3];
-double R_W_B[9];
+double R_W_B[9];  // 3x3 rotation matrix
 double I[3] = {0.01, 0.02, 0.01};
 
 // Control variables
@@ -30,7 +30,6 @@ double linear_acceleration_d_W[3] = {0.0, 0.0, 0.0};
 double angular_velocity_d_B[3] = {0.0, 0.0, 0.0};
 double angular_acceleration_d_B[3] = {0.0, 0.0, 0.0};
 double yaw_d = 0.0;
-double omega_control[4];
 
 const double k_p = 0.5;
 const double k_v = 1.0;
@@ -38,7 +37,7 @@ const double k_R = 1.0;
 const double k_w = 1.0;
 
 void init_drone_state(void) {
-    // Initialize rotor speeds
+    // Initialize omegas
     for(int i = 0; i < 4; i++) {
         omega[i] = OMEGA_STABLE;
     }
@@ -53,14 +52,16 @@ void init_drone_state(void) {
         linear_velocity_W[i] = 0.0;
     }
     
-    // Initialize position
+    // Initialize position (0, 1, 0)
     linear_position_W[0] = 0.0;
     linear_position_W[1] = 1.0;
     linear_position_W[2] = 0.0;
     
-    // Initialize rotation matrix
+    // Initialize rotation matrix (identity matrix from rotation of 0 around all axes)
     double temp[9];
     double result[9];
+    
+    // Get rotation matrices for 0 rotation around each axis and multiply them
     xRotMat3f(0.0, temp);
     yRotMat3f(0.0, result);
     multMat3f(temp, result, R_W_B);
@@ -307,16 +308,10 @@ void update_drone_control(void) {
     double omega_sign_square[4];
     multMatVec4f(F_bar_inv, control_input, omega_sign_square);
 
-    omega_control[0] = sqrt(fabs(omega_sign_square[0]));
-    omega_control[1] = sqrt(fabs(omega_sign_square[1]));
-    omega_control[2] = sqrt(fabs(omega_sign_square[2]));
-    omega_control[3] = sqrt(fabs(omega_sign_square[3]));
-}
-
-void update_omega(void) {
-    for(int i = 0; i < 4; i++) {
-        omega[i] = omega_control[i];
-    }
+    omega[0] = sqrt(fabs(omega_sign_square[0]));
+    omega[1] = sqrt(fabs(omega_sign_square[1]));
+    omega[2] = sqrt(fabs(omega_sign_square[2]));
+    omega[3] = sqrt(fabs(omega_sign_square[3]));
 }
 
 #endif // QUAD_H

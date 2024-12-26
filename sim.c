@@ -34,9 +34,6 @@ int main() {
         // Control
         update_drone_control();
 
-        // Update rotor speeds
-        update_omega();
-
         // Render frame and add to GIF
         memset(frame_buffer, 0, WIDTH * HEIGHT * 3);
         vertex_shader(meshes, 2, camera_pos, camera_target);
