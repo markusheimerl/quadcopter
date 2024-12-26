@@ -240,41 +240,21 @@ void update_drone_control(void) {
     subVec3f(tau_B_control, temp_vec, tau_B_control);
 
     // 8. Calculate rotor speeds
-    double F_bar[16];
-    // First row
-    F_bar[0] = K_F;
-    F_bar[1] = K_F;
-    F_bar[2] = K_F;
-    F_bar[3] = K_F;
-
-    // Calculate columns
-    double rotor_positions[4][3] = {
-        {-L, 0, L},
-        {L, 0, L},
-        {L, 0, -L},
-        {-L, 0, -L}
+    double F_bar[16] = {
+        K_F, K_F, K_F, K_F,   // Thrust coefficients
+        0, 0, 0, 0,           // Roll moments
+        K_M, -K_M, K_M, -K_M, // Yaw moments
+        0, 0, 0, 0            // Pitch moments
     };
 
+    // Calculate roll and pitch moments
     for(int i = 0; i < 4; i++) {
-        double force[3] = {0, 1, 0};
         double moment[3];
-        multScalVec3f(K_F, rotor_positions[i], temp_vec);
-        crossVec3f(temp_vec, force, moment);
-        
-        double column[3];
-        if(i % 2 == 0) {
-            column[0] = moment[0];
-            column[1] = K_M;
-            column[2] = moment[2];
-        } else {
-            column[0] = moment[0];
-            column[1] = -K_M;
-            column[2] = moment[2];
-        }
-        
-        F_bar[4 + i] = column[0];
-        F_bar[8 + i] = column[1];
-        F_bar[12 + i] = column[2];
+        double pos_scaled[3];
+        multScalVec3f(K_F, (double [4][3]){{-L, 0,  L}, { L, 0,  L}, { L, 0, -L}, {-L, 0, -L}}[i], pos_scaled);
+        crossVec3f(pos_scaled, (double[3]){0, 1, 0}, moment);
+        F_bar[4 + i]  = moment[0];  // Roll
+        F_bar[12 + i] = moment[2];  // Pitch
     }
 
     // 9. Calculate and update rotor speeds
