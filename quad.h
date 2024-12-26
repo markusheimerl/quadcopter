@@ -69,67 +69,76 @@ void init_drone_state(void) {
 }
 
 void update_drone_physics(void) {
-    // 1. Clamp motor speeds
+    // Limit motor speeds
     for(int i = 0; i < 4; i++) {
         omega[i] = fmax(fmin(omega[i], OMEGA_MAX), OMEGA_MIN);
     }
 
-    // 2. Calculate rotor forces and moments
+    // Calculate individual rotor forces and moments
     double f[4], m[4];
-    double total_thrust = 0;
-    double total_moment = 0;
     for(int i = 0; i < 4; i++) {
         f[i] = K_F * omega[i] * fabs(omega[i]);
         m[i] = K_M * omega[i] * fabs(omega[i]);
-        total_thrust += f[i];
-        total_moment += (i % 2 == 0) ? m[i] : -m[i];
     }
 
-    // 3. Calculate thrust and torques
-    double f_B_thrust[3] = {0, total_thrust, 0};
-    double tau_B_drag[3] = {0, total_moment, 0};
-    
-    // Calculate thrust torques
-    const double rotor_pos[4][3] = {
+    // Total thrust force in body frame
+    double f_B_thrust[3] = {0, f[0] + f[1] + f[2] + f[3], 0};
+
+    // Torques from drag and thrust
+    double tau_B_drag[3] = {0, m[0] - m[1] + m[2] - m[3], 0};
+
+    // Torques from thrust forces
+    double rotor_pos[4][3] = {
         {-L, 0, L},
         {L, 0, L},
         {L, 0, -L},
         {-L, 0, -L}
     };
+    double f_vectors[4][3] = {
+        {0, f[0], 0},
+        {0, f[1], 0},
+        {0, f[2], 0},
+        {0, f[3], 0}
+    };
     
+    double tau_individual[4][3];
+    for(int i = 0; i < 4; i++) {
+        crossVec3f(rotor_pos[i], f_vectors[i], tau_individual[i]);
+    }
+
     double tau_B_thrust[3] = {0, 0, 0};
     for(int i = 0; i < 4; i++) {
-        double f_vector[3] = {0, f[i], 0};
-        double tau_temp[3];
-        crossVec3f(rotor_pos[i], f_vector, tau_temp);
-        addVec3f(tau_B_thrust, tau_temp, tau_B_thrust);
+        for(int j = 0; j < 3; j++) {
+            tau_B_thrust[j] += tau_individual[i][j];
+        }
     }
 
-    // 4. Combine torques
     double tau_B[3];
-    addVec3f(tau_B_drag, tau_B_thrust, tau_B);
+    for(int i = 0; i < 3; i++) {
+        tau_B[i] = tau_B_drag[i] + tau_B_thrust[i];
+    }
 
-    // 5. Transform forces to world frame
+    // Transform thrust to world frame and add gravity
     double f_thrust_W[3];
     multMatVec3f((double*)R_W_B, f_B_thrust, f_thrust_W);
-    
-    // 6. Calculate linear acceleration (including gravity)
+    double f_gravity_W[3] = {0, -G * M, 0};
+
+    // Calculate accelerations
     double linear_acceleration_W[3];
     for(int i = 0; i < 3; i++) {
-        linear_acceleration_W[i] = f_thrust_W[i] / M;
+        linear_acceleration_W[i] = (f_thrust_W[i] + f_gravity_W[i]) / M;
     }
-    linear_acceleration_W[1] -= G;  // Add gravity in Y direction
 
-    // 7. Calculate angular acceleration
+    // Angular momentum terms
     double I_mat[9];
     vecToDiagMat3f(I, I_mat);
-    
     double h_B[3];
     multMatVec3f(I_mat, angular_velocity_B, h_B);
     
-    double w_cross_h[3];
     double neg_angular_velocity[3];
     multScalVec3f(-1, angular_velocity_B, neg_angular_velocity);
+    
+    double w_cross_h[3];
     crossVec3f(neg_angular_velocity, h_B, w_cross_h);
 
     double angular_acceleration_B[3];
@@ -137,17 +146,16 @@ void update_drone_physics(void) {
         angular_acceleration_B[i] = (w_cross_h[i] + tau_B[i]) / I[i];
     }
 
-    // 8. Update state variables using Euler integration
+    // Update state variables
     for(int i = 0; i < 3; i++) {
         linear_velocity_W[i] += DT * linear_acceleration_W[i];
         linear_position_W[i] += DT * linear_velocity_W[i];
         angular_velocity_B[i] += DT * angular_acceleration_B[i];
     }
 
-    // 9. Update rotation matrix
+    // Update rotation matrix
     double w_hat[9];
     so3hat(angular_velocity_B, w_hat);
-    
     double R_dot[9];
     multMat3f((double*)R_W_B, w_hat, R_dot);
     
@@ -157,7 +165,13 @@ void update_drone_physics(void) {
     double R_new[9];
     addMat3f((double*)R_W_B, R_dot_scaled, R_new);
     
-    memcpy(R_W_B, R_new, 9 * sizeof(double));
+    // Copy back to R_W_B
+    for(int i = 0; i < 3; i++) {
+        for(int j = 0; j < 3; j++) {
+            R_W_B[i*3 + j] = R_new[i*3 + j];
+        }
+    }
+
     orthonormalize_rotation_matrix(R_W_B);
 }
 
