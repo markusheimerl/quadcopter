@@ -1,0 +1,70 @@
+name: Simulation Data Pipeline
+
+on:
+  workflow_dispatch:
+
+jobs:
+  simulate-and-process:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Compile simulation
+        run: make log
+
+      - name: Run simulation until 1GB of data is generated
+        run: |
+          mkdir -p csv_files
+          total_size=0
+          run_count=0
+          while [ $total_size -lt 1073741824 ]; do  # 1GB in bytes
+            ./a.out > /dev/null
+            mv *.csv csv_files/
+            total_size=$(du -sb csv_files | cut -f1)
+            run_count=$((run_count + 1))
+            if [ $((run_count % 200)) -eq 0 ]; then
+              echo "Run $run_count: Total data generated so far: $total_size bytes"
+            fi
+          done
+          echo "Finished: Total data generated: $total_size bytes (after $run_count runs)"
+
+      - name: Merge all CSV files into one with timestamped name
+        run: |
+          cd csv_files
+          first_file=$(ls *.csv | head -n 1)
+          timestamp=$(date +"%Y-%m-%d_%H-%M-%S")
+          merged_file="${timestamp}_control_data.csv"
+          cp "$first_file" "$merged_file"
+          for file in *.csv; do
+            if [ "$file" != "$merged_file" ]; then
+              tail -n +2 "$file" >> "$merged_file"
+              rm "$file"
+            fi
+          done
+
+      - name: Compress the merged CSV file
+        run: |
+          cd csv_files
+          gzip -9 *_control_data.csv
+
+      - name: Create GitHub release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: simulation-data-${{ github.run_id }}
+          release_name: Simulation Data ${{ github.run_id }}
+          draft: false
+          prerelease: false
+
+      - name: Upload compressed CSV file to release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: csv_files/*_control_data.csv.gz
+          asset_name: $(basename csv_files/*_control_data.csv.gz)
+          asset_content_type: application/gzip
