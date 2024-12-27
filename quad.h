@@ -73,26 +73,18 @@ void update_drone_physics(void) {
     // 2. Calculate total thrust force in body frame (only y component is non-zero)
     double f_B_thrust[3] = {0, f[0] + f[1] + f[2] + f[3], 0};
 
-    // 3. Calculate total torque (drag + thrust)
-    const double rotor_pos[4][3] = {
-        {-L, 0, L},   // Rotor 0
-        {L, 0, L},    // Rotor 1
-        {L, 0, -L},   // Rotor 2
-        {-L, 0, -L}   // Rotor 3
-    };
-
-    // 4. Initialize with drag torque (only y component is non-zero)
+    // 3. Initialize with drag torque (only y component is non-zero)
     double tau_B[3] = {0, m[0] - m[1] + m[2] - m[3], 0};
 
-    // 5. Add thrust torques
+    // 4. Add thrust torques
     for(int i = 0; i < 4; i++) {
         double f_vector[3] = {0, f[i], 0};
         double tau_thrust[3];
-        crossVec3f(rotor_pos[i], f_vector, tau_thrust);
+        crossVec3f((double [4][3]){{-L, 0,  L}, { L, 0,  L}, { L, 0, -L}, {-L, 0, -L}}[i], f_vector, tau_thrust);
         addVec3f(tau_B, tau_thrust, tau_B);
     }
 
-    // 6. Transform thrust to world frame and calculate linear acceleration
+    // 5. Transform thrust to world frame and calculate linear acceleration
     double f_thrust_W[3];
     multMatVec3f((double*)R_W_B, f_B_thrust, f_thrust_W);
     
@@ -102,7 +94,7 @@ void update_drone_physics(void) {
     }
     linear_acceleration_W[1] -= G;  // Add gravity
 
-    // 7. Calculate angular acceleration
+    // 6. Calculate angular acceleration
     double I_mat[9];
     vecToDiagMat3f(I, I_mat);
     
@@ -117,14 +109,14 @@ void update_drone_physics(void) {
         angular_acceleration_B[i] = (-w_cross_h[i] + tau_B[i]) / I[i];
     }
 
-    // 8. Update states with Euler integration
+    // 7. Update states with Euler integration
     for(int i = 0; i < 3; i++) {
         linear_velocity_W[i] += DT * linear_acceleration_W[i];
         linear_position_W[i] += DT * linear_velocity_W[i];
         angular_velocity_B[i] += DT * angular_acceleration_B[i];
     }
 
-    // 9. Update rotation matrix
+    // 8. Update rotation matrix
     double w_hat[9];
     so3hat(angular_velocity_B, w_hat);
     
@@ -138,7 +130,7 @@ void update_drone_physics(void) {
     addMat3f((double*)R_W_B, R_dot_scaled, R_new);
     memcpy(R_W_B, R_new, 9 * sizeof(double));
 
-    // 10. Ensure rotation matrix stays orthonormal
+    // 9. Ensure rotation matrix stays orthonormal
     orthonormalize_rotation_matrix(R_W_B);
 }
 
