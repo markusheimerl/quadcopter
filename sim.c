@@ -1,9 +1,19 @@
 #include "gif.h"
 #include "rasterizer.h"
 #include "quad.h"
+#include <stdbool.h>
 #include <time.h>
 
-#define STEPS 600
+#define MAX_STEPS 100000
+
+bool is_stable(double angular_velocity_B[3]) {
+    for (int i = 0; i < 3; i++) {
+        if (fabs(angular_velocity_B[i]) > 0.008) {
+            return false;
+        }
+    }
+    return true;
+}
 
 int main() {
     #ifdef RENDER
@@ -39,7 +49,8 @@ int main() {
     #endif
 
     // Main simulation loop
-    for(int step = 0; step < STEPS; step++) {
+    int step = 0;
+    while ((!is_stable(angular_velocity_B) && step < MAX_STEPS) || step < 100) {
         // Update dynamics
         update_drone_physics();
 
@@ -64,10 +75,12 @@ int main() {
         #endif
         
         // Print state
-        printf("Step %d/%d\n", step + 1, STEPS);
+        printf("Step %d\n", step + 1);
         printf("Position: [%.3f, %.3f, %.3f]\n", linear_position_W[0], linear_position_W[1], linear_position_W[2]);
         printf("Angular Velocity: [%.3f, %.3f, %.3f]\n", angular_velocity_B[0], angular_velocity_B[1], angular_velocity_B[2]);
         printf("---\n");
+
+        step++;
     }
 
     #ifdef LOG
