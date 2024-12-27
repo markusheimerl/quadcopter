@@ -1,10 +1,4 @@
 # sim
-A zero dependency quadcoptor simulation
+A quadcoptor simulation
 
 ![Drone Simulation](drone_simulation.gif)
-
-New approach finding MLP controller:
-Implement geometric controller that can read perfect states
-and use perfect control signal of geometric controller to train MLP
-that only has desired state, current timestep and noised simulated sensor
-readings as input
