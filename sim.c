@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include <time.h>
 
-#define MAX_STEPS 100000
+#define MAX_STEPS 10000
 
 bool is_stable(double angular_velocity_B[3]) {
     for (int i = 0; i < 3; i++) {
@@ -90,8 +90,7 @@ int main() {
     #ifdef LOG
     // Close CSV file
     fclose(csv_file);
-    // Delete file if steps > 10000 since the chance is high that the simulation diverged
-    if (step >= 10000) {
+    if (step >= MAX_STEPS * 0.9) {
         remove(filename);
         printf("Deleted file %s since simulation diverged\n", filename);
     }
