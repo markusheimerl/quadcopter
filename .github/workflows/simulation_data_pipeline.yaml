@@ -3,6 +3,9 @@ name: Simulation Data Pipeline
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   simulate-and-process:
     runs-on: ubuntu-latest
@@ -18,8 +21,7 @@ jobs:
           mkdir -p csv_files
           total_size=0
           run_count=0
-          while [ $total_size -lt 1073741824 ]; do  # 1GB in bytes
-            # Run the simulation
+          while [ $total_size -lt 268435456 ]; do
             if ! ./a.out > /dev/null; then
               echo "Simulation failed in run $run_count"
             else
@@ -53,6 +55,12 @@ jobs:
           cd csv_files
           gzip -9 *_control_data.csv
 
+      - name: Get compressed filename
+        id: get_filename
+        run: |
+          echo "ASSET_NAME=$(basename csv_files/*_control_data.csv.gz)" >> $GITHUB_ENV
+          echo "ASSET_PATH=csv_files/*_control_data.csv.gz" >> $GITHUB_ENV
+
       - name: Create GitHub release
         id: create_release
         uses: actions/create-release@v1
@@ -70,6 +78,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: csv_files/*_control_data.csv.gz
-          asset_name: $(basename csv_files/*_control_data.csv.gz)
+          asset_path: ${{ env.ASSET_PATH }}
+          asset_name: ${{ env.ASSET_NAME }}
           asset_content_type: application/gzip
