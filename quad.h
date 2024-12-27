@@ -25,6 +25,7 @@ double R_W_B[9];
 double I[3] = {0.01, 0.02, 0.01};
 
 // Control variables
+double omega_next[4];
 double linear_position_d_W[3] = {-1.0, 0.5, -0.5};
 double linear_velocity_d_W[3] = {0.0, 0.0, 0.0};
 double linear_acceleration_d_W[3] = {0.0, 0.0, 0.0};
@@ -259,7 +260,13 @@ void update_drone_control(void) {
     multMatVec4f(F_bar_inv, control_input, omega_sign_square);
 
     for(int i = 0; i < 4; i++) {
-        omega[i] = sqrt(fabs(omega_sign_square[i]));
+        omega_next[i] = sqrt(fabs(omega_sign_square[i]));
+    }
+}
+
+void update_rotor_speeds(void) {
+    for(int i = 0; i < 4; i++) {
+        omega[i] = omega_next[i];
     }
 }
 
