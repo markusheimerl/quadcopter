@@ -16,12 +16,12 @@
 #define OMEGA_STABLE 50.0
 
 // State variables
-double omega[4];
-double angular_velocity_B[3];
-double linear_velocity_W[3];
-double linear_position_W[3];
-double linear_acceleration_B[3];
-double R_W_B[9];
+double omega[4] = {OMEGA_STABLE, OMEGA_STABLE, OMEGA_STABLE, OMEGA_STABLE};
+double angular_velocity_B[3] = {0.0, 0.0, 0.0};
+double linear_velocity_W[3] = {0.0, 0.0, 0.0};
+double linear_position_W[3] = {0.0, 1.0, 0.0};
+double linear_acceleration_B[3] = {0.0, 0.0, 0.0};
+double R_W_B[9] = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0};
 double I[3] = {0.01, 0.02, 0.01};
 
 // Control variables
@@ -37,26 +37,6 @@ const double k_p = 0.5;
 const double k_v = 1.0;
 const double k_R = 1.0;
 const double k_w = 1.0;
-
-void init_drone_state(void) {
-    // 1. Initialize rotor speeds to stable hover
-    for(int i = 0; i < 4; i++) {
-        omega[i] = OMEGA_STABLE;
-        omega_next[i] = OMEGA_STABLE;
-    }
-    
-    // 2. Initialize velocities to zero
-    double zero_vec[3] = {0.0, 0.0, 0.0};
-    memcpy(angular_velocity_B, zero_vec, 3 * sizeof(double));
-    memcpy(linear_velocity_W, zero_vec, 3 * sizeof(double));
-    
-    // 3. Initialize position to (0, 1, 0)
-    double init_pos[3] = {0.0, 1.0, 0.0};
-    memcpy(linear_position_W, init_pos, 3 * sizeof(double));
-    
-    // 4. Initialize rotation matrix to identity (level orientation)
-    memcpy(R_W_B, (double[9]){1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0}, 9 * sizeof(double));
-}
 
 void update_drone_physics(void) {
     // 1. Declare arrays and calculate rotor forces/moments

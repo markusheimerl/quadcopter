@@ -1,6 +1,7 @@
 #include "gif.h"
 #include "rasterizer.h"
 #include "quad.h"
+#include <time.h>
 
 #define STEPS 600
 
@@ -28,10 +29,14 @@ int main() {
     // Open CSV file for logging and write header
     FILE *csv_file = fopen("drone_data.csv", "w");
     fprintf(csv_file, "step,linear_position_d_W[0],linear_position_d_W[1],linear_position_d_W[2],yaw_d,angular_velocity_B[0],angular_velocity_B[1],angular_velocity_B[2],linear_acceleration_B[0],linear_acceleration_B[1],linear_acceleration_B[2],omega_next[0],omega_next[1],omega_next[2],omega_next[3]\n");
+    
+    // Set desired state to random values
+    srand(time(NULL));
+    linear_position_d_W[0] = (double)rand() / RAND_MAX * 10 - 5; // [-5, 5]
+    linear_position_d_W[1] = (double)rand() / RAND_MAX * 10;     // [0, 10]
+    linear_position_d_W[2] = (double)rand() / RAND_MAX * 10 - 5; // [-5, 5]
+    yaw_d = (double)rand() / RAND_MAX * 2 * M_PI;                // [0, 2pi]
     #endif
-
-    // Initialize drone state
-    init_drone_state();
 
     // Main simulation loop
     for(int step = 0; step < STEPS; step++) {

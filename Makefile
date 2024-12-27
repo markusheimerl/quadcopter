@@ -16,6 +16,11 @@ render: CFLAGS += -DRENDER
 render: $(SRC)
 	$(CC) $(CFLAGS) $(SRC) $(LDFLAGS) -o $(TARGET)
 
+# Build target with LOG flag
+log: CFLAGS += -DLOG
+log: $(SRC)
+	$(CC) $(CFLAGS) $(SRC) $(LDFLAGS) -o $(TARGET)
+
 # Run the program
 run: $(TARGET)
 	./$(TARGET)
