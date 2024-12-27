@@ -1,5 +1,7 @@
+#ifdef RENDER
 #include "gif.h"
 #include "rasterizer.h"
+#endif
 #include "quad.h"
 #include <stdbool.h>
 #include <time.h>
