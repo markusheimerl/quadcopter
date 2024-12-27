@@ -52,12 +52,7 @@ void init_drone_state(void) {
     memcpy(linear_position_W, init_pos, 3 * sizeof(double));
     
     // 4. Initialize rotation matrix to identity (level orientation)
-    double identity[9] = {
-        1.0, 0.0, 0.0,
-        0.0, 1.0, 0.0,
-        0.0, 0.0, 1.0
-    };
-    memcpy(R_W_B, identity, 9 * sizeof(double));
+    memcpy(R_W_B, (double[9]){1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0}, 9 * sizeof(double));
 }
 
 void update_drone_physics(void) {
