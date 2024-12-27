@@ -29,7 +29,7 @@ double linear_velocity_d_W[3] = {0.0, 0.0, 0.0};
 double linear_acceleration_d_W[3] = {0.0, 0.0, 0.0};
 double angular_velocity_d_B[3] = {0.0, 0.0, 0.0};
 double angular_acceleration_d_B[3] = {0.0, 0.0, 0.0};
-double yaw_d = 0.0;
+double yaw_d = 3.14 / 2.0;
 
 const double k_p = 0.5;
 const double k_v = 1.0;

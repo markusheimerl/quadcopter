@@ -2,7 +2,7 @@
 #include "rasterizer.h"
 #include "quad.h"
 
-#define STEPS 180
+#define STEPS 600
 
 int main() {
     // Initialize meshes
