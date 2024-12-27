@@ -20,6 +20,7 @@ double omega[4];
 double angular_velocity_B[3];
 double linear_velocity_W[3];
 double linear_position_W[3];
+double linear_acceleration_B[3];
 double R_W_B[9];
 double I[3] = {0.01, 0.02, 0.01};
 
@@ -81,7 +82,7 @@ void update_drone_physics(void) {
 
     // 5. Transform thrust to world frame and calculate linear acceleration
     double f_thrust_W[3];
-    multMatVec3f((double*)R_W_B, f_B_thrust, f_thrust_W);
+    multMatVec3f(R_W_B, f_B_thrust, f_thrust_W);
     
     double linear_acceleration_W[3];
     for(int i = 0; i < 3; i++) {
@@ -116,17 +117,31 @@ void update_drone_physics(void) {
     so3hat(angular_velocity_B, w_hat);
     
     double R_dot[9];
-    multMat3f((double*)R_W_B, w_hat, R_dot);
+    multMat3f(R_W_B, w_hat, R_dot);
     
     double R_dot_scaled[9];
     multScalMat3f(DT, R_dot, R_dot_scaled);
     
     double R_new[9];
-    addMat3f((double*)R_W_B, R_dot_scaled, R_new);
+    addMat3f(R_W_B, R_dot_scaled, R_new);
     memcpy(R_W_B, R_new, 9 * sizeof(double));
 
     // 9. Ensure rotation matrix stays orthonormal
     orthonormalize_rotation_matrix(R_W_B);
+
+    // 10. Calculate linear acceleration in body frame (for accelerometer simulation)
+    double gravity_W[3] = {0, -G, 0}; // Gravity in world frame
+    double gravity_B[3]; // Gravity in body frame
+
+    // Transform gravity to body frame
+    multMatVec3f(R_W_B, gravity_W, gravity_B);
+
+    // Transform linear acceleration from world frame to body frame
+    double linear_acceleration_W_minus_gravity[3];
+    for (int i = 0; i < 3; i++) {
+        linear_acceleration_W_minus_gravity[i] = linear_acceleration_W[i] - gravity_W[i];
+    }
+    multMatVec3f(R_W_B, linear_acceleration_W_minus_gravity, linear_acceleration_B);
 }
 
 void update_drone_control(void) {
@@ -152,7 +167,7 @@ void update_drone_control(void) {
     // 3. Calculate thrust magnitude
     double z_W_B[3];
     double y_body[3] = {0, 1, 0};
-    multMatVec3f((double*)R_W_B, y_body, z_W_B);
+    multMatVec3f(R_W_B, y_body, z_W_B);
     double f_z_B_control = dotVec3f(z_W_d, z_W_B);
 
     // 4. Calculate desired rotation matrix
@@ -175,9 +190,9 @@ void update_drone_control(void) {
     // 5. Calculate rotation error
     double R_W_d_T[9], R_W_B_T[9], temp_mat1[9], temp_mat2[9], temp_mat3[9];
     transpMat3f(R_W_d, R_W_d_T);
-    transpMat3f((double*)R_W_B, R_W_B_T);
+    transpMat3f(R_W_B, R_W_B_T);
     
-    multMat3f(R_W_d_T, (double*)R_W_B, temp_mat1);
+    multMat3f(R_W_d_T, R_W_B, temp_mat1);
     multMat3f(R_W_B_T, R_W_d, temp_mat2);
     subMat3f(temp_mat1, temp_mat2, temp_mat3);
 
@@ -187,7 +202,7 @@ void update_drone_control(void) {
 
     // 6. Calculate angular velocity error
     double temp_vec[3], error_w[3];
-    multMat3f(R_W_d_T, (double*)R_W_B, temp_mat1);
+    multMat3f(R_W_d_T, R_W_B, temp_mat1);
     multMatVec3f(temp_mat1, angular_velocity_d_B, temp_vec);
     subVec3f(angular_velocity_B, temp_vec, error_w);
 
