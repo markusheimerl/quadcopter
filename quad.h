@@ -106,7 +106,7 @@ void update_drone_physics(void) {
     
     double R_new[9];
     addMat3f(R_W_B, R_dot_scaled, R_new);
-    memcpy(R_W_B, R_new, 9 * sizeof(double));
+    for (int i = 0; i < 9; i++) R_W_B[i] = R_new[i];
 
     // 9. Ensure rotation matrix stays orthonormal
     orthonormalize_rotation_matrix(R_W_B);

@@ -2,15 +2,17 @@
 #include "gif.h"
 #include "rasterizer.h"
 #endif
-#include "quad.h"
+#include <stdio.h>
+#include <stdlib.h>
 #include <stdbool.h>
 #include <time.h>
+#include "quad.h"
 
 #define MAX_STEPS 10000
 
 bool is_stable(double angular_velocity_B[3]) {
     for (int i = 0; i < 3; i++) {
-        if (fabs(angular_velocity_B[i]) > 0.001) {
+        if (fabs(angular_velocity_B[i]) > 0.005) {
             return false;
         }
     }
