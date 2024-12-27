@@ -42,6 +42,7 @@ void init_drone_state(void) {
     // 1. Initialize rotor speeds to stable hover
     for(int i = 0; i < 4; i++) {
         omega[i] = OMEGA_STABLE;
+        omega_next[i] = OMEGA_STABLE;
     }
     
     // 2. Initialize velocities to zero

@@ -24,6 +24,12 @@ int main() {
     transform_mesh(meshes[1], (double[3]){0.0, -0.5, 0.0}, 1.0, (double[9]){1,0,0, 0,1,0, 0,0,1});
     #endif
 
+    #ifdef LOG
+    // Open CSV file for logging and write header
+    FILE *csv_file = fopen("drone_data.csv", "w");
+    fprintf(csv_file, "step,linear_position_d_W[0],linear_position_d_W[1],linear_position_d_W[2],yaw_d,angular_velocity_B[0],angular_velocity_B[1],angular_velocity_B[2],linear_acceleration_B[0],linear_acceleration_B[1],linear_acceleration_B[2],omega_next[0],omega_next[1],omega_next[2],omega_next[3]\n");
+    #endif
+
     // Initialize drone state
     init_drone_state();
 
@@ -34,6 +40,14 @@ int main() {
 
         // Control
         update_drone_control();
+
+        #ifdef LOG
+        // Log data to CSV
+        fprintf(csv_file, "%d,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n", step, linear_position_d_W[0], linear_position_d_W[1], linear_position_d_W[2], yaw_d, angular_velocity_B[0], angular_velocity_B[1], angular_velocity_B[2], linear_acceleration_B[0], linear_acceleration_B[1], linear_acceleration_B[2], omega_next[0], omega_next[1], omega_next[2], omega_next[3]);
+        #endif
+
+        // Update rotor speeds
+        update_rotor_speeds();
 
         #ifdef RENDER
         // Render frame and add to GIF and transform drone mesh
@@ -49,10 +63,12 @@ int main() {
         printf("Position: [%.3f, %.3f, %.3f]\n", linear_position_W[0], linear_position_W[1], linear_position_W[2]);
         printf("Angular Velocity: [%.3f, %.3f, %.3f]\n", angular_velocity_B[0], angular_velocity_B[1], angular_velocity_B[2]);
         printf("---\n");
-
-        // Update rotor speeds
-        update_rotor_speeds();
     }
+
+    #ifdef LOG
+    // Close CSV file
+    fclose(csv_file);
+    #endif
 
     #ifdef RENDER
     // Cleanup
