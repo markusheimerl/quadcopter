@@ -21,7 +21,7 @@ jobs:
           mkdir -p csv_files
           total_size=0
           run_count=0
-          while [ $total_size -lt 268435456 ]; do
+          while [ $total_size -lt 67108864 ]; do
             if ! ./a.out > /dev/null; then
               echo "Simulation failed in run $run_count"
             else
@@ -58,8 +58,9 @@ jobs:
       - name: Get compressed filename
         id: get_filename
         run: |
-          echo "ASSET_NAME=$(basename csv_files/*_control_data.csv.gz)" >> $GITHUB_ENV
-          echo "ASSET_PATH=csv_files/*_control_data.csv.gz" >> $GITHUB_ENV
+          cd csv_files
+          echo "ASSET_NAME=$(ls *_control_data.csv.gz)" >> $GITHUB_ENV
+          echo "ASSET_PATH=csv_files/$(ls *_control_data.csv.gz)" >> $GITHUB_ENV
 
       - name: Create GitHub release
         id: create_release
