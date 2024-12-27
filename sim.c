@@ -37,7 +37,11 @@ int main() {
 
     #ifdef LOG
     // Open CSV file for logging and write header
-    FILE *csv_file = fopen("drone_data.csv", "w");
+    time_t t = time(NULL);
+    struct tm tm = *localtime(&t);
+    char filename[100];
+    sprintf(filename, "%d-%d-%d_%d-%d-%d_control_data.csv", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
+    FILE *csv_file = fopen(filename, "w");
     fprintf(csv_file, "step,linear_position_d_W[0],linear_position_d_W[1],linear_position_d_W[2],yaw_d,angular_velocity_B[0],angular_velocity_B[1],angular_velocity_B[2],linear_acceleration_B[0],linear_acceleration_B[1],linear_acceleration_B[2],omega_next[0],omega_next[1],omega_next[2],omega_next[3]\n");
     
     // Set desired state to random values
@@ -86,6 +90,11 @@ int main() {
     #ifdef LOG
     // Close CSV file
     fclose(csv_file);
+    // Delete file if steps > 10000 since the chance is high that the simulation diverged
+    if (step >= 10000) {
+        remove(filename);
+        printf("Deleted file %s since simulation diverged\n", filename);
+    }
     #endif
 
     #ifdef RENDER
