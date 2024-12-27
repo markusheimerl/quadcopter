@@ -97,6 +97,7 @@ int main() {
     if (step >= MAX_STEPS * 0.9) {
         remove(filename);
         printf("Deleted file %s since simulation diverged\n", filename);
+        exit(1);
     }
     #endif
 

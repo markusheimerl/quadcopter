@@ -19,9 +19,14 @@ jobs:
           total_size=0
           run_count=0
           while [ $total_size -lt 1073741824 ]; do  # 1GB in bytes
-            ./a.out > /dev/null
-            mv *.csv csv_files/
-            total_size=$(du -sb csv_files | cut -f1)
+            # Run the simulation
+            if ! ./a.out > /dev/null; then
+              echo "Simulation failed in run $run_count"
+            else
+              mv *.csv csv_files/
+              total_size=$(du -sb csv_files | cut -f1)
+            fi
+
             run_count=$((run_count + 1))
             if [ $((run_count % 200)) -eq 0 ]; then
               echo "Run $run_count: Total data generated so far: $total_size bytes"
