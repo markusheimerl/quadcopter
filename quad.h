@@ -37,36 +37,27 @@ const double k_R = 1.0;
 const double k_w = 1.0;
 
 void init_drone_state(void) {
-    // Initialize omegas
+    // 1. Initialize rotor speeds to stable hover
     for(int i = 0; i < 4; i++) {
         omega[i] = OMEGA_STABLE;
     }
     
-    // Initialize angular velocity
-    for(int i = 0; i < 3; i++) {
-        angular_velocity_B[i] = 0.0;
-    }
+    // 2. Initialize velocities to zero
+    double zero_vec[3] = {0.0, 0.0, 0.0};
+    memcpy(angular_velocity_B, zero_vec, 3 * sizeof(double));
+    memcpy(linear_velocity_W, zero_vec, 3 * sizeof(double));
     
-    // Initialize linear velocity
-    for(int i = 0; i < 3; i++) {
-        linear_velocity_W[i] = 0.0;
-    }
+    // 3. Initialize position to (0, 1, 0)
+    double init_pos[3] = {0.0, 1.0, 0.0};
+    memcpy(linear_position_W, init_pos, 3 * sizeof(double));
     
-    // Initialize position (0, 1, 0)
-    linear_position_W[0] = 0.0;
-    linear_position_W[1] = 1.0;
-    linear_position_W[2] = 0.0;
-    
-    // Initialize rotation matrix (identity matrix from rotation of 0 around all axes)
-    double temp[9];
-    double result[9];
-    
-    // Get rotation matrices for 0 rotation around each axis and multiply them
-    xRotMat3f(0.0, temp);
-    yRotMat3f(0.0, result);
-    multMat3f(temp, result, R_W_B);
-    zRotMat3f(0.0, temp);
-    multMat3f(R_W_B, temp, R_W_B);
+    // 4. Initialize rotation matrix to identity (level orientation)
+    double identity[9] = {
+        1.0, 0.0, 0.0,
+        0.0, 1.0, 0.0,
+        0.0, 0.0, 1.0
+    };
+    memcpy(R_W_B, identity, 9 * sizeof(double));
 }
 
 void update_drone_physics(void) {
