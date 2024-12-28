@@ -71,8 +71,8 @@ int main() {
                 #ifdef LOG
                 fclose(csv_file);
                 remove(filename);
-                printf("Simulation diverged at meta_step %d\n", meta_step);
                 #endif
+                printf("Simulation diverged.\n");
                 return 1;
             }
 
