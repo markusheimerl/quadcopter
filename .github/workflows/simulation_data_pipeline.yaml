@@ -7,69 +7,45 @@ permissions:
   contents: write
 
 jobs:
-  simulate-and-process:
+  run-simulation:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
 
       - name: Compile simulation
-        run: make log
+        run: make run
 
-      - name: Run simulation and collect data
+      - name: Run simulation
+        id: simulation
         run: |
-          mkdir -p csv_files
-          total_size=0
-          run_count=0
-          while [ $total_size -lt 67108864 ]; do
-            if ! ./a.out > /dev/null; then
-              echo "Simulation failed in run $run_count"
+          attempt=1
+          max_attempts=10
+          
+          while [ $attempt -le $max_attempts ]; do
+            echo "Simulation attempt $attempt"
+            if ./a.out; then
+              echo "Simulation completed successfully"
+              break
             else
-              mv *.csv csv_files/
-              total_size=$(du -sb csv_files | cut -f1)
-            fi
-
-            run_count=$((run_count + 1))
-            if [ $((run_count % 200)) -eq 0 ]; then
-              echo "Run $run_count: Total data generated so far: $total_size bytes"
+              echo "Simulation diverged on attempt $attempt"
+              attempt=$((attempt + 1))
+              if [ $attempt -gt $max_attempts ]; then
+                echo "Maximum attempts reached. Simulation failed consistently."
+                exit 1
+              fi
             fi
           done
-          echo "Finished: Total data generated: $total_size bytes (after $run_count runs)"
-
-      - name: Merge and compress CSV files
-        id: process_files
-        run: |
-          cd csv_files
-          # Get timestamp once
-          timestamp=$(date +"%Y-%m-%d_%H-%M-%S")
-          merged_file="${timestamp}_control_data.csv"
-          
-          # Use find instead of ls to avoid pipe issues
-          first_file=$(find . -maxdepth 1 -name "*.csv" -print -quit)
-          first_file="${first_file#./}"
-          
-          # Create merged file
-          cp "$first_file" "$merged_file"
-          
-          # Merge remaining files
-          find . -maxdepth 1 -name "*.csv" ! -name "$merged_file" -print0 | 
-          while IFS= read -r -d '' file; do
-            tail -n +2 "$file" >> "$merged_file"
-            rm "$file"
-          done
-          
-          # Compress file
-          gzip -9 "$merged_file"
-          
-          # Set outputs using the new GitHub Actions syntax
-          echo "asset_name=${merged_file}.gz" >> "$GITHUB_OUTPUT"
-          echo "asset_path=csv_files/${merged_file}.gz" >> "$GITHUB_OUTPUT"
 
       - name: Create Release
+        if: success()
         id: create_release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # Get current date in YYYY-MM-DD format
+          DATE=$(date +"%Y-%m-%d")
+          
           response=$(curl -L \
             -X POST \
             -H "Accept: application/vnd.github+json" \
@@ -77,8 +53,8 @@ jobs:
             -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/repos/${{ github.repository }}/releases \
             -d '{
-              "tag_name":"simulation-data-${{ github.run_id }}",
-              "name":"Simulation Data ${{ github.run_id }}",
+              "tag_name":"simulation-'"${DATE}"'",
+              "name":"Simulation Run '"${DATE}"'",
               "draft":false,
               "prerelease":false
             }')
@@ -86,15 +62,23 @@ jobs:
           upload_url=$(echo "$response" | jq -r .upload_url | sed 's/{?name,label}//g')
           echo "upload_url=$upload_url" >> "$GITHUB_OUTPUT"
 
-      - name: Upload Release Asset
+      - name: Upload Simulation Data
+        if: success()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          curl -L \
-            -X POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer $GITHUB_TOKEN" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            -H "Content-Type: application/gzip" \
-            "${{ steps.create_release.outputs.upload_url }}?name=${{ steps.process_files.outputs.asset_name }}" \
-            --data-binary "@${{ steps.process_files.outputs.asset_path }}"
+          DATE=$(date +"%Y-%m-%d")
+          # Assuming your simulation creates some output file
+          # Adjust the filename pattern as needed
+          for file in *.csv; do
+            if [ -f "$file" ]; then
+              curl -L \
+                -X POST \
+                -H "Accept: application/vnd.github+json" \
+                -H "Authorization: Bearer $GITHUB_TOKEN" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                -H "Content-Type: text/csv" \
+                "${{ steps.create_release.outputs.upload_url }}?name=${DATE}_${file}" \
+                --data-binary "@$file"
+            fi
+          done
