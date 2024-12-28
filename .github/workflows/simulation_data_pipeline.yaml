@@ -10,42 +10,39 @@ jobs:
   run-simulation:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-
-      - name: Compile simulation
-        run: make log
+      - uses: actions/checkout@v3
 
       - name: Run simulation
         id: simulation
         run: |
-          attempt=1
-          max_attempts=10
-          
-          while [ $attempt -le $max_attempts ]; do
+          make log
+          for attempt in {1..10}; do
             echo "Simulation attempt $attempt"
             if ./a.out; then
-              echo "Simulation completed successfully"
+              echo "Simulation successful"
               break
-            else
-              echo "Simulation diverged on attempt $attempt"
-              attempt=$((attempt + 1))
-              if [ $attempt -gt $max_attempts ]; then
-                echo "Maximum attempts reached. Simulation failed consistently."
-                exit 1
-              fi
+            fi
+            if [ $attempt -eq 10 ]; then
+              echo "Maximum attempts reached. Simulation failed."
+              exit 1
             fi
           done
 
-      - name: Create Release
+      - name: Compress data files
         if: success()
-        id: create_release
+        run: |
+          for file in *.csv; do
+            [ -f "$file" ] && gzip -9 "$file"
+          done
+
+      - name: Create Release and Upload Data
+        if: success()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Get current date in YYYY-MM-DD format
           DATE=$(date +"%Y-%m-%d")
           
+          # Create release
           response=$(curl -L \
             -X POST \
             -H "Accept: application/vnd.github+json" \
@@ -60,23 +57,15 @@ jobs:
             }')
           
           upload_url=$(echo "$response" | jq -r .upload_url | sed 's/{?name,label}//g')
-          echo "upload_url=$upload_url" >> "$GITHUB_OUTPUT"
-
-      - name: Upload Simulation Data
-        if: success()
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          DATE=$(date +"%Y-%m-%d")
-          for file in *.csv; do
-            if [ -f "$file" ]; then
-              curl -L \
-                -X POST \
-                -H "Accept: application/vnd.github+json" \
-                -H "Authorization: Bearer $GITHUB_TOKEN" \
-                -H "X-GitHub-Api-Version: 2022-11-28" \
-                -H "Content-Type: text/csv" \
-                "${{ steps.create_release.outputs.upload_url }}?name=${DATE}_${file}" \
-                --data-binary "@$file"
-            fi
+          
+          # Upload compressed files
+          for file in *.csv.gz; do
+            [ -f "$file" ] && curl -L \
+              -X POST \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer $GITHUB_TOKEN" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              -H "Content-Type: application/gzip" \
+              "${upload_url}?name=${DATE}_${file}" \
+              --data-binary "@$file"
           done
