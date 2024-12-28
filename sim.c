@@ -37,10 +37,7 @@ static bool check_divergence(void) {
 
 int main(int argc, char *argv[]) {
     #ifdef RENDER
-    Mesh* meshes[] = {
-        create_mesh("rasterizer/drone.obj", "rasterizer/drone.bmp"),
-        create_mesh("rasterizer/ground.obj", "rasterizer/ground.bmp")
-    };
+    Mesh* meshes[] = {create_mesh("rasterizer/drone.obj", "rasterizer/drone.bmp"), create_mesh("rasterizer/ground.obj", "rasterizer/ground.bmp")};
     uint8_t *frame_buffer = calloc(WIDTH * HEIGHT * 3, sizeof(uint8_t));
     ge_GIF *gif = ge_new_gif("drone_simulation.gif", WIDTH, HEIGHT, 4, -1, 0);
     transform_mesh(meshes[1], (double[3]){0.0, -0.5, 0.0}, 1.0, (double[9]){1,0,0, 0,1,0, 0,0,1});
