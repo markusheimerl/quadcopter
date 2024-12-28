@@ -16,7 +16,7 @@ jobs:
       - name: Compile simulation
         run: make log
 
-      - name: Run simulation until 1GB of data is generated
+      - name: Run simulation and collect data
         run: |
           mkdir -p csv_files
           total_size=0
@@ -36,49 +36,65 @@ jobs:
           done
           echo "Finished: Total data generated: $total_size bytes (after $run_count runs)"
 
-      - name: Merge all CSV files into one with timestamped name
+      - name: Merge and compress CSV files
+        id: process_files
         run: |
           cd csv_files
-          first_file=$(ls *.csv | head -n 1)
+          # Get timestamp once
           timestamp=$(date +"%Y-%m-%d_%H-%M-%S")
           merged_file="${timestamp}_control_data.csv"
+          
+          # Use find instead of ls to avoid pipe issues
+          first_file=$(find . -maxdepth 1 -name "*.csv" -print -quit)
+          first_file="${first_file#./}"
+          
+          # Create merged file
           cp "$first_file" "$merged_file"
-          for file in *.csv; do
-            if [ "$file" != "$merged_file" ]; then
-              tail -n +2 "$file" >> "$merged_file"
-              rm "$file"
-            fi
+          
+          # Merge remaining files
+          find . -maxdepth 1 -name "*.csv" ! -name "$merged_file" -print0 | 
+          while IFS= read -r -d '' file; do
+            tail -n +2 "$file" >> "$merged_file"
+            rm "$file"
           done
+          
+          # Compress file
+          gzip -9 "$merged_file"
+          
+          # Set outputs using the new GitHub Actions syntax
+          echo "asset_name=${merged_file}.gz" >> "$GITHUB_OUTPUT"
+          echo "asset_path=csv_files/${merged_file}.gz" >> "$GITHUB_OUTPUT"
 
-      - name: Compress the merged CSV file
-        run: |
-          cd csv_files
-          gzip -9 *_control_data.csv
-
-      - name: Get compressed filename
-        id: get_filename
-        run: |
-          cd csv_files
-          echo "ASSET_NAME=$(ls *_control_data.csv.gz)" >> $GITHUB_ENV
-          echo "ASSET_PATH=csv_files/$(ls *_control_data.csv.gz)" >> $GITHUB_ENV
-
-      - name: Create GitHub release
+      - name: Create Release
         id: create_release
-        uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: simulation-data-${{ github.run_id }}
-          release_name: Simulation Data ${{ github.run_id }}
-          draft: false
-          prerelease: false
+        run: |
+          response=$(curl -L \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/${{ github.repository }}/releases \
+            -d '{
+              "tag_name":"simulation-data-${{ github.run_id }}",
+              "name":"Simulation Data ${{ github.run_id }}",
+              "draft":false,
+              "prerelease":false
+            }')
+          
+          upload_url=$(echo "$response" | jq -r .upload_url | sed 's/{?name,label}//g')
+          echo "upload_url=$upload_url" >> "$GITHUB_OUTPUT"
 
-      - name: Upload compressed CSV file to release
-        uses: actions/upload-release-asset@v1
+      - name: Upload Release Asset
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ${{ env.ASSET_PATH }}
-          asset_name: ${{ env.ASSET_NAME }}
-          asset_content_type: application/gzip
+        run: |
+          curl -L \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            -H "Content-Type: application/gzip" \
+            "${{ steps.create_release.outputs.upload_url }}?name=${{ steps.process_files.outputs.asset_name }}" \
+            --data-binary "@${{ steps.process_files.outputs.asset_path }}"
