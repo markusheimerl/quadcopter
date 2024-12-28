@@ -56,13 +56,13 @@ int main() {
     double t_control = 0.0;
     double t_simulation = 0.0;
 
-    for (int meta_step = 0; meta_step < 200; meta_step++) {
+    for (int meta_step = 0; meta_step < 5000; meta_step++) {
         #ifdef LOG
         linear_position_d_W[0] = (double)rand() / RAND_MAX * 10 - 5;
         linear_position_d_W[1] = (double)rand() / RAND_MAX * 10;
         linear_position_d_W[2] = (double)rand() / RAND_MAX * 10 - 5;
         yaw_d = (double)rand() / RAND_MAX * 2 * M_PI;
-        printf("New target %d: [%.3f, %.3f, %.3f], yaw: %.3f\n", meta_step, linear_position_d_W[0], linear_position_d_W[1], linear_position_d_W[2], yaw_d);
+        if(meta_step % 100 == 0) printf("New target %d: [%.3f, %.3f, %.3f], yaw: %.3f\n", meta_step, linear_position_d_W[0], linear_position_d_W[1], linear_position_d_W[2], yaw_d);
         #endif
 
         while (!is_stable() || !is_at_target_position()) {
@@ -102,13 +102,12 @@ int main() {
             }
             #endif
 
-            #ifdef LOG
-            printf("Meta step %d\n", meta_step);
-            #endif
+            #ifndef LOG
             printf("Position: [%.3f, %.3f, %.3f]\n", linear_position_W[0], linear_position_W[1], linear_position_W[2]);
             printf("Desired position: [%.3f, %.3f, %.3f]\n", linear_position_d_W[0], linear_position_d_W[1], linear_position_d_W[2]);
             printf("Angular Velocity: [%.3f, %.3f, %.3f]\n", angular_velocity_B[0], angular_velocity_B[1], angular_velocity_B[2]);
             printf("---\n");
+            #endif
 
             t_simulation += DT_PHYSICS;
         }
