@@ -36,7 +36,7 @@ jobs:
           CSV_FILE=$(ls *_control_data.csv)
           
           # Compress the file
-          gzip -9 "$CSV_FILE"
+          xz -9 "$CSV_FILE"
           
           # Create release
           response=$(curl -L \
@@ -59,6 +59,6 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer $GITHUB_TOKEN" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            -H "Content-Type: application/gzip" \
-            "${upload_url}?name=${CSV_FILE}.gz" \
-            --data-binary "@${CSV_FILE}.gz"
+            -H "Content-Type: application/x-xz" \
+            "${upload_url}?name=${CSV_FILE}.xz" \
+            --data-binary "@${CSV_FILE}.xz"
