@@ -10,7 +10,6 @@
 #define L_SQRT2 (L / sqrtf(2.0))
 #define G 9.81
 #define M 0.5
-#define DT (1.0 / 60.0)
 #define OMEGA_MIN 30.0
 #define OMEGA_MAX 70.0
 #define OMEGA_STABLE 50.0
@@ -38,7 +37,7 @@ const double k_v = 1.0;
 const double k_R = 1.0;
 const double k_w = 1.0;
 
-void update_drone_physics(void) {
+void update_drone_physics(double dt) {
     // 1. Declare arrays and calculate rotor forces/moments
     double f[4], m[4];
     for(int i = 0; i < 4; i++) {
@@ -89,9 +88,9 @@ void update_drone_physics(void) {
 
     // 7. Update states with Euler integration
     for(int i = 0; i < 3; i++) {
-        linear_velocity_W[i] += DT * linear_acceleration_W[i];
-        linear_position_W[i] += DT * linear_velocity_W[i];
-        angular_velocity_B[i] += DT * angular_acceleration_B[i];
+        linear_velocity_W[i] += dt * linear_acceleration_W[i];
+        linear_position_W[i] += dt * linear_velocity_W[i];
+        angular_velocity_B[i] += dt * angular_acceleration_B[i];
     }
 
     // 8. Update rotation matrix
@@ -102,7 +101,7 @@ void update_drone_physics(void) {
     multMat3f(R_W_B, w_hat, R_dot);
     
     double R_dot_scaled[9];
-    multScalMat3f(DT, R_dot, R_dot_scaled);
+    multScalMat3f(dt, R_dot, R_dot_scaled);
     
     double R_new[9];
     addMat3f(R_W_B, R_dot_scaled, R_new);

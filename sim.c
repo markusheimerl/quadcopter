@@ -8,6 +8,11 @@
 #include <time.h>
 #include "quad.h"
 
+// Timing
+#define DT_PHYSICS (1.0 / 1000.0)
+#define DT_CONTROL (1.0 / 60.0)
+#define DT_RENDER (1.0 / 30.0)
+
 static bool is_stable(const double v[3]) {
     for (int i = 0; i < 3; i++) {if (fabs(v[i]) > 0.005) return false;}
     return true;
@@ -34,6 +39,7 @@ int main() {
     uint8_t *frame_buffer = calloc(WIDTH * HEIGHT * 3, sizeof(uint8_t));
     ge_GIF *gif = ge_new_gif("drone_simulation.gif", WIDTH, HEIGHT, 4, -1, 0);
     transform_mesh(meshes[1], (double[3]){0.0, -0.5, 0.0}, 1.0, (double[9]){1,0,0, 0,1,0, 0,0,1});
+    double t_render = 0.0;
     #endif
 
     #ifdef LOG
@@ -45,6 +51,10 @@ int main() {
     fprintf(csv_file, "pos_d[0],pos_d[1],pos_d[2],yaw_d,ang_vel[0],ang_vel[1],ang_vel[2],acc[0],acc[1],acc[2],omega[0],omega[1],omega[2],omega[3]\n");
     srand(time(NULL));
     #endif
+
+    double t_physics = 0.0;
+    double t_control = 0.0;
+    double t_simulation = 0.0;
 
     for (int meta_step = 0; meta_step < 4; meta_step++) {
         #ifdef LOG
@@ -65,21 +75,31 @@ int main() {
                 return 1;
             }
 
-            update_drone_physics();
-            update_drone_control();
+            while (t_physics <= t_simulation) {
+                update_drone_physics(DT_PHYSICS);
+                t_physics += DT_PHYSICS;
+            }
             
-            #ifdef LOG
-            fprintf(csv_file, "%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n", linear_position_d_W[0], linear_position_d_W[1], linear_position_d_W[2], yaw_d, angular_velocity_B[0], angular_velocity_B[1], angular_velocity_B[2], linear_acceleration_B[0], linear_acceleration_B[1], linear_acceleration_B[2], omega_next[0], omega_next[1], omega_next[2], omega_next[3]);
-            #endif
+            if (t_control <= t_simulation) {
+                update_drone_control();
+                
+                #ifdef LOG
+                fprintf(csv_file, "%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n", linear_position_d_W[0], linear_position_d_W[1], linear_position_d_W[2], yaw_d, angular_velocity_B[0], angular_velocity_B[1], angular_velocity_B[2], linear_acceleration_B[0], linear_acceleration_B[1], linear_acceleration_B[2], omega_next[0], omega_next[1], omega_next[2], omega_next[3]);
+                #endif
 
-            update_rotor_speeds();
+                update_rotor_speeds();
+                t_control += DT_CONTROL;
+            }
 
             #ifdef RENDER
-            transform_mesh(meshes[0], linear_position_W, 0.5, R_W_B);
-            memset(frame_buffer, 0, WIDTH * HEIGHT * 3);
-            vertex_shader(meshes, 2, (double[3]){-2.0, 2.0, -2.0}, (double[3]){0.0, 0.0, 0.0});
-            rasterize(frame_buffer, meshes, 2);
-            ge_add_frame(gif, frame_buffer, 6);
+            if (t_render <= t_simulation) {
+                transform_mesh(meshes[0], linear_position_W, 0.5, R_W_B);
+                memset(frame_buffer, 0, WIDTH * HEIGHT * 3);
+                vertex_shader(meshes, 2, (double[3]){-2.0, 2.0, -2.0}, (double[3]){0.0, 0.0, 0.0});
+                rasterize(frame_buffer, meshes, 2);
+                ge_add_frame(gif, frame_buffer, 6);
+                t_render += DT_RENDER;
+            }
             #endif
 
             #ifdef LOG
@@ -89,6 +109,8 @@ int main() {
             printf("Desired position: [%.3f, %.3f, %.3f]\n", linear_position_d_W[0], linear_position_d_W[1], linear_position_d_W[2]);
             printf("Angular Velocity: [%.3f, %.3f, %.3f]\n", angular_velocity_B[0], angular_velocity_B[1], angular_velocity_B[2]);
             printf("---\n");
+
+            t_simulation += DT_PHYSICS;
         }
 
         #ifndef LOG
