@@ -35,7 +35,7 @@ static bool check_divergence(void) {
     return false;
 }
 
-int main() {
+int main(int argc, char *argv[]) {
     #ifdef RENDER
     Mesh* meshes[] = {
         create_mesh("rasterizer/drone.obj", "rasterizer/drone.bmp"),
@@ -48,6 +48,8 @@ int main() {
     #endif
 
     #ifdef LOG
+    int max_steps = 5000;
+    if (argc > 1) max_steps = strtol(argv[1], NULL, 10);
     time_t t = time(NULL);
     struct tm tm = *localtime(&t);
     char filename[100];
@@ -59,7 +61,7 @@ int main() {
 
     double t_physics = 0.0, t_control = 0.0, t_simulation = 0.0;
 
-    for (int meta_step = 0; meta_step < 5000; meta_step++) {
+    for (int meta_step = 0; meta_step < max_steps; meta_step++) {
         #ifdef LOG
         for (int i = 0; i < 3; i++) linear_position_d_W[i] = (double)rand() / RAND_MAX * 10 - (i != 1 ? 5 : 0);
         yaw_d = (double)rand() / RAND_MAX * 2 * M_PI;
