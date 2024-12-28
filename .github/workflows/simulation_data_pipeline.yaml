@@ -13,7 +13,6 @@ jobs:
       - uses: actions/checkout@v3
 
       - name: Run simulation
-        id: simulation
         run: |
           make log
           for attempt in {1..10}; do
@@ -28,19 +27,16 @@ jobs:
             fi
           done
 
-      - name: Compress data files
-        if: success()
-        run: |
-          for file in *.csv; do
-            [ -f "$file" ] && gzip -9 "$file"
-          done
-
-      - name: Create Release and Upload Data
+      - name: Process and upload data
         if: success()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           DATE=$(date +"%Y-%m-%d")
+          CSV_FILE=$(ls *_control_data.csv)
+          
+          # Compress the file
+          gzip -9 "$CSV_FILE"
           
           # Create release
           response=$(curl -L \
@@ -56,16 +52,13 @@ jobs:
               "prerelease":false
             }')
           
+          # Upload file
           upload_url=$(echo "$response" | jq -r .upload_url | sed 's/{?name,label}//g')
-          
-          # Upload compressed files
-          for file in *.csv.gz; do
-            [ -f "$file" ] && curl -L \
-              -X POST \
-              -H "Accept: application/vnd.github+json" \
-              -H "Authorization: Bearer $GITHUB_TOKEN" \
-              -H "X-GitHub-Api-Version: 2022-11-28" \
-              -H "Content-Type: application/gzip" \
-              "${upload_url}?name=${DATE}_${file}" \
-              --data-binary "@$file"
-          done
+          curl -L \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            -H "Content-Type: application/gzip" \
+            "${upload_url}?name=${CSV_FILE}.gz" \
+            --data-binary "@${CSV_FILE}.gz"
