@@ -82,7 +82,9 @@ int main() {
             ge_add_frame(gif, frame_buffer, 6);
             #endif
 
+            #ifdef LOG
             printf("Meta step %d\n", meta_step);
+            #endif
             printf("Position: [%.3f, %.3f, %.3f]\n", linear_position_W[0], linear_position_W[1], linear_position_W[2]);
             printf("Desired position: [%.3f, %.3f, %.3f]\n", linear_position_d_W[0], linear_position_d_W[1], linear_position_d_W[2]);
             printf("Angular Velocity: [%.3f, %.3f, %.3f]\n", angular_velocity_B[0], angular_velocity_B[1], angular_velocity_B[2]);
