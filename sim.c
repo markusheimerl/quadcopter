@@ -13,8 +13,8 @@
 #define DT_CONTROL (1.0 / 60.0)
 #define DT_RENDER (1.0 / 30.0)
 
-static bool is_stable(const double v[3]) {
-    for (int i = 0; i < 3; i++) {if (fabs(v[i]) > 0.005) return false;}
+static bool is_stable(void) {
+    for (int i = 0; i < 3; i++) {if (fabs(angular_velocity_B[i]) > 0.005) return false;}
     return true;
 }
 
@@ -65,7 +65,7 @@ int main() {
         printf("New target %d: [%.3f, %.3f, %.3f], yaw: %.3f\n", meta_step, linear_position_d_W[0], linear_position_d_W[1], linear_position_d_W[2], yaw_d);
         #endif
 
-        while (!is_stable(angular_velocity_B) || !is_at_target_position()) {
+        while (!is_stable() || !is_at_target_position()) {
             if (check_divergence()) {
                 #ifdef LOG
                 fclose(csv_file);
