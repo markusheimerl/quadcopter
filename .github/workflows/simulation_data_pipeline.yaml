@@ -17,7 +17,7 @@ jobs:
           make log
           for attempt in {1..10}; do
             echo "Simulation attempt $attempt"
-            if ./a.out; then
+            if ./a.out 100000; then
               echo "Simulation successful"
               break
             fi
