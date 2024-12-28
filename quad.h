@@ -32,10 +32,10 @@ double angular_velocity_d_B[3] = {0.0, 0.0, 0.0};
 double angular_acceleration_d_B[3] = {0.0, 0.0, 0.0};
 double yaw_d = 3.14 / 2.0;
 
-const double k_p = 0.5;
-const double k_v = 1.0;
-const double k_R = 1.0;
-const double k_w = 1.0;
+const double k_p = 0.1;
+const double k_v = 0.6;
+const double k_R = 0.6;
+const double k_w = 0.6;
 
 void update_drone_physics(double dt) {
     // 1. Declare arrays and calculate rotor forces/moments

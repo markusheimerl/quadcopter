@@ -56,7 +56,7 @@ int main() {
     double t_control = 0.0;
     double t_simulation = 0.0;
 
-    for (int meta_step = 0; meta_step < 4; meta_step++) {
+    for (int meta_step = 0; meta_step < 200; meta_step++) {
         #ifdef LOG
         linear_position_d_W[0] = (double)rand() / RAND_MAX * 10 - 5;
         linear_position_d_W[1] = (double)rand() / RAND_MAX * 10;
