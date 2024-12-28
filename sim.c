@@ -8,25 +8,30 @@
 #endif
 #include "quad.h"
 
-// Timing
-#define DT_PHYSICS (1.0 / 1000.0)
-#define DT_CONTROL (1.0 / 60.0)
-#define DT_RENDER (1.0 / 30.0)
+#define DT_PHYSICS  (1.0 / 1000.0)
+#define DT_CONTROL  (1.0 / 60.0)
+#define DT_RENDER   (1.0 / 30.0)
 
 static bool is_stable(void) {
-    for (int i = 0; i < 3; i++) {if (fabs(angular_velocity_B[i]) > 0.005) return false;}
+    for (int i = 0; i < 3; i++)
+        if (fabs(angular_velocity_B[i]) > 0.005) return false;
     return true;
 }
 
 static bool is_at_target_position(void) {
-    double position_error[3] = {linear_position_W[0] - linear_position_d_W[0], linear_position_W[1] - linear_position_d_W[1], linear_position_W[2] - linear_position_d_W[2]};
-    for (int i = 0; i < 3; i++) {if (fabs(position_error[i]) > 0.1) return false;}
+    for (int i = 0; i < 3; i++)
+        if (fabs(linear_position_W[i] - linear_position_d_W[i]) > 0.1) return false;
     return true;
 }
 
 static bool check_divergence(void) {
-    if (fabs(linear_position_W[0]) > 1000.0 || fabs(linear_position_W[1]) > 1000.0 || fabs(linear_position_W[2]) > 1000.0 ||fabs(linear_velocity_W[0]) > 100.0 || fabs(linear_velocity_W[1]) > 100.0 || fabs(linear_velocity_W[2]) > 100.0 ||fabs(angular_velocity_B[0]) > 100.0 || fabs(angular_velocity_B[1]) > 100.0 || fabs(angular_velocity_B[2]) > 100.0) return true;
-    for (int i = 0; i < 4; i++) {if (omega_next[i] < 0 || omega_next[i] > 1000) return true;}
+    for (int i = 0; i < 3; i++) {
+        if (fabs(linear_position_W[i]) > 1000.0 || 
+            fabs(linear_velocity_W[i]) > 100.0 || 
+            fabs(angular_velocity_B[i]) > 100.0) return true;
+    }
+    for (int i = 0; i < 4; i++)
+        if (omega_next[i] < 0 || omega_next[i] > 1000) return true;
     return false;
 }
 
@@ -52,15 +57,11 @@ int main() {
     srand(time(NULL));
     #endif
 
-    double t_physics = 0.0;
-    double t_control = 0.0;
-    double t_simulation = 0.0;
+    double t_physics = 0.0, t_control = 0.0, t_simulation = 0.0;
 
     for (int meta_step = 0; meta_step < 5000; meta_step++) {
         #ifdef LOG
-        linear_position_d_W[0] = (double)rand() / RAND_MAX * 10 - 5;
-        linear_position_d_W[1] = (double)rand() / RAND_MAX * 10;
-        linear_position_d_W[2] = (double)rand() / RAND_MAX * 10 - 5;
+        for (int i = 0; i < 3; i++) linear_position_d_W[i] = (double)rand() / RAND_MAX * 10 - (i != 1 ? 5 : 0);
         yaw_d = (double)rand() / RAND_MAX * 2 * M_PI;
         if(meta_step % 100 == 0) printf("New target %d: [%.3f, %.3f, %.3f], yaw: %.3f\n", meta_step, linear_position_d_W[0], linear_position_d_W[1], linear_position_d_W[2], yaw_d);
         #endif
@@ -82,11 +83,9 @@ int main() {
             
             if (t_control <= t_simulation) {
                 update_drone_control();
-                
                 #ifdef LOG
                 fprintf(csv_file, "%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n", linear_position_d_W[0], linear_position_d_W[1], linear_position_d_W[2], yaw_d, angular_velocity_B[0], angular_velocity_B[1], angular_velocity_B[2], linear_acceleration_B[0], linear_acceleration_B[1], linear_acceleration_B[2], omega_next[0], omega_next[1], omega_next[2], omega_next[3]);
                 #endif
-
                 update_rotor_speeds();
                 t_control += DT_CONTROL;
             }
@@ -103,10 +102,7 @@ int main() {
             #endif
 
             #ifndef LOG
-            printf("Position: [%.3f, %.3f, %.3f]\n", linear_position_W[0], linear_position_W[1], linear_position_W[2]);
-            printf("Desired position: [%.3f, %.3f, %.3f]\n", linear_position_d_W[0], linear_position_d_W[1], linear_position_d_W[2]);
-            printf("Angular Velocity: [%.3f, %.3f, %.3f]\n", angular_velocity_B[0], angular_velocity_B[1], angular_velocity_B[2]);
-            printf("---\n");
+            printf("Position: [%.3f, %.3f, %.3f]\nDesired position: [%.3f, %.3f, %.3f]\nAngular Velocity: [%.3f, %.3f, %.3f]\n---\n", linear_position_W[0], linear_position_W[1], linear_position_W[2], linear_position_d_W[0], linear_position_d_W[1], linear_position_d_W[2], angular_velocity_B[0], angular_velocity_B[1], angular_velocity_B[2]);
             #endif
 
             t_simulation += DT_PHYSICS;
