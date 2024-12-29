@@ -44,8 +44,8 @@ int main(int argc, char *argv[]) {
     double t_render = 0.0;
     #endif
 
-    #ifdef LOG
     int max_steps = 5000;
+    #ifdef LOG
     if (argc > 1) max_steps = strtol(argv[1], NULL, 10);
     time_t t = time(NULL);
     struct tm tm = *localtime(&t);
@@ -56,7 +56,7 @@ int main(int argc, char *argv[]) {
     srand(time(NULL));
     #endif
 
-    double t_physics = 0.0, t_control = 0.0, t_simulation = 0.0;
+    double t_physics = 0.0, t_control = 0.0;
 
     for (int meta_step = 0; meta_step < max_steps; meta_step++) {
         #ifdef LOG
@@ -75,12 +75,10 @@ int main(int argc, char *argv[]) {
                 return 1;
             }
 
-            while (t_physics <= t_simulation) {
-                update_drone_physics(DT_PHYSICS);
-                t_physics += DT_PHYSICS;
-            }
+            update_drone_physics(DT_PHYSICS);
+            t_physics += DT_PHYSICS;
             
-            if (t_control <= t_simulation) {
+            if (t_control <= t_physics) {
                 update_drone_control();
                 #ifdef LOG
                 fprintf(csv_file, "%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n", linear_position_d_W[0], linear_position_d_W[1], linear_position_d_W[2], yaw_d, angular_velocity_B[0], angular_velocity_B[1], angular_velocity_B[2], linear_acceleration_B[0], linear_acceleration_B[1], linear_acceleration_B[2], omega_next[0], omega_next[1], omega_next[2], omega_next[3]);
@@ -90,7 +88,7 @@ int main(int argc, char *argv[]) {
             }
 
             #ifdef RENDER
-            if (t_render <= t_simulation) {
+            if (t_render <= t_physics) {
                 transform_mesh(meshes[0], linear_position_W, 0.5, R_W_B);
                 memset(frame_buffer, 0, WIDTH * HEIGHT * 3);
                 vertex_shader(meshes, 2, (double[3]){-2.0, 2.0, -2.0}, (double[3]){0.0, 0.0, 0.0});
@@ -103,8 +101,6 @@ int main(int argc, char *argv[]) {
             #ifndef LOG
             printf("Position: [%.3f, %.3f, %.3f]\nDesired position: [%.3f, %.3f, %.3f]\nAngular Velocity: [%.3f, %.3f, %.3f]\n---\n", linear_position_W[0], linear_position_W[1], linear_position_W[2], linear_position_d_W[0], linear_position_d_W[1], linear_position_d_W[2], angular_velocity_B[0], angular_velocity_B[1], angular_velocity_B[2]);
             #endif
-
-            t_simulation += DT_PHYSICS;
         }
 
         #ifndef LOG
