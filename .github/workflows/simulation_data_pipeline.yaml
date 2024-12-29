@@ -47,14 +47,14 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Get date and filename
-          DATE=$(date +"%Y-%m-%d")
+          # Get date and timestamp
+          DATETIME=$(date +"%Y-%m-%d_%H-%M-%S")
           CSV_FILE=$(ls *_control_data.csv)
           
-          # Create release
-          gh release create "simulation-${DATE}" \
-            --title "Simulation Run ${DATE}" \
-            --notes "Simulation data for ${DATE}"
+          # Create release with unique timestamp
+          gh release create "simulation-${DATETIME}" \
+            --title "Simulation Run ${DATETIME}" \
+            --notes "Simulation data for ${DATETIME}"
           
           # Compress and split file
           echo "Compressing data file..."
@@ -68,7 +68,7 @@ jobs:
           echo "Uploading file parts..."
           for part in ${CSV_FILE}.xz.part_*; do
             echo "Uploading $part..."
-            gh release upload "simulation-${DATE}" "$part" --clobber
+            gh release upload "simulation-${DATETIME}" "$part" --clobber
             
             # Add small delay between uploads
             sleep 2
