@@ -1,5 +1,5 @@
 # drone
-A design of a tiny drone utilizing the Cologne Chip GateMate FPGA - on hold for now
+A design of a tiny drone
 
 ![image](https://github.com/ratisbonrobotics/drone/assets/149831926/ca73d6d1-41e3-425e-b51a-48b5f8c18408)
 ![image](https://github.com/ratisbonrobotics/drone/assets/149831926/81ee0bea-3d01-427b-8c20-06429374bebd)
