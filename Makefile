@@ -4,7 +4,7 @@ CFLAGS = -O3 -march=native -ffast-math -funroll-loops -I./rasterizer
 LDFLAGS = -lm -flto
 
 # Target and source
-TARGET = a.out
+TARGET = sim.out
 SRC = sim.c
 
 # Build target
