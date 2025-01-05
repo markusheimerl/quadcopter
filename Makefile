@@ -27,4 +27,4 @@ run: $(TARGET)
 
 # Clean up
 clean:
-	rm -f $(TARGET)
+	rm -f $(TARGET) *_control_data.csv
