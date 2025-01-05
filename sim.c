@@ -44,7 +44,7 @@ int main(int argc, char *argv[]) {
     double t_render = 0.0;
     #endif
 
-    int max_steps = 5000;
+    int max_steps = 50;
     #ifdef LOG
     if (argc > 1) max_steps = strtol(argv[1], NULL, 10);
     time_t t = time(NULL);
@@ -62,7 +62,7 @@ int main(int argc, char *argv[]) {
         #ifdef LOG
         for (int i = 0; i < 3; i++) linear_position_d_W[i] = (double)rand() / RAND_MAX * 10 - (i != 1 ? 5 : 0);
         yaw_d = (double)rand() / RAND_MAX * 2 * M_PI;
-        if(meta_step % 100 == 0) printf("New target %d: [%.3f, %.3f, %.3f], yaw: %.3f\n", meta_step, linear_position_d_W[0], linear_position_d_W[1], linear_position_d_W[2], yaw_d);
+        if(meta_step % 10 == 0) printf("New target %d: [%.3f, %.3f, %.3f], yaw: %.3f\n", meta_step, linear_position_d_W[0], linear_position_d_W[1], linear_position_d_W[2], yaw_d);
         #endif
 
         while (!is_stable() || !is_at_target_position()) {
