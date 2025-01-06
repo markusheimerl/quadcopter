@@ -27,7 +27,7 @@ int main(int argc, char *argv[]) {
     double t_render = 0.0, t_status = 0.0;
     int max_steps = 2;
     #else
-    int max_steps = 100;
+    int max_steps = 1000;
     #endif
 
     if (argc > 1) max_steps = strtol(argv[1], NULL, 10);
@@ -36,6 +36,7 @@ int main(int argc, char *argv[]) {
     sprintf(filename, "%d-%d-%d_%d-%d-%d_control_data.csv", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
     FILE *csv_file = fopen(filename, "w");
     fprintf(csv_file, "vel_d_B[0],vel_d_B[1],vel_d_B[2],yaw_d,ang_vel[0],ang_vel[1],ang_vel[2],acc[0],acc[1],acc[2],omega[0],omega[1],omega[2],omega[3]\n");
+    printf("Starting data collection for %d steps...\n", max_steps);
     #endif
 
     srand(time(NULL));
@@ -47,6 +48,9 @@ int main(int argc, char *argv[]) {
         yaw_d = (double)rand() / RAND_MAX * 2 * M_PI;
         #ifdef RENDER
         printf("\n=== New Target %d ===\nDesired velocity (body): [%.3f, %.3f, %.3f], yaw: %.3f\n", meta_step, linear_velocity_d_B[0], linear_velocity_d_B[1], linear_velocity_d_B[2], yaw_d);
+        #endif
+        #ifdef LOG
+        if (meta_step % 100 == 0) printf("Progress: %d/%d steps\n", meta_step, max_steps);
         #endif
 
         double min_time = t_physics + 0.5;
@@ -112,6 +116,7 @@ int main(int argc, char *argv[]) {
 
     #ifdef LOG
     fclose(csv_file);
+    printf("\nData collection complete. Saved to: %s\n", filename);
     #endif
     #ifdef RENDER
     free(frame_buffer); free_meshes(meshes, 2); ge_close_gif(gif);
