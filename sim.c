@@ -11,6 +11,7 @@
 #define DT_PHYSICS  (1.0 / 1000.0)
 #define DT_CONTROL  (1.0 / 60.0)
 #define DT_RENDER   (1.0 / 30.0)
+#define VEC3_MAG2(v) ((v)[0]*(v)[0] + (v)[1]*(v)[1] + (v)[2]*(v)[2])
 
 int main(int argc, char *argv[]) {
     time_t t = time(NULL);
@@ -23,8 +24,7 @@ int main(int argc, char *argv[]) {
     uint8_t *frame_buffer = calloc(WIDTH * HEIGHT * 3, sizeof(uint8_t));
     ge_GIF *gif = ge_new_gif(filename, WIDTH, HEIGHT, 4, -1, 0);
     transform_mesh(meshes[1], (double[3]){0.0, -0.5, 0.0}, 1.0, (double[9]){1,0,0, 0,1,0, 0,0,1});
-    double t_render = 0.0;
-    double t_status = 0.0;
+    double t_render = 0.0, t_status = 0.0;
     int max_steps = 2;
     #else
     int max_steps = 100;
@@ -46,19 +46,14 @@ int main(int argc, char *argv[]) {
         linear_velocity_d_B[1] *= 0.2;
         yaw_d = (double)rand() / RAND_MAX * 2 * M_PI;
         #ifdef RENDER
-        printf("\n=== New Target %d ===\nDesired velocity (body): [%.3f, %.3f, %.3f], yaw: %.3f\n", 
-               meta_step, linear_velocity_d_B[0], linear_velocity_d_B[1], linear_velocity_d_B[2], yaw_d);
+        printf("\n=== New Target %d ===\nDesired velocity (body): [%.3f, %.3f, %.3f], yaw: %.3f\n", meta_step, linear_velocity_d_B[0], linear_velocity_d_B[1], linear_velocity_d_B[2], yaw_d);
         #endif
 
         double min_time = t_physics + 0.5;
         bool velocity_achieved = false;
 
         while (!velocity_achieved || t_physics < min_time) {
-            if (fabs(linear_position_W[0]) > 1000.0 || fabs(linear_position_W[1]) > 1000.0 || 
-                fabs(linear_position_W[2]) > 1000.0 || fabs(linear_velocity_W[0]) > 100.0 || 
-                fabs(linear_velocity_W[1]) > 100.0 || fabs(linear_velocity_W[2]) > 100.0 || 
-                fabs(angular_velocity_B[0]) > 100.0 || fabs(angular_velocity_B[1]) > 100.0 || 
-                fabs(angular_velocity_B[2]) > 100.0) {
+            if (VEC3_MAG2(linear_position_W) > 1000.0*1000.0 || VEC3_MAG2(linear_velocity_W) > 100.0*100.0 || VEC3_MAG2(angular_velocity_B) > 100.0*100.0) {
                 printf("Simulation diverged.\n");
                 #ifdef LOG
                 fclose(csv_file);
@@ -80,21 +75,19 @@ int main(int argc, char *argv[]) {
 
                 velocity_achieved = true;
                 for (int i = 0; i < 3; i++) {
-                    if (fabs(angular_velocity_B[i]) > 0.005 || fabs(linear_velocity_B[i] - linear_velocity_d_B[i]) > 0.1) {
+                    if (fabs(angular_velocity_B[i]) > 0.05 || fabs(linear_velocity_B[i] - linear_velocity_d_B[i]) > 0.1) {
                         velocity_achieved = false;
                         break;
                     }
                 }
 
+                double current_yaw = fmod(atan2(R_W_B[2], R_W_B[8]) + M_PI, 2*M_PI) - M_PI;
+                double desired_yaw = fmod(yaw_d + M_PI, 2*M_PI) - M_PI;
+                if (fabs(current_yaw - desired_yaw) > 0.1) velocity_achieved = false;
+
                 #ifdef RENDER
                 if (t_physics >= t_status) {
-                    // Calculate current yaw from rotation matrix
-                    double current_yaw = atan2(R_W_B[2], R_W_B[8]);
-                    printf("\rPos: [%5.2f, %5.2f, %5.2f] Vel (body): [%5.2f, %5.2f, %5.2f] Angular: [%5.2f, %5.2f, %5.2f] Yaw: %5.2f/%5.2f", 
-                           linear_position_W[0], linear_position_W[1], linear_position_W[2],
-                           linear_velocity_B[0], linear_velocity_B[1], linear_velocity_B[2],
-                           angular_velocity_B[0], angular_velocity_B[1], angular_velocity_B[2],
-                           current_yaw, yaw_d);
+                    printf("\rPos: [%5.2f, %5.2f, %5.2f] Vel (body): [%5.2f, %5.2f, %5.2f] Angular: [%5.2f, %5.2f, %5.2f] Yaw: %5.2f/%5.2f", linear_position_W[0], linear_position_W[1], linear_position_W[2], linear_velocity_B[0], linear_velocity_B[1], linear_velocity_B[2], angular_velocity_B[0], angular_velocity_B[1], angular_velocity_B[2], current_yaw, desired_yaw);
                     fflush(stdout);
                     t_status = t_physics + 0.1;
                 }
