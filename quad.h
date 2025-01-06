@@ -18,6 +18,7 @@
 double omega[4] = {OMEGA_STABLE, OMEGA_STABLE, OMEGA_STABLE, OMEGA_STABLE};
 double angular_velocity_B[3] = {0.0, 0.0, 0.0};
 double linear_velocity_W[3] = {0.0, 0.0, 0.0};
+double linear_velocity_B[3] = {0.0, 0.0, 0.0};
 double linear_position_W[3] = {0.0, 1.0, 0.0};
 double linear_acceleration_B[3] = {0.0, 0.0, 0.0};
 double R_W_B[9] = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0};
@@ -25,8 +26,7 @@ double I[3] = {0.01, 0.02, 0.01};
 
 // Control variables
 double omega_next[4];
-double linear_position_d_W[3] = {-1.0, 0.5, -0.5};
-double linear_velocity_d_W[3] = {0.0, 0.0, 0.0};
+double linear_velocity_d_B[3] = {0.0, 0.0, 0.0};
 double linear_acceleration_d_W[3] = {0.0, 0.0, 0.0};
 double angular_velocity_d_B[3] = {0.0, 0.0, 0.0};
 double angular_acceleration_d_B[3] = {0.0, 0.0, 0.0};
@@ -123,36 +123,44 @@ void update_drone_physics(double dt) {
         linear_acceleration_W_minus_gravity[i] = linear_acceleration_W[i] - gravity_W[i];
     }
     multMatVec3f(R_W_B, linear_acceleration_W_minus_gravity, linear_acceleration_B);
+
+    // 11. Calculate velocity in body frame (for checking velocity control)
+    double R_W_B_T[9];
+    transpMat3f(R_W_B, R_W_B_T);
+    multMatVec3f(R_W_B_T, linear_velocity_W, linear_velocity_B);
 }
 
 void update_drone_control(void) {
-    // 1. Calculate position and velocity errors
-    double error_p[3], error_v[3];
-    subVec3f(linear_position_W, linear_position_d_W, error_p);
-    subVec3f(linear_velocity_W, linear_velocity_d_W, error_v);
+    // 1. Transform current world velocity to body frame
+    double linear_velocity_B[3];
+    double R_W_B_T[9];
+    transpMat3f(R_W_B, R_W_B_T);
+    multMatVec3f(R_W_B_T, linear_velocity_W, linear_velocity_B);
 
-    // 2. Calculate desired force vector in world frame
-    double z_W_d[3], temp[3];
-    multScalVec3f(-k_p, error_p, z_W_d);
-    multScalVec3f(-k_v, error_v, temp);
-    addVec3f(z_W_d, temp, z_W_d);
+    // 2. Calculate velocity error in body frame
+    double error_v[3];
+    subVec3f(linear_velocity_B, linear_velocity_d_B, error_v);
+
+    // 3. Calculate desired force vector in body frame
+    double z_B_d[3];
+    multScalVec3f(-k_v, error_v, z_B_d);
     
-    // Add gravity compensation and desired acceleration
-    double gravity_term[3] = {0, M * G, 0};
-    addVec3f(z_W_d, gravity_term, z_W_d);
-    
-    double accel_term[3];
-    multScalVec3f(M, linear_acceleration_d_W, accel_term);
-    addVec3f(z_W_d, accel_term, z_W_d);
+    // Add gravity compensation (transformed to body frame)
+    double gravity_W[3] = {0, M * G, 0};
+    double gravity_B[3];
+    multMatVec3f(R_W_B_T, gravity_W, gravity_B);
+    addVec3f(z_B_d, gravity_B, z_B_d);
 
-    // 3. Calculate thrust magnitude
-    double z_W_B[3];
-    double y_body[3] = {0, 1, 0};
-    multMatVec3f(R_W_B, y_body, z_W_B);
-    double f_z_B_control = dotVec3f(z_W_d, z_W_B);
+    // 4. Calculate thrust magnitude
+    double f_z_B_control = z_B_d[1];  // y-component in body frame
 
-    // 4. Calculate desired rotation matrix
+    // 5. Calculate desired rotation matrix
+    // We still need yaw control, but roll and pitch will come from velocity
     double x_tilde_d_W[3] = {sin(yaw_d), 0, cos(yaw_d)};
+    double z_W_d[3];
+    multMatVec3f(R_W_B, z_B_d, z_W_d);
+    normVec3f(z_W_d, z_W_d);
+    
     double temp_cross1[3], temp_cross2[3];
     double R_W_d_column_0[3], R_W_d_column_1[3], R_W_d_column_2[3];
     
@@ -168,10 +176,9 @@ void update_drone_control(void) {
         R_W_d_column_1[2], R_W_d_column_2[2], R_W_d_column_0[2]
     };
 
-    // 5. Calculate rotation error
-    double R_W_d_T[9], R_W_B_T[9], temp_mat1[9], temp_mat2[9], temp_mat3[9];
+    // 6. Calculate rotation error
+    double R_W_d_T[9], temp_mat1[9], temp_mat2[9], temp_mat3[9];
     transpMat3f(R_W_d, R_W_d_T);
-    transpMat3f(R_W_B, R_W_B_T);
     
     multMat3f(R_W_d_T, R_W_B, temp_mat1);
     multMat3f(R_W_B_T, R_W_d, temp_mat2);
@@ -181,13 +188,13 @@ void update_drone_control(void) {
     so3vee(temp_mat3, error_r);
     multScalVec3f(0.5, error_r, error_r);
 
-    // 6. Calculate angular velocity error
+    // 7. Calculate angular velocity error
     double temp_vec[3], error_w[3];
     multMat3f(R_W_d_T, R_W_B, temp_mat1);
     multMatVec3f(temp_mat1, angular_velocity_d_B, temp_vec);
     subVec3f(angular_velocity_B, temp_vec, error_w);
 
-    // 7. Calculate control torque
+    // 8. Calculate control torque
     double tau_B_control[3], temp_vec2[3];
     multScalVec3f(-k_R, error_r, tau_B_control);
     multScalVec3f(-k_w, error_w, temp_vec2);
@@ -213,25 +220,23 @@ void update_drone_control(void) {
     multMatVec3f(I_mat, temp_vec5, temp_vec);
     subVec3f(tau_B_control, temp_vec, tau_B_control);
 
-    // 8. Calculate rotor speeds
+    // 9. Calculate rotor speeds
     double F_bar[16] = {
-        K_F, K_F, K_F, K_F,   // Thrust coefficients
-        0, 0, 0, 0,           // Roll moments
-        K_M, -K_M, K_M, -K_M, // Yaw moments
-        0, 0, 0, 0            // Pitch moments
+        K_F, K_F, K_F, K_F,
+        0, 0, 0, 0,
+        K_M, -K_M, K_M, -K_M,
+        0, 0, 0, 0
     };
 
-    // Calculate roll and pitch moments
     for(int i = 0; i < 4; i++) {
         double moment[3];
         double pos_scaled[3];
         multScalVec3f(K_F, (double [4][3]){{-L, 0,  L}, { L, 0,  L}, { L, 0, -L}, {-L, 0, -L}}[i], pos_scaled);
         crossVec3f(pos_scaled, (double[3]){0, 1, 0}, moment);
-        F_bar[4 + i]  = moment[0];  // Roll
-        F_bar[12 + i] = moment[2];  // Pitch
+        F_bar[4 + i]  = moment[0];
+        F_bar[12 + i] = moment[2];
     }
 
-    // 9. Calculate and update rotor speeds
     double F_bar_inv[16];
     inv4Mat4f(F_bar, F_bar_inv);
 
