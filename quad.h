@@ -252,7 +252,7 @@ void update_drone_control(void) {
 
 void update_rotor_speeds(void) {
     for(int i = 0; i < 4; i++) {
-        omega[i] = omega_next[i];
+        omega[i] = fmax(OMEGA_MIN, fmin(OMEGA_MAX, omega_next[i]));
     }
 }
 
