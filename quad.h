@@ -25,7 +25,7 @@ double R_W_B[9] = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0};
 double I[3] = {0.01, 0.02, 0.01};
 
 // Control variables
-double omega_next[4];
+double omega_next[4] = {OMEGA_STABLE, OMEGA_STABLE, OMEGA_STABLE, OMEGA_STABLE};
 double linear_velocity_d_B[3] = {0.0, 0.0, 0.0};
 double linear_acceleration_d_W[3] = {0.0, 0.0, 0.0};
 double angular_velocity_d_B[3] = {0.0, 0.0, 0.0};
