@@ -1,6 +1,6 @@
 # Compiler and flags
-CC = gcc
-CFLAGS = -O3 -march=native -ffast-math -funroll-loops -I./rasterizer
+CC = clang
+CFLAGS = -O3 -march=native -ffast-math -I./rasterizer
 LDFLAGS = -lm -flto
 
 # Target and source
