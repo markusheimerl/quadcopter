@@ -15,16 +15,16 @@
 #define OMEGA_STABLE 50.0
 
 // State variables
-double omega[4] = {OMEGA_STABLE, OMEGA_STABLE, OMEGA_STABLE, OMEGA_STABLE};
+double omega[4] = {0.0, 0.0, 0.0, 0.0};
 double angular_velocity_B[3] = {0.0, 0.0, 0.0};
 double linear_velocity_W[3] = {0.0, 0.0, 0.0};
-double linear_position_W[3] = {0.0, 1.0, 0.0};
+double linear_position_W[3] = {0.0, 0.0, 0.0};
 double linear_acceleration_B[3] = {0.0, 0.0, 0.0};
 double R_W_B[9] = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0};
 double I[3] = {0.01, 0.02, 0.01};
 
 // Control variables
-double omega_next[4] = {OMEGA_STABLE, OMEGA_STABLE, OMEGA_STABLE, OMEGA_STABLE};
+double omega_next[4] = {0.0, 0.0, 0.0, 0.0};
 double linear_position_d_W[3] = {0.0, 0.0, 0.0};
 double linear_velocity_d_W[3] = {0.0, 0.0, 0.0};
 double linear_acceleration_d_W[3] = {0.0, 0.0, 0.0};
@@ -32,10 +32,10 @@ double angular_velocity_d_B[3] = {0.0, 0.0, 0.0};
 double angular_acceleration_d_B[3] = {0.0, 0.0, 0.0};
 double yaw_d = 0.0;
 
-const double k_p = 0.2;
-const double k_v = 0.7;
-const double k_R = 0.7;
-const double k_w = 0.7;
+const double k_p = 0.1;
+const double k_v = 0.6;
+const double k_R = 0.6;
+const double k_w = 0.6;
 
 void update_drone_physics(double dt) {
     // 1. Declare arrays and calculate rotor forces/moments
@@ -92,6 +92,9 @@ void update_drone_physics(double dt) {
         linear_position_W[i] += dt * linear_velocity_W[i];
         angular_velocity_B[i] += dt * angular_acceleration_B[i];
     }
+
+    // Ensure the quadcopter doesn't go below ground level
+    if (linear_position_W[1] < 0.0) linear_position_W[1] = 0.0;
 
     // 8. Update rotation matrix
     double w_hat[9];
