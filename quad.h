@@ -39,6 +39,8 @@ double yaw_d = 0.0;
 // Sensor variables
 double linear_acceleration_B_s[3] = {0.0, 0.0, 0.0}; // Accelerometer
 double angular_velocity_B_s[3] = {0.0, 0.0, 0.0}; // Gyroscope
+double accel_bias[3] = {0.0, 0.0, 0.0};
+double gyro_bias[3] = {0.0, 0.0, 0.0};
 
 const double k_p = 0.1;
 const double k_v = 0.6;
