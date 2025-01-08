@@ -40,6 +40,10 @@ int main(int argc, char *argv[]) {
     #endif
 
     srand(time(NULL));
+    for(int i = 0; i < 3; i++) {
+        accel_bias[i] = (2.0 * ((double)rand() / RAND_MAX) - 1.0) * ACCEL_BIAS;
+        gyro_bias[i] = (2.0 * ((double)rand() / RAND_MAX) - 1.0) * GYRO_BIAS;
+    }
     double t_physics = 0.0, t_control = 0.0;
 
     for (int meta_step = 0; meta_step < max_steps; meta_step++) {

@@ -14,6 +14,11 @@
 #define OMEGA_MAX 70.0
 #define OMEGA_STABLE 50.0
 
+#define ACCEL_NOISE_STDDEV 0.1
+#define GYRO_NOISE_STDDEV 0.01
+#define ACCEL_BIAS 0.05
+#define GYRO_BIAS 0.005
+
 // State variables
 double omega[4] = {0.0, 0.0, 0.0, 0.0};
 double angular_velocity_B[3] = {0.0, 0.0, 0.0};
@@ -39,6 +44,11 @@ const double k_p = 0.1;
 const double k_v = 0.6;
 const double k_R = 0.6;
 const double k_w = 0.6;
+
+static double gaussian_noise(double stddev) {
+    double u1 = (double)rand() / RAND_MAX, u2 = (double)rand() / RAND_MAX;
+    return sqrt(-2.0 * log(u1)) * cos(2.0 * M_PI * u2) * stddev;
+}
 
 void update_drone_physics(double dt) {
     // 1. Declare arrays and calculate rotor forces/moments
@@ -115,6 +125,18 @@ void update_drone_physics(double dt) {
 
     // 9. Ensure rotation matrix stays orthonormal
     orthonormalize_rotation_matrix(R_W_B);
+
+    // 10. Calculate sensor readings with noise
+    double linear_acceleration_B[3], R_B_W[9];
+    transpMat3f(R_W_B, R_B_W);
+    multMatVec3f(R_B_W, linear_acceleration_W, linear_acceleration_B);
+    double gravity_B[3];
+    multMatVec3f(R_B_W, (double[3]){0, G, 0}, gravity_B);
+    subVec3f(linear_acceleration_B, gravity_B, linear_acceleration_B);
+    for(int i = 0; i < 3; i++) {
+        linear_acceleration_B_s[i] = linear_acceleration_B[i] + gaussian_noise(ACCEL_NOISE_STDDEV) + accel_bias[i];
+        angular_velocity_B_s[i] = angular_velocity_B[i] + gaussian_noise(GYRO_NOISE_STDDEV) + gyro_bias[i];
+    }
 }
 
 void update_drone_control(void) {
