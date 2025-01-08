@@ -56,7 +56,7 @@ int main(int argc, char *argv[]) {
         #endif
         
         #ifdef LOG
-        if (meta_step % 100 == 0) printf("Progress: %d/%d steps\n", meta_step, max_steps);
+        if (meta_step % 100 == 0) printf("Progress: %d/%d targets sequentially reached.\n", meta_step, max_steps);
         #endif
 
         bool position_achieved = false;
@@ -79,7 +79,7 @@ int main(int argc, char *argv[]) {
             if (t_control <= t_physics) {
                 update_drone_control();
                 #ifdef LOG
-                fprintf(csv_file, "%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n", linear_position_d_W[0], linear_position_d_W[1], linear_position_d_W[2], yaw_d, angular_velocity_B[0], angular_velocity_B[1], angular_velocity_B[2], linear_acceleration_B[0], linear_acceleration_B[1], linear_acceleration_B[2], omega_next[0], omega_next[1], omega_next[2], omega_next[3]);
+                fprintf(csv_file, "%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n", linear_position_d_W[0], linear_position_d_W[1], linear_position_d_W[2], yaw_d, angular_velocity_B_s[0], angular_velocity_B_s[1], angular_velocity_B_s[2], linear_acceleration_B_s[0], linear_acceleration_B_s[1], linear_acceleration_B_s[2], omega_next[0], omega_next[1], omega_next[2], omega_next[3]);
                 #endif
                 update_rotor_speeds();
                 t_control += DT_CONTROL;

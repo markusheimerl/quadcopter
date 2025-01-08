@@ -19,6 +19,10 @@
 #define ACCEL_BIAS 0.05
 #define GYRO_BIAS 0.005
 
+// Environment variables
+double wind_force_W[3] = {0.0, 0.0, 0.0};
+double target_wind_W[3] = {0.0, 0.0, 0.0};
+
 // State variables
 double omega[4] = {0.0, 0.0, 0.0, 0.0};
 double angular_velocity_B[3] = {0.0, 0.0, 0.0};
@@ -42,10 +46,10 @@ double angular_velocity_B_s[3] = {0.0, 0.0, 0.0}; // Gyroscope
 double accel_bias[3] = {0.0, 0.0, 0.0};
 double gyro_bias[3] = {0.0, 0.0, 0.0};
 
-const double k_p = 0.1;
-const double k_v = 0.6;
-const double k_R = 0.6;
-const double k_w = 0.6;
+const double k_p = 0.2;
+const double k_v = 0.7;
+const double k_R = 0.7;
+const double k_w = 0.7;
 
 static double gaussian_noise(double stddev) {
     double u1 = (double)rand() / RAND_MAX, u2 = (double)rand() / RAND_MAX;
@@ -85,6 +89,14 @@ void update_drone_physics(double dt) {
         linear_acceleration_W[i] = f_thrust_W[i] / M;
     }
     linear_acceleration_W[1] -= G;  // Add gravity
+
+    if ((double)rand() / RAND_MAX < 0.01)  // 1% chance to change target wind
+        for(int i = 0; i < 3; i++) if (i != 1) target_wind_W[i] = ((double)rand() / RAND_MAX - 0.5) * 1.0;  // ±0.5N
+    
+    for(int i = 0; i < 3; i++) {
+        wind_force_W[i] = 0.995 * wind_force_W[i] + 0.005 * target_wind_W[i];
+        linear_acceleration_W[i] += wind_force_W[i] / M;
+    }
 
     // 6. Calculate angular acceleration
     double I_mat[9];
