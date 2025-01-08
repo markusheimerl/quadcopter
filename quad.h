@@ -19,7 +19,6 @@ double omega[4] = {0.0, 0.0, 0.0, 0.0};
 double angular_velocity_B[3] = {0.0, 0.0, 0.0};
 double linear_velocity_W[3] = {0.0, 0.0, 0.0};
 double linear_position_W[3] = {0.0, 0.0, 0.0};
-double linear_acceleration_B[3] = {0.0, 0.0, 0.0};
 double R_W_B[9] = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0};
 double I[3] = {0.01, 0.02, 0.01};
 
@@ -31,6 +30,10 @@ double linear_acceleration_d_W[3] = {0.0, 0.0, 0.0};
 double angular_velocity_d_B[3] = {0.0, 0.0, 0.0};
 double angular_acceleration_d_B[3] = {0.0, 0.0, 0.0};
 double yaw_d = 0.0;
+
+// Sensor variables
+double linear_acceleration_B_s[3] = {0.0, 0.0, 0.0}; // Accelerometer
+double angular_velocity_B_s[3] = {0.0, 0.0, 0.0}; // Gyroscope
 
 const double k_p = 0.1;
 const double k_v = 0.6;
@@ -112,20 +115,6 @@ void update_drone_physics(double dt) {
 
     // 9. Ensure rotation matrix stays orthonormal
     orthonormalize_rotation_matrix(R_W_B);
-
-    // 10. Calculate linear acceleration in body frame (for accelerometer simulation)
-    double gravity_W[3] = {0, -G, 0}; // Gravity in world frame
-    double gravity_B[3]; // Gravity in body frame
-
-    // Transform gravity to body frame
-    multMatVec3f(R_W_B, gravity_W, gravity_B);
-
-    // Transform linear acceleration from world frame to body frame
-    double linear_acceleration_W_minus_gravity[3];
-    for (int i = 0; i < 3; i++) {
-        linear_acceleration_W_minus_gravity[i] = linear_acceleration_W[i] - gravity_W[i];
-    }
-    multMatVec3f(R_W_B, linear_acceleration_W_minus_gravity, linear_acceleration_B);
 }
 
 void update_drone_control(void) {
