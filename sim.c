@@ -35,7 +35,7 @@ int main(int argc, char *argv[]) {
     #ifdef LOG
     sprintf(filename, "%d-%d-%d_%d-%d-%d_control_data.csv", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
     FILE *csv_file = fopen(filename, "w");
-    fprintf(csv_file, "vel_d_B[0],vel_d_B[1],vel_d_B[2],ang_vel[0],ang_vel[1],ang_vel[2],acc[0],acc[1],acc[2],omega[0],omega[1],omega[2],omega[3]\n");
+    fprintf(csv_file, "pos_d[0],pos_d[1],pos_d[2],yaw_d,ang_vel[0],ang_vel[1],ang_vel[2],acc[0],acc[1],acc[2],omega[0],omega[1],omega[2],omega[3]\n");
     printf("Starting data collection for %d steps...\n", max_steps);
     #endif
 
@@ -43,19 +43,26 @@ int main(int argc, char *argv[]) {
     double t_physics = 0.0, t_control = 0.0;
 
     for (int meta_step = 0; meta_step < max_steps; meta_step++) {
-        for (int i = 0; i < 3; i++) linear_velocity_d_B[i] = 0.0;
-        if (rand() % 4 != 0) linear_velocity_d_B[rand() % 3] = (rand() % 2 ? 0.5 : -0.5);
+        if (meta_step > 0) {
+            for (int i = 0; i < 3; i++) {
+                linear_position_d_W[i] = (double)rand() / RAND_MAX * 10 - (i != 1 ? 5 : 0);
+            }
+            yaw_d = (double)rand() / RAND_MAX * 2 * M_PI;
+        }
+
         #ifdef RENDER
-        printf("\n=== New Target %d ===\nDesired velocity (body): [%.3f, %.3f, %.3f]\n", meta_step, linear_velocity_d_B[0], linear_velocity_d_B[1], linear_velocity_d_B[2]);
+        printf("\n=== New Target %d ===\nDesired:  P: [% 6.3f, % 6.3f, % 6.3f], yaw: % 6.3f\n", meta_step, linear_position_d_W[0], linear_position_d_W[1], linear_position_d_W[2], yaw_d);
         #endif
+        
         #ifdef LOG
         if (meta_step % 100 == 0) printf("Progress: %d/%d steps\n", meta_step, max_steps);
         #endif
 
+        bool position_achieved = false;
+        bool stability_achieved = false;
         double min_time = t_physics + 0.5;
-        bool velocity_achieved = false;
 
-        while (!velocity_achieved || t_physics < min_time) {
+        while (!position_achieved || !stability_achieved || t_physics < min_time) {
             if (VEC3_MAG2(linear_position_W) > 100.0*100.0 || VEC3_MAG2(linear_velocity_W) > 10.0*10.0 || VEC3_MAG2(angular_velocity_B) > 10.0*10.0) {
                 printf("\nSimulation diverged.\n");
                 #ifdef LOG
@@ -71,22 +78,23 @@ int main(int argc, char *argv[]) {
             if (t_control <= t_physics) {
                 update_drone_control();
                 #ifdef LOG
-                fprintf(csv_file, "%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n", linear_velocity_d_B[0], linear_velocity_d_B[1], linear_velocity_d_B[2], angular_velocity_B[0], angular_velocity_B[1], angular_velocity_B[2], linear_acceleration_B[0], linear_acceleration_B[1], linear_acceleration_B[2], omega_next[0], omega_next[1], omega_next[2], omega_next[3]);
+                fprintf(csv_file, "%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n", linear_position_d_W[0], linear_position_d_W[1], linear_position_d_W[2], yaw_d, angular_velocity_B[0], angular_velocity_B[1], angular_velocity_B[2], linear_acceleration_B[0], linear_acceleration_B[1], linear_acceleration_B[2], omega_next[0], omega_next[1], omega_next[2], omega_next[3]);
                 #endif
                 update_rotor_speeds();
                 t_control += DT_CONTROL;
 
-                velocity_achieved = true;
+                position_achieved = true;
+                stability_achieved = true;
                 for (int i = 0; i < 3; i++) {
-                    if (fabs(linear_velocity_B[i] - linear_velocity_d_B[i]) > 0.01 || fabs(angular_velocity_B[i]) > 0.05) {
-                        velocity_achieved = false;
-                        break;
-                    }
+                    if (fabs(linear_position_W[i] - linear_position_d_W[i]) > 0.1)
+                        position_achieved = false;
+                    if (fabs(angular_velocity_B[i]) > 0.05)
+                        stability_achieved = false;
                 }
 
                 #ifdef RENDER
                 if (t_physics >= t_status) {
-                    printf("\rP: [%5.2f, %5.2f, %5.2f] L_V_B: [%5.2f, %5.2f, %5.2f] A_V_B: [%5.2f, %5.2f, %5.2f] R: [%5.2f, %5.2f, %5.2f, %5.2f]", linear_position_W[0], linear_position_W[1], linear_position_W[2], linear_velocity_B[0], linear_velocity_B[1], linear_velocity_B[2], angular_velocity_B[0], angular_velocity_B[1], angular_velocity_B[2], omega[0], omega[1], omega[2], omega[3]);
+                    printf("\rP: [% 6.3f, % 6.3f, % 6.3f] yaw: % 6.3f A_V_B: [% 6.3f, % 6.3f, % 6.3f] R: [% 6.3f, % 6.3f, % 6.3f, % 6.3f]", linear_position_W[0], linear_position_W[1], linear_position_W[2], atan2(R_W_B[2], R_W_B[8]), angular_velocity_B[0], angular_velocity_B[1], angular_velocity_B[2], omega[0], omega[1], omega[2], omega[3]);
                     fflush(stdout);
                     t_status = t_physics + 0.1;
                 }
