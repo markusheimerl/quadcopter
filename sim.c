@@ -12,6 +12,7 @@
 #define DT_CONTROL  (1.0 / 60.0)
 #define DT_RENDER   (1.0 / 30.0)
 #define VEC3_MAG2(v) ((v)[0]*(v)[0] + (v)[1]*(v)[1] + (v)[2]*(v)[2])
+#define WAIT_TIME 1.0
 
 int main(int argc, char *argv[]) {
     time_t t = time(NULL);
@@ -25,7 +26,7 @@ int main(int argc, char *argv[]) {
     ge_GIF *gif = ge_new_gif(filename, WIDTH, HEIGHT, 4, -1, 0);
     transform_mesh(meshes[1], (double[3]){0.0, -0.2, 0.0}, 1.0, (double[9]){1,0,0, 0,1,0, 0,0,1});
     double t_render = 0.0, t_status = 0.0;
-    int max_steps = 2;
+    int max_steps = 4;
     #else
     int max_steps = 1000;
     #endif
@@ -36,7 +37,6 @@ int main(int argc, char *argv[]) {
     sprintf(filename, "%d-%d-%d_%d-%d-%d_control_data.csv", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
     FILE *csv_file = fopen(filename, "w");
     fprintf(csv_file, "pos_d[0],pos_d[1],pos_d[2],yaw_d,ang_vel[0],ang_vel[1],ang_vel[2],acc[0],acc[1],acc[2],omega[0],omega[1],omega[2],omega[3]\n");
-    printf("Starting data collection for %d steps...\n", max_steps);
     #endif
 
     srand(time(NULL));
@@ -44,25 +44,26 @@ int main(int argc, char *argv[]) {
         accel_bias[i] = (2.0 * ((double)rand() / RAND_MAX) - 1.0) * ACCEL_BIAS;
         gyro_bias[i] = (2.0 * ((double)rand() / RAND_MAX) - 1.0) * GYRO_BIAS;
     }
-    double t_physics = 0.0, t_control = 0.0;
+
+    double t_physics = 0.0, t_control = 0.0, wait_start = 0.0;
+    bool is_waiting = true, at_ground = true;
 
     for (int meta_step = 0; meta_step < max_steps; meta_step++) {
+        if (is_waiting && at_ground) {
+            for(int i = 0; i < 3; i++) linear_position_d_W[i] = linear_position_W[i];
+            wait_start = t_physics;
+            #ifdef RENDER
+            printf("\n=== Waiting at ground ===\n");
+            #endif
+        } else {
+            linear_position_d_W[0] = linear_position_d_W[2] = yaw_d = 0.0;
+            linear_position_d_W[1] = at_ground ? 1.0 : 0.0;
+            #ifdef RENDER
+            printf("\n=== Moving to [0.000, %.3f, 0.000] ===\n", linear_position_d_W[1]);
+            #endif
+        }
 
-        linear_position_d_W[0] = 0.0;
-        linear_position_d_W[1] = (meta_step % 2) ? 0.0 : 1.0;
-        linear_position_d_W[2] = 0.0;
-        yaw_d = 0.0;  
-
-        #ifdef RENDER
-        printf("\n=== New Target %d ===\nDesired:  P: [% 6.3f, % 6.3f, % 6.3f], yaw: % 6.3f\n", meta_step, linear_position_d_W[0], linear_position_d_W[1], linear_position_d_W[2], yaw_d);
-        #endif
-        
-        #ifdef LOG
-        if (meta_step % 100 == 0) printf("Progress: %d/%d targets sequentially reached.\n", meta_step, max_steps);
-        #endif
-
-        bool position_achieved = false;
-        bool stability_achieved = false;
+        bool position_achieved = false, stability_achieved = false;
         double min_time = t_physics + 0.5;
 
         while (!position_achieved || !stability_achieved || t_physics < min_time) {
@@ -86,46 +87,36 @@ int main(int argc, char *argv[]) {
                 update_rotor_speeds();
                 t_control += DT_CONTROL;
 
-                position_achieved = true;
-                stability_achieved = true;
+                position_achieved = stability_achieved = true;
                 for (int i = 0; i < 3; i++) {
-                    if (fabs(linear_position_W[i] - linear_position_d_W[i]) > 0.1)
-                        position_achieved = false;
-                    if (fabs(angular_velocity_B[i]) > 0.05)
-                        stability_achieved = false;
+                    if (fabs(linear_position_W[i] - linear_position_d_W[i]) > 0.1) position_achieved = false;
+                    if (fabs(angular_velocity_B[i]) > 0.05) stability_achieved = false;
                 }
+                if (is_waiting && (t_physics - wait_start >= WAIT_TIME)) position_achieved = stability_achieved = true;
 
                 #ifdef RENDER
-                if (t_physics >= t_status) {
-                    printf("\rP: [% 6.3f, % 6.3f, % 6.3f] yaw: % 6.3f A_V_B: [% 6.3f, % 6.3f, % 6.3f] R: [% 6.3f, % 6.3f, % 6.3f, % 6.3f]", linear_position_W[0], linear_position_W[1], linear_position_W[2], atan2(R_W_B[2], R_W_B[8]) < 0 ? atan2(R_W_B[2], R_W_B[8]) + 2 * M_PI : atan2(R_W_B[2], R_W_B[8]), angular_velocity_B[0], angular_velocity_B[1], angular_velocity_B[2], omega[0], omega[1], omega[2], omega[3]);                    fflush(stdout);
-                    t_status = t_physics + 0.1;
-                }
+                if (t_physics >= t_status) { printf("\rP: [% 6.3f, % 6.3f, % 6.3f] yaw: % 6.3f A_V_B: [% 6.3f, % 6.3f, % 6.3f] R: [% 6.3f, % 6.3f, % 6.3f, % 6.3f]", linear_position_W[0], linear_position_W[1], linear_position_W[2], atan2(R_W_B[2], R_W_B[8]) < 0 ? atan2(R_W_B[2], R_W_B[8]) + 2*M_PI : atan2(R_W_B[2], R_W_B[8]), angular_velocity_B[0], angular_velocity_B[1], angular_velocity_B[2], omega[0], omega[1], omega[2], omega[3]); fflush(stdout); t_status = t_physics + 0.1; }
                 #endif
             }
 
             #ifdef RENDER
-            if (t_render <= t_physics) {
-                transform_mesh(meshes[0], linear_position_W, 0.5, R_W_B);
-                memset(frame_buffer, 0, WIDTH * HEIGHT * 3);
-                vertex_shader(meshes, 2, (double[3]){-2.0, 2.0, -2.0}, (double[3]){0.0, 0.0, 0.0});
-                rasterize(frame_buffer, meshes, 2);
-                ge_add_frame(gif, frame_buffer, 6);
-                t_render += DT_RENDER;
-            }
+            if (t_render <= t_physics) { transform_mesh(meshes[0], linear_position_W, 0.5, R_W_B); memset(frame_buffer, 0, WIDTH * HEIGHT * 3); vertex_shader(meshes, 2, (double[3]){-2.0, 2.0, -2.0}, (double[3]){0.0, 0.0, 0.0}); rasterize(frame_buffer, meshes, 2); ge_add_frame(gif, frame_buffer, 6); t_render += DT_RENDER; }
             #endif
         }
-        #ifdef RENDER
-        printf("\nTarget achieved!\n");
-        #endif
+        
+        if (is_waiting) {
+            is_waiting = false;
+        } else {
+            at_ground = !at_ground;
+            is_waiting = at_ground;
+        }
     }
 
     #ifdef LOG
     fclose(csv_file);
-    printf("\nData collection complete. Saved to: %s\n", filename);
     #endif
     #ifdef RENDER
     free(frame_buffer); free_meshes(meshes, 2); ge_close_gif(gif);
     #endif
-    
     return 0;
 }
