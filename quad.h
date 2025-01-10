@@ -90,7 +90,6 @@ void update_drone_physics(double dt) {
     }
     linear_acceleration_W[1] -= G;  // Add gravity
 
-/*
     if ((double)rand() / RAND_MAX < 0.01)  // 1% chance to change target wind
         for(int i = 0; i < 3; i++) if (i != 1) target_wind_W[i] = ((double)rand() / RAND_MAX - 0.5) * 1.0;  // ±0.5N
     
@@ -98,7 +97,7 @@ void update_drone_physics(double dt) {
         wind_force_W[i] = 0.995 * wind_force_W[i] + 0.005 * target_wind_W[i];
         linear_acceleration_W[i] += wind_force_W[i] / M;
     }
-*/
+
     // 6. Calculate angular acceleration
     double I_mat[9];
     vecToDiagMat3f(I, I_mat);
