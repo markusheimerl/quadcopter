@@ -25,7 +25,7 @@ int main(int argc, char *argv[]) {
     ge_GIF *gif = ge_new_gif(filename, WIDTH, HEIGHT, 4, -1, 0);
     transform_mesh(meshes[1], (double[3]){0.0, -0.2, 0.0}, 1.0, (double[9]){1,0,0, 0,1,0, 0,0,1});
     double t_render = 0.0, t_status = 0.0;
-    int max_steps = 1;
+    int max_steps = 2;
     #else
     int max_steps = 1000;
     #endif
@@ -48,8 +48,10 @@ int main(int argc, char *argv[]) {
 
     for (int meta_step = 0; meta_step < max_steps; meta_step++) {
 
-        for (int i = 0; i < 3; i++) linear_position_d_W[i] = (double)rand() / RAND_MAX * 10 - (i != 1 ? 5 : 0);
-        yaw_d = (double)rand() / RAND_MAX * 2 * M_PI;        
+        linear_position_d_W[0] = 0.0;
+        linear_position_d_W[1] = (meta_step % 2) ? 0.0 : 1.0;
+        linear_position_d_W[2] = 0.0;
+        yaw_d = 0.0;  
 
         #ifdef RENDER
         printf("\n=== New Target %d ===\nDesired:  P: [% 6.3f, % 6.3f, % 6.3f], yaw: % 6.3f\n", meta_step, linear_position_d_W[0], linear_position_d_W[1], linear_position_d_W[2], yaw_d);
