@@ -36,7 +36,7 @@ int main(int argc, char *argv[]) {
     #ifdef LOG
     sprintf(filename, "%d-%d-%d_%d-%d-%d_control_data.csv", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
     FILE *csv_file = fopen(filename, "w");
-    fprintf(csv_file, "pos_d[0],pos_d[1],pos_d[2],yaw_d,ang_vel[0],ang_vel[1],ang_vel[2],acc[0],acc[1],acc[2],omega[0],omega[1],omega[2],omega[3]\n");
+    fprintf(csv_file, "pos_d[0],pos_d[1],pos_d[2],yaw_d,ang_vel[0],ang_vel[1],ang_vel[2],acc[0],acc[1],acc[2],omega[0],omega[1],omega[2],omega[3],reward\n");
     #endif
 
     srand(time(NULL));
@@ -81,15 +81,20 @@ int main(int argc, char *argv[]) {
             
             if (t_control <= t_physics) {
                 update_drone_control();
+
                 #ifdef LOG
-                fprintf(csv_file, "%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n", linear_position_d_W[0], linear_position_d_W[1], linear_position_d_W[2], yaw_d, angular_velocity_B_s[0], angular_velocity_B_s[1], angular_velocity_B_s[2], linear_acceleration_B_s[0], linear_acceleration_B_s[1], linear_acceleration_B_s[2], omega_next[0], omega_next[1], omega_next[2], omega_next[3]);
+                double pos_error = sqrt(pow(linear_position_W[0], 2) + pow(linear_position_W[1] - 1.0, 2) + pow(linear_position_W[2], 2));
+                double ang_vel_error = sqrt(VEC3_MAG2(angular_velocity_B));
+                double reward = exp(-(pos_error * 2.0 + ang_vel_error * 0.5));
+                fprintf(csv_file, "%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n", linear_position_d_W[0], linear_position_d_W[1], linear_position_d_W[2], yaw_d, angular_velocity_B_s[0], angular_velocity_B_s[1], angular_velocity_B_s[2], linear_acceleration_B_s[0], linear_acceleration_B_s[1], linear_acceleration_B_s[2], omega_next[0], omega_next[1], omega_next[2], omega_next[3], reward);
                 #endif
+                
                 update_rotor_speeds();
                 t_control += DT_CONTROL;
 
                 position_achieved = stability_achieved = true;
                 for (int i = 0; i < 3; i++) {
-                    if (fabs(linear_position_W[i] - linear_position_d_W[i]) > 0.1) position_achieved = false;
+                    if (fabs(linear_position_W[i] - linear_position_d_W[i]) > 0.05) position_achieved = false;
                     if (fabs(angular_velocity_B[i]) > 0.05) stability_achieved = false;
                 }
                 if (is_waiting && (t_physics - wait_start >= WAIT_TIME)) position_achieved = stability_achieved = true;
@@ -104,12 +109,8 @@ int main(int argc, char *argv[]) {
             #endif
         }
         
-        if (is_waiting) {
-            is_waiting = false;
-        } else {
-            at_ground = !at_ground;
-            is_waiting = at_ground;
-        }
+        if (is_waiting) is_waiting = false;
+        else { at_ground = !at_ground; is_waiting = at_ground; }
     }
 
     #ifdef LOG
