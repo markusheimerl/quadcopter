@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <stdbool.h>
 #include <time.h>
 #ifdef RENDER
@@ -37,8 +38,6 @@ int main(int argc, char *argv[]) {
     sprintf(filename, "%d-%d-%d_%d-%d-%d_control_data.csv", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
     FILE *csv_file = fopen(filename, "w");
     fprintf(csv_file, "pos_d[0],pos_d[1],pos_d[2],yaw_d,ang_vel[0],ang_vel[1],ang_vel[2],acc[0],acc[1],acc[2],omega[0],omega[1],omega[2],omega[3],reward,cumulative_reward\n");
-    int data_size = 0;
-    double *rewards = malloc(max_steps * 1000 * sizeof(double)), *cumulative_rewards = malloc(max_steps * 1000 * sizeof(double));
     #endif
 
     srand(time(NULL));
@@ -72,7 +71,8 @@ int main(int argc, char *argv[]) {
             if (VEC3_MAG2(linear_position_W) > 100.0*100.0 || VEC3_MAG2(linear_velocity_W) > 10.0*10.0 || VEC3_MAG2(angular_velocity_B) > 10.0*10.0) {
                 printf("\nSimulation diverged.\n");
                 #ifdef LOG
-                free(rewards); free(cumulative_rewards); fclose(csv_file); remove(filename);
+                fclose(csv_file); 
+                remove(filename);
                 #endif
                 return 1;
             }
@@ -85,10 +85,8 @@ int main(int argc, char *argv[]) {
 
                 #ifdef LOG
                 double pos_error = sqrt(pow(linear_position_W[0], 2) + pow(linear_position_W[1] - 1.0, 2) + pow(linear_position_W[2], 2));
-                rewards[data_size] = exp(-(pos_error * 2.0 + sqrt(VEC3_MAG2(angular_velocity_B)) * 0.5));
-                cumulative_rewards[data_size] = (data_size > 0 ? cumulative_rewards[data_size-1] : 0.0) + rewards[data_size];
-                fprintf(csv_file, "%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n", linear_position_d_W[0], linear_position_d_W[1], linear_position_d_W[2], yaw_d, angular_velocity_B_s[0], angular_velocity_B_s[1], angular_velocity_B_s[2], linear_acceleration_B_s[0], linear_acceleration_B_s[1], linear_acceleration_B_s[2], omega_next[0], omega_next[1], omega_next[2], omega_next[3], rewards[data_size], cumulative_rewards[data_size]);
-                data_size++;
+                double reward = exp(-(pos_error * 2.0 + sqrt(VEC3_MAG2(angular_velocity_B)) * 0.5));
+                fprintf(csv_file, "%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n", linear_position_d_W[0], linear_position_d_W[1], linear_position_d_W[2], yaw_d, angular_velocity_B_s[0], angular_velocity_B_s[1], angular_velocity_B_s[2], linear_acceleration_B_s[0], linear_acceleration_B_s[1], linear_acceleration_B_s[2], omega_next[0], omega_next[1], omega_next[2], omega_next[3], reward, 0.0);
                 #endif
                 
                 update_rotor_speeds();
@@ -99,10 +97,15 @@ int main(int argc, char *argv[]) {
                     if (fabs(linear_position_W[i] - linear_position_d_W[i]) > 0.05) position_achieved = false;
                     if (fabs(angular_velocity_B[i]) > 0.05) stability_achieved = false;
                 }
-                if (is_waiting && (t_physics - wait_start >= WAIT_TIME)) position_achieved = stability_achieved = true;
+                if (is_waiting && (t_physics - wait_start >= WAIT_TIME)) 
+                    position_achieved = stability_achieved = true;
 
                 #ifdef RENDER
-                if (t_physics >= t_status) { printf("\rP: [% 6.3f, % 6.3f, % 6.3f] yaw: % 6.3f A_V_B: [% 6.3f, % 6.3f, % 6.3f] R: [% 6.3f, % 6.3f, % 6.3f, % 6.3f]", linear_position_W[0], linear_position_W[1], linear_position_W[2], atan2(R_W_B[2], R_W_B[8]) < 0 ? atan2(R_W_B[2], R_W_B[8]) + 2*M_PI : atan2(R_W_B[2], R_W_B[8]), angular_velocity_B[0], angular_velocity_B[1], angular_velocity_B[2], omega[0], omega[1], omega[2], omega[3]); fflush(stdout); t_status = t_physics + 0.1; }
+                if (t_physics >= t_status) {
+                    printf("\rP: [% 6.3f, % 6.3f, % 6.3f] yaw: % 6.3f A_V_B: [% 6.3f, % 6.3f, % 6.3f] R: [% 6.3f, % 6.3f, % 6.3f, % 6.3f]", linear_position_W[0], linear_position_W[1], linear_position_W[2], atan2(R_W_B[2], R_W_B[8]) < 0 ? atan2(R_W_B[2], R_W_B[8]) + 2*M_PI : atan2(R_W_B[2], R_W_B[8]), angular_velocity_B[0], angular_velocity_B[1], angular_velocity_B[2], omega[0], omega[1], omega[2], omega[3]); 
+                    fflush(stdout);
+                    t_status = t_physics + 0.1;
+                }
                 #endif
             }
 
@@ -113,7 +116,8 @@ int main(int argc, char *argv[]) {
                 vertex_shader(meshes, 2, (double[3]){-2.0, 2.0, -2.0}, (double[3]){0.0, 0.0, 0.0});
                 rasterize(frame_buffer, meshes, 2);
                 ge_add_frame(gif, frame_buffer, 6);
-                t_render += DT_RENDER; }
+                t_render += DT_RENDER;
+            }
             #endif
         }
         
@@ -122,8 +126,44 @@ int main(int argc, char *argv[]) {
     }
 
     #ifdef LOG
-    free(rewards); free(cumulative_rewards); fclose(csv_file);
+    fclose(csv_file);
+    
+    FILE *input = fopen(filename, "r");
+    char temp_filename[100];
+    sprintf(temp_filename, "%s.tmp", filename);
+    FILE *output = fopen(temp_filename, "w");
+    
+    char line[1024], header[1024];
+    fgets(header, sizeof(header), input);
+    fprintf(output, "%s", header);
+
+    int line_count = 0;
+    double *rewards = NULL;
+    while (fgets(line, sizeof(line), input)) {
+        rewards = realloc(rewards, (line_count + 1) * sizeof(double));
+        char *token = strtok(line, ",");
+        for (int i = 0; i < 14; i++) token = strtok(NULL, ",");
+        rewards[line_count++] = atof(token);
+    }
+
+    rewind(input);
+    fgets(line, sizeof(line), input);
+
+    int current_line = 0;
+    while (fgets(line, sizeof(line), input)) {
+        double cumulative = 0.0;
+        for (int i = current_line; i < line_count; i++) cumulative += rewards[i];
+        
+        line[strlen(line)-1] = '\0';
+        char *last_comma = strrchr(line, ',');
+        *last_comma = '\0';
+        fprintf(output, "%s,%f\n", line, cumulative);
+        current_line++;
+    }
+
+    free(rewards); fclose(input); fclose(output); remove(filename); rename(temp_filename, filename);
     #endif
+
     #ifdef RENDER
     free(frame_buffer); free_meshes(meshes, 2); ge_close_gif(gif);
     #endif
