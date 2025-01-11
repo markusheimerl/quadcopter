@@ -57,7 +57,7 @@ int main(int argc, char *argv[]) {
             #endif
         } else {
             linear_position_d_W[0] = linear_position_d_W[2] = yaw_d = 0.0;
-            linear_position_d_W[1] = 1.0;//at_ground ? 1.0 : 0.0;
+            linear_position_d_W[1] = at_ground ? 1.0 : 0.0;
             #ifdef RENDER
             printf("\n=== Moving to [0.000, %.3f, 0.000] ===\n", linear_position_d_W[1]);
             #endif
