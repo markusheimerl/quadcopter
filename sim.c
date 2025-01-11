@@ -14,6 +14,7 @@
 #define DT_RENDER   (1.0 / 30.0)
 #define VEC3_MAG2(v) ((v)[0]*(v)[0] + (v)[1]*(v)[1] + (v)[2]*(v)[2])
 #define WAIT_TIME 1.0
+#define GAMMA 0.99  // Discount factor for rewards
 
 int main(int argc, char *argv[]) {
     time_t t = time(NULL);
@@ -35,9 +36,9 @@ int main(int argc, char *argv[]) {
     if (argc > 1) max_steps = strtol(argv[1], NULL, 10);
     
     #ifdef LOG
-    sprintf(filename, "%d-%d-%d_%d-%d-%d_control_data.csv", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
+    sprintf(filename, "%d-%d-%d_%d-%d-%d_state_data.csv", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
     FILE *csv_file = fopen(filename, "w");
-    fprintf(csv_file, "pos_d[0],pos_d[1],pos_d[2],yaw_d,ang_vel[0],ang_vel[1],ang_vel[2],acc[0],acc[1],acc[2],omega[0],omega[1],omega[2],omega[3],reward,cumulative_reward\n");
+    fprintf(csv_file, "pos[0],pos[1],pos[2],vel[0],vel[1],vel[2],ang_vel[0],ang_vel[1],ang_vel[2],R[0],R[1],R[2],R[3],R[4],R[5],R[6],R[7],R[8],omega[0],omega[1],omega[2],omega[3],reward,discounted_return\n");
     #endif
 
     srand(time(NULL));
@@ -71,8 +72,7 @@ int main(int argc, char *argv[]) {
             if (VEC3_MAG2(linear_position_W) > 100.0*100.0 || VEC3_MAG2(linear_velocity_W) > 10.0*10.0 || VEC3_MAG2(angular_velocity_B) > 10.0*10.0) {
                 printf("\nSimulation diverged.\n");
                 #ifdef LOG
-                fclose(csv_file); 
-                remove(filename);
+                fclose(csv_file); remove(filename);
                 #endif
                 return 1;
             }
@@ -86,7 +86,7 @@ int main(int argc, char *argv[]) {
                 #ifdef LOG
                 double pos_error = sqrt(pow(linear_position_W[0], 2) + pow(linear_position_W[1] - 1.0, 2) + pow(linear_position_W[2], 2));
                 double reward = exp(-(pos_error * 2.0 + sqrt(VEC3_MAG2(angular_velocity_B)) * 0.5));
-                fprintf(csv_file, "%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n", linear_position_d_W[0], linear_position_d_W[1], linear_position_d_W[2], yaw_d, angular_velocity_B_s[0], angular_velocity_B_s[1], angular_velocity_B_s[2], linear_acceleration_B_s[0], linear_acceleration_B_s[1], linear_acceleration_B_s[2], omega_next[0], omega_next[1], omega_next[2], omega_next[3], reward, 0.0);
+                fprintf(csv_file, "%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n", linear_position_W[0], linear_position_W[1], linear_position_W[2], linear_velocity_W[0], linear_velocity_W[1], linear_velocity_W[2], angular_velocity_B[0], angular_velocity_B[1], angular_velocity_B[2], R_W_B[0], R_W_B[1], R_W_B[2], R_W_B[3], R_W_B[4], R_W_B[5], R_W_B[6], R_W_B[7], R_W_B[8], omega[0], omega[1], omega[2], omega[3], reward, 0.0);
                 #endif
                 
                 update_rotor_speeds();
@@ -97,8 +97,7 @@ int main(int argc, char *argv[]) {
                     if (fabs(linear_position_W[i] - linear_position_d_W[i]) > 0.05) position_achieved = false;
                     if (fabs(angular_velocity_B[i]) > 0.05) stability_achieved = false;
                 }
-                if (is_waiting && (t_physics - wait_start >= WAIT_TIME)) 
-                    position_achieved = stability_achieved = true;
+                if (is_waiting && (t_physics - wait_start >= WAIT_TIME)) position_achieved = stability_achieved = true;
 
                 #ifdef RENDER
                 if (t_physics >= t_status) {
@@ -127,7 +126,6 @@ int main(int argc, char *argv[]) {
 
     #ifdef LOG
     fclose(csv_file);
-    
     FILE *input = fopen(filename, "r");
     char temp_filename[100];
     sprintf(temp_filename, "%s.tmp", filename);
@@ -142,7 +140,7 @@ int main(int argc, char *argv[]) {
     while (fgets(line, sizeof(line), input)) {
         rewards = realloc(rewards, (line_count + 1) * sizeof(double));
         char *token = strtok(line, ",");
-        for (int i = 0; i < 14; i++) token = strtok(NULL, ",");
+        for (int i = 0; i < 22; i++) token = strtok(NULL, ",");
         rewards[line_count++] = atof(token);
     }
 
@@ -151,13 +149,17 @@ int main(int argc, char *argv[]) {
 
     int current_line = 0;
     while (fgets(line, sizeof(line), input)) {
-        double cumulative = 0.0;
-        for (int i = current_line; i < line_count; i++) cumulative += rewards[i];
+        double discounted_return = 0.0;
+        double discount = 1.0;
+        for (int i = current_line; i < line_count; i++) {
+            discounted_return += discount * rewards[i];
+            discount *= GAMMA;
+        }
         
         line[strlen(line)-1] = '\0';
         char *last_comma = strrchr(line, ',');
         *last_comma = '\0';
-        fprintf(output, "%s,%f\n", line, cumulative);
+        fprintf(output, "%s,%f\n", line, discounted_return);
         current_line++;
     }
 

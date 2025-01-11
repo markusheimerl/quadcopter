@@ -25,9 +25,9 @@ double target_wind_W[3] = {0.0, 0.0, 0.0};
 
 // State variables
 double omega[4] = {0.0, 0.0, 0.0, 0.0};
-double angular_velocity_B[3] = {0.0, 0.0, 0.0};
-double linear_velocity_W[3] = {0.0, 0.0, 0.0};
 double linear_position_W[3] = {0.0, 0.0, 0.0};
+double linear_velocity_W[3] = {0.0, 0.0, 0.0};
+double angular_velocity_B[3] = {0.0, 0.0, 0.0};
 double R_W_B[9] = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0};
 double I[3] = {0.01, 0.02, 0.01};
 

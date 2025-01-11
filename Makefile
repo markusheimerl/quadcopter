@@ -27,4 +27,4 @@ run: $(TARGET)
 
 # Clean up
 clean:
-	rm -f $(TARGET) *_control_data.csv *_simulation.gif
+	rm -f $(TARGET) *_state_data.csv *_simulation.gif
