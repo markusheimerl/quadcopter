@@ -10,7 +10,7 @@
 #define DT_RENDER   (1.0 / 30.0)
 #define NUM_TARGETS 3
 #define TARGET_RADIUS 2.0
-#define MIN_HEIGHT 1.0
+#define MIN_HEIGHT 0.1
 #define MAX_YAW (2.0 * M_PI)
 #define MAX_SIMULATION_TIME 10.0  // Maximum time per target in seconds
 #define MAX_TOTAL_TIME 30.0      // Maximum total simulation time in seconds
