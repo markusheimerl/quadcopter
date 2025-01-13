@@ -44,7 +44,6 @@ void free_sim(Sim* sim){
         free_meshes(sim->meshes, 2);
         free(sim->frame_buffer);
         ge_close_gif(sim->gif);
-        free(sim->gif);
     }
     free(sim->quad);
     free(sim);

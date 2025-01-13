@@ -54,15 +54,15 @@ Quad* init_quad(double x, double y, double z) {
 }
 
 void reset_quad(Quad* q, double x, double y, double z) {
-    memcpy(q->omega, (double[]){0.0, 0.0, 0.0, 0.0}, 4);
-    memcpy(q->linear_position_W, (double[]){x, y, z}, 3);
-    memcpy(q->linear_velocity_W, (double[]){0.0, 0.0, 0.0}, 3);
-    memcpy(q->angular_velocity_B, (double[]){0.0, 0.0, 0.0}, 3);
-    memcpy(q->R_W_B, (double[]){1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0}, 9);
-    memcpy(q->I, (double[]){0.01, 0.02, 0.01}, 3);
-    memcpy(q->omega_next, (double[]){0.0, 0.0, 0.0, 0.0}, 4);
-    memcpy(q->linear_acceleration_B_s, (double[]){0.0, 0.0, 0.0}, 3);
-    memcpy(q->angular_velocity_B_s, (double[]){0.0, 0.0, 0.0}, 3);
+    memcpy(q->omega, (double[]){0.0, 0.0, 0.0, 0.0}, 4 * sizeof(double));
+    memcpy(q->linear_position_W, (double[]){x, y, z}, 3 * sizeof(double));
+    memcpy(q->linear_velocity_W, (double[]){0.0, 0.0, 0.0}, 3 * sizeof(double));
+    memcpy(q->angular_velocity_B, (double[]){0.0, 0.0, 0.0}, 3 * sizeof(double));
+    memcpy(q->R_W_B, (double[]){1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0}, 9 * sizeof(double));
+    memcpy(q->I, (double[]){0.01, 0.02, 0.01}, 3 * sizeof(double));
+    memcpy(q->omega_next, (double[]){0.0, 0.0, 0.0, 0.0}, 4 * sizeof(double));
+    memcpy(q->linear_acceleration_B_s, (double[]){0.0, 0.0, 0.0}, 3 * sizeof(double));
+    memcpy(q->angular_velocity_B_s, (double[]){0.0, 0.0, 0.0}, 3 * sizeof(double));
     for(int i = 0; i < 3; i++) {
         q->accel_bias[i] = (2.0*((double)rand()/RAND_MAX) - 1.0) * ACCEL_BIAS;
         q->gyro_bias[i] = (2.0*((double)rand()/RAND_MAX) - 1.0) * GYRO_BIAS;
@@ -70,8 +70,7 @@ void reset_quad(Quad* q, double x, double y, double z) {
 }
 
 void print_quad(Quad* q) {
-    printf("P: %.2f %.2f %.2f | ", q->linear_position_W[0], q->linear_position_W[1], q->linear_position_W[2]);
-    printf("R: %.2f %.2f %.2f %.2f\n", q->omega[0], q->omega[1], q->omega[2], q->omega[3]);
+    printf("\rP: %.2f %.2f %.2f | R: %.2f %.2f %.2f %.2f", q->linear_position_W[0], q->linear_position_W[1], q->linear_position_W[2], q->omega[0], q->omega[1], q->omega[2], q->omega[3]);
 }
 
 static double gaussian_noise(double stddev) {
