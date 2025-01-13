@@ -23,58 +23,10 @@ void vecToDiagMat3f(const double* v, double* result) {
     result[8] = v[2];
 }
 
-void invMat3f(const double* m, double* result) {
-    double det = m[0]*(m[4]*m[8] - m[7]*m[5]) - 
-                m[1]*(m[3]*m[8] - m[5]*m[6]) + 
-                m[2]*(m[3]*m[7] - m[4]*m[6]);
-    
-    if (det == 0.0f) {
-        // Handle error case
-        return;
-    }
-    
-    double invDet = 1.0f/det;
-    result[0] = invDet*(m[4]*m[8] - m[7]*m[5]);
-    result[1] = invDet*(m[2]*m[7] - m[1]*m[8]);
-    result[2] = invDet*(m[1]*m[5] - m[2]*m[4]);
-    result[3] = invDet*(m[5]*m[6] - m[3]*m[8]);
-    result[4] = invDet*(m[0]*m[8] - m[2]*m[6]);
-    result[5] = invDet*(m[3]*m[2] - m[0]*m[5]);
-    result[6] = invDet*(m[3]*m[7] - m[6]*m[4]);
-    result[7] = invDet*(m[6]*m[1] - m[0]*m[7]);
-    result[8] = invDet*(m[0]*m[4] - m[3]*m[1]);
-}
-
 void transpMat3f(const double* m, double* result) {
     result[0] = m[0]; result[1] = m[3]; result[2] = m[6];
     result[3] = m[1]; result[4] = m[4]; result[5] = m[7];
     result[6] = m[2]; result[7] = m[5]; result[8] = m[8];
-}
-
-void identMat3f(double* result) {
-    for(int i = 0; i < 9; i++) result[i] = 0;
-    result[0] = result[4] = result[8] = 1.0;
-}
-
-void rotMat3f(char axis, double rads, double* result) {
-    double s = sinf(rads), c = cosf(rads);
-    switch(axis) {
-        case 'x':
-            result[0]=1; result[1]=0; result[2]=0;
-            result[3]=0; result[4]=c; result[5]=-s;
-            result[6]=0; result[7]=s; result[8]=c;
-            break;
-        case 'y':
-            result[0]=c; result[1]=0; result[2]=s;
-            result[3]=0; result[4]=1; result[5]=0;
-            result[6]=-s; result[7]=0; result[8]=c;
-            break;
-        case 'z':
-            result[0]=c; result[1]=-s; result[2]=0;
-            result[3]=s; result[4]=c; result[5]=0;
-            result[6]=0; result[7]=0; result[8]=1;
-            break;
-    }
 }
 
 void so3hat(const double* v, double* result) {
@@ -100,14 +52,6 @@ void subMat3f(const double* a, const double* b, double* result) {
 
 void multScalMat3f(double s, const double* m, double* result) {
     for(int i = 0; i < 9; i++) result[i] = s * m[i];
-}
-
-// 4x4 Matrix Operations
-void multMat4f(const double* a, const double* b, double* result) {
-    for(int i = 0; i < 4; i++)
-        for(int j = 0; j < 4; j++)
-            result[i*4 + j] = a[i*4]*b[j] + a[i*4+1]*b[j+4] + 
-                             a[i*4+2]*b[j+8] + a[i*4+3]*b[j+12];
 }
 
 // Vector Operations
@@ -188,19 +132,6 @@ void multMatVec4f(const double* m, const double* v, double* result) {
     result[1] = m[4]*v[0] + m[5]*v[1] + m[6]*v[2] + m[7]*v[3];
     result[2] = m[8]*v[0] + m[9]*v[1] + m[10]*v[2] + m[11]*v[3];
     result[3] = m[12]*v[0] + m[13]*v[1] + m[14]*v[2] + m[15]*v[3];
-}
-
-// Helper functions for rotation matrices
-void xRotMat3f(double rads, double* result) {
-    rotMat3f('x', rads, result);
-}
-
-void yRotMat3f(double rads, double* result) {
-    rotMat3f('y', rads, result);
-}
-
-void zRotMat3f(double rads, double* result) {
-    rotMat3f('z', rads, result);
 }
 
 void orthonormalize_rotation_matrix(double* R) {
