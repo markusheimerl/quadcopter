@@ -18,6 +18,11 @@
 #define ACCEL_BIAS 0.05
 #define GYRO_BIAS 0.005
 
+#define K_P 0.2
+#define K_V 0.6
+#define K_R 0.6
+#define K_W 0.6
+
 typedef struct {
     // State variables
     double omega[4];
@@ -168,7 +173,7 @@ void update_quad(Quad* q, double dt){
 
     // 11. Update rotor speeds
     for(int i = 0; i < 4; i++) {
-        q->omega_next[i] = fmax(OMEGA_MIN, fmin(OMEGA_MAX, q->omega_next[i]));
+        q->omega[i] = fmax(OMEGA_MIN, fmin(OMEGA_MAX, q->omega_next[i]));
     }
 }
 
@@ -180,8 +185,8 @@ void control_quad(Quad* q, double* control_input) {
 
     // 2. Calculate desired force vector in world frame
     double z_W_d[3], temp[3];
-    multScalVec3f(-0.1, error_p, z_W_d);
-    multScalVec3f(-0.1, error_v, temp);
+    multScalVec3f(-K_P, error_p, z_W_d);
+    multScalVec3f(-K_V, error_v, temp);
     addVec3f(z_W_d, temp, z_W_d);
     
     // Add gravity compensation and desired acceleration
@@ -236,8 +241,8 @@ void control_quad(Quad* q, double* control_input) {
 
     // 7. Calculate control torque
     double tau_B_control[3], temp_vec2[3];
-    multScalVec3f(-0.1, error_r, tau_B_control);
-    multScalVec3f(-0.1, error_w, temp_vec2);
+    multScalVec3f(-K_R, error_r, tau_B_control);
+    multScalVec3f(-K_W, error_w, temp_vec2);
     addVec3f(tau_B_control, temp_vec2, tau_B_control);
 
     // Add angular momentum terms

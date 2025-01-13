@@ -11,11 +11,8 @@ $(TARGET): $(SRC)
 render: $(SRC)
 	$(CC) $(CFLAGS) -DRENDER $(SRC) $(LDFLAGS) -o $(TARGET)
 
-log: $(SRC)
-	$(CC) $(CFLAGS) -DLOG $(SRC) $(LDFLAGS) -o $(TARGET)
-
 run: render
 	./$(TARGET)
 
 clean:
-	rm -f $(TARGET) *_state_data.csv *_simulation.gif
+	rm -f $(TARGET) *.gif

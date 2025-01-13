@@ -18,8 +18,8 @@ Sim* init_sim(bool render){
     Sim* sim = malloc(sizeof(Sim));
     if(render){
         sim->meshes = malloc(2 * sizeof(Mesh*));
-        sim->meshes[0] = create_mesh("sim/rasterizer/drone.obj", "sim/rasterizer/drone.bmp");
-        sim->meshes[1] = create_mesh("sim/rasterizer/ground.obj", "sim/rasterizer/ground.bmp");
+        sim->meshes[0] = create_mesh("rasterizer/drone.obj", "rasterizer/drone.bmp");
+        sim->meshes[1] = create_mesh("rasterizer/ground.obj", "rasterizer/ground.bmp");
         sim->frame_buffer = calloc(WIDTH * HEIGHT * 3, sizeof(uint8_t));
         char filename[100];
         strftime(filename, 100, "%Y-%m-%d_%H-%M-%S_flight.gif", localtime(&(time_t){time(NULL)}));
