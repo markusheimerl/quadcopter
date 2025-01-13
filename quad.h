@@ -192,7 +192,7 @@ void control_quad(Quad* q, double* control_input) {
     control_input[0] = dotVec3f(z_W_d, z_W_B);
 
     // 4. Calculate desired rotation matrix
-    double x_tilde_d_W[3] = {sin(0.0), control_input[6], cos(0.0)};
+    double x_tilde_d_W[3] = {sin(control_input[6]), 0.0, cos(control_input[6])};
     double temp_cross1[3], temp_cross2[3];
     double R_W_d_column_0[3], R_W_d_column_1[3], R_W_d_column_2[3];
     

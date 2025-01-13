@@ -17,18 +17,16 @@ int main() {
     int current_target = 0;
     double control_input[7] = {0};
     
-    // Generate targets in camera's field of view
     double targets[NUM_TARGETS][3];
     double yaw_targets[NUM_TARGETS];
     srand(time(NULL));
     
     for(int i = 0; i < NUM_TARGETS; i++) {
-        targets[i][0] = ((double)rand()/RAND_MAX) * 2.0 - 1.0;    // -1 to 1
-        targets[i][1] = ((double)rand()/RAND_MAX) * 1.5;          // 0 to 1.5
-        targets[i][2] = ((double)rand()/RAND_MAX) * 2.0 - 1.0;    // -1 to 1
+        targets[i][0] = ((double)rand()/RAND_MAX) * 2.0 - 1.0; 
+        targets[i][1] = ((double)rand()/RAND_MAX) * 1.5;
+        targets[i][2] = ((double)rand()/RAND_MAX) * 2.0 - 1.0;
         yaw_targets[i] = ((double)rand()/RAND_MAX) * 2.0 * M_PI;
-        printf("Target %d: [%.2f, %.2f, %.2f], yaw: %.2f\n", 
-               i, targets[i][0], targets[i][1], targets[i][2], yaw_targets[i]);
+        printf("Target %d: [%.2f, %.2f, %.2f], yaw: %.2f\n", i, targets[i][0], targets[i][1], targets[i][2], yaw_targets[i]);
     }
     
     while(current_target < NUM_TARGETS && t_physics < MAX_TIME) {
@@ -43,11 +41,7 @@ int main() {
             
             // Print progress every second
             if(fmod(t_physics, 1.0) < DT_CONTROL) {
-                printf("\rTime: %.1fs, Target: %d/3, Pos: [%.2f, %.2f, %.2f]",
-                    t_physics, current_target + 1,
-                    sim->quad->linear_position_W[0],
-                    sim->quad->linear_position_W[1],
-                    sim->quad->linear_position_W[2]);
+                print_quad(sim->quad);
                 fflush(stdout);
             }
             
