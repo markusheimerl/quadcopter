@@ -37,15 +37,15 @@ typedef struct {
 
 Quad* init_quad(double x, double y, double z) {
     Quad* quad = malloc(sizeof(Quad));
-    memcpy(quad->omega, (double[]){0.0, 0.0, 0.0, 0.0}, 4);
-    memcpy(quad->linear_position_W, (double[]){x, y, z}, 3);
-    memcpy(quad->linear_velocity_W, (double[]){0.0, 0.0, 0.0}, 3);
-    memcpy(quad->angular_velocity_B, (double[]){0.0, 0.0, 0.0}, 3);
-    memcpy(quad->R_W_B, (double[]){1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0}, 9);
-    memcpy(quad->I, (double[]){0.01, 0.02, 0.01}, 3);
-    memcpy(quad->omega_next, (double[]){0.0, 0.0, 0.0, 0.0}, 4);
-    memcpy(quad->linear_acceleration_B_s, (double[]){0.0, 0.0, 0.0}, 3);
-    memcpy(quad->angular_velocity_B_s, (double[]){0.0, 0.0, 0.0}, 3);
+    memcpy(quad->omega, (double[]){0.0, 0.0, 0.0, 0.0}, 4 * sizeof(double));
+    memcpy(quad->linear_position_W, (double[]){x, y, z}, 3 * sizeof(double));
+    memcpy(quad->linear_velocity_W, (double[]){0.0, 0.0, 0.0}, 3 * sizeof(double));
+    memcpy(quad->angular_velocity_B, (double[]){0.0, 0.0, 0.0}, 3 * sizeof(double));
+    memcpy(quad->R_W_B, (double[]){1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0}, 9 * sizeof(double));
+    memcpy(quad->I, (double[]){0.01, 0.02, 0.01}, 3 * sizeof(double));
+    memcpy(quad->omega_next, (double[]){0.0, 0.0, 0.0, 0.0}, 4 * sizeof(double));
+    memcpy(quad->linear_acceleration_B_s, (double[]){0.0, 0.0, 0.0}, 3 * sizeof(double));
+    memcpy(quad->angular_velocity_B_s, (double[]){0.0, 0.0, 0.0}, 3 * sizeof(double));
     for(int i = 0; i < 3; i++) {
         quad->accel_bias[i] = (2.0*((double)rand()/RAND_MAX) - 1.0) * ACCEL_BIAS;
         quad->gyro_bias[i] = (2.0*((double)rand()/RAND_MAX) - 1.0) * GYRO_BIAS;
