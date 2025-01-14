@@ -8,8 +8,8 @@
 #define K_M 0.00004905
 #define L 0.25
 #define L_SQRT2 (L / sqrtf(2.0))
-#define G 9.81
-#define M 0.5
+#define GRAVITY 9.81
+#define MASS 0.5
 #define OMEGA_MIN 30.0
 #define OMEGA_MAX 70.0
 
@@ -101,9 +101,9 @@ void update_quad(Quad* q, double dt){
     
     double linear_acceleration_W[3];
     for(int i = 0; i < 3; i++) {
-        linear_acceleration_W[i] = f_thrust_W[i] / M;
+        linear_acceleration_W[i] = f_thrust_W[i] / MASS;
     }
-    linear_acceleration_W[1] -= G;  // Add gravity
+    linear_acceleration_W[1] -= GRAVITY;  // Add gravity
 
     // 6. Calculate angular acceleration
     double I_mat[9];
@@ -152,7 +152,7 @@ void update_quad(Quad* q, double dt){
     transpMat3f(q->R_W_B, R_B_W);
     multMatVec3f(R_B_W, linear_acceleration_W, linear_acceleration_B);
     double gravity_B[3];
-    multMatVec3f(R_B_W, (double[3]){0, G, 0}, gravity_B);
+    multMatVec3f(R_B_W, (double[3]){0, GRAVITY, 0}, gravity_B);
     subVec3f(linear_acceleration_B, gravity_B, linear_acceleration_B);
     for(int i = 0; i < 3; i++) {
         q->linear_acceleration_B_s[i] = linear_acceleration_B[i] + gaussian_noise(ACCEL_NOISE_STDDEV) + q->accel_bias[i];
@@ -178,11 +178,11 @@ void control_quad(Quad* q, double* control_input) {
     addVec3f(z_W_d, temp, z_W_d);
     
     // Add gravity compensation and desired acceleration
-    double gravity_term[3] = {0, M * G, 0};
+    double gravity_term[3] = {0, MASS * GRAVITY, 0};
     addVec3f(z_W_d, gravity_term, z_W_d);
     
     double accel_term[3];
-    multScalVec3f(M, (double[]){0.0, 0.0, 0.0}, accel_term);
+    multScalVec3f(MASS, (double[]){0.0, 0.0, 0.0}, accel_term);
     addVec3f(z_W_d, accel_term, z_W_d);
 
     // 3. Calculate thrust magnitude

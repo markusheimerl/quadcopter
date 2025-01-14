@@ -2,6 +2,7 @@
 #define SIM_H
 
 #include <stdbool.h>
+#include <time.h>
 #include "rasterizer.h"
 #include "gif.h"
 #include "quad.h"
