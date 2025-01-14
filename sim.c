@@ -26,7 +26,7 @@ int main() {
         targets[i][1] = ((double)rand()/RAND_MAX) * 1.5;
         targets[i][2] = ((double)rand()/RAND_MAX) * 2.0 - 1.0;
         yaw_targets[i] = ((double)rand()/RAND_MAX) * 2.0 * M_PI;
-        printf("Target %d: [%.2f, %.2f, %.2f], yaw: %.2f\n", i, targets[i][0], targets[i][1], targets[i][2], yaw_targets[i]);
+        printf("Target %d: [%.2f, %.2f, %.2f], yaw: %.2f\n", i + 1, targets[i][0], targets[i][1], targets[i][2], yaw_targets[i]);
     }
     
     while(current_target < NUM_TARGETS && t_physics < MAX_TIME) {
@@ -39,8 +39,8 @@ int main() {
             control_quad(sim->quad, control_input);
             t_control += DT_CONTROL;
             
-            // Print progress every second
-            if(fmod(t_physics, 1.0) < DT_CONTROL) {
+            // Print progress
+            if(fmod(t_physics, 0.01) < DT_CONTROL) {
                 print_quad(sim->quad);
                 fflush(stdout);
             }
