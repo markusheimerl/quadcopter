@@ -15,16 +15,24 @@ typedef struct {
     bool render;
 } Sim;
 
-Sim* init_sim(bool render){
+Sim* init_sim(const char* prefix, bool render){
     Sim* sim = malloc(sizeof(Sim));
     if(render){
+        char path[256];
         sim->meshes = malloc(2 * sizeof(Mesh*));
-        sim->meshes[0] = create_mesh("rasterizer/drone.obj", "rasterizer/drone.bmp");
-        sim->meshes[1] = create_mesh("rasterizer/ground.obj", "rasterizer/ground.bmp");
+        
+        snprintf(path, sizeof(path), "%srasterizer/drone.obj", prefix);
+        char tex_path[256];
+        snprintf(tex_path, sizeof(tex_path), "%srasterizer/drone.bmp", prefix);
+        sim->meshes[0] = create_mesh(path, tex_path);
+            
+        snprintf(path, sizeof(path), "%srasterizer/ground.obj", prefix);
+        snprintf(tex_path, sizeof(tex_path), "%srasterizer/ground.bmp", prefix);
+        sim->meshes[1] = create_mesh(path, tex_path);
+            
         sim->frame_buffer = calloc(WIDTH * HEIGHT * 3, sizeof(uint8_t));
-        char filename[100];
-        strftime(filename, 100, "%Y-%m-%d_%H-%M-%S_flight.gif", localtime(&(time_t){time(NULL)}));
-        sim->gif = ge_new_gif(filename, WIDTH, HEIGHT, 4, -1, 0);
+        strftime(path, sizeof(path), "%Y-%m-%d_%H-%M-%S_flight.gif", localtime(&(time_t){time(NULL)}));
+        sim->gif = ge_new_gif(path, WIDTH, HEIGHT, 4, -1, 0);
         transform_mesh(sim->meshes[1], (double[3]){0.0, -0.2, 0.0}, 1.0, (double[9]){1,0,0, 0,1,0, 0,0,1});
     }
     sim->render = render;

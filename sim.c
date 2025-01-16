@@ -12,7 +12,7 @@
 #define MAX_TIME 30.0
 
 int main() {
-    Sim* sim = init_sim(true);
+    Sim* sim = init_sim("./", true);
     double t_physics = 0.0, t_control = 0.0, t_render = 0.0;
     int current_target = 0;
     double control_input[7] = {0};
