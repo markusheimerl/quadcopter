@@ -92,59 +92,55 @@ void update_quad(Quad* q, double dt) {
     for(int i = 0; i < 4; i++) {
         q->omega[i] = fmax(fmin(q->omega[i], OMEGA_MAX), OMEGA_MIN);
         double omega_sq = q->omega[i] * fabs(q->omega[i]);
-        forces_moments_matrix[i] = K_F * omega_sq;    // Forces
-        forces_moments_matrix[i+4] = K_M * omega_sq;  // Moments
+        forces_moments_matrix[i] = K_F * omega_sq;      // Forces
+        forces_moments_matrix[i + 4] = K_M * omega_sq;  // Moments
     }
 
-    // 2. Calculate total thrust force in body frame
-    double f_B_thrust[3] = {0, 0, 0};
-    f_B_thrust[1] = forces_moments_matrix[0] + forces_moments_matrix[1] + 
-                    forces_moments_matrix[2] + forces_moments_matrix[3];
+    // 2. Calculate total thrust force in body frame (only y component is non-zero)
+    double f_B_thrust[3] = {0};
+    f_B_thrust[1] = cblas_dasum(4, forces_moments_matrix, 1);
 
-    // 3. Initialize with drag torque
-    double tau_B[3] = {0, 0, 0};
-    tau_B[1] = forces_moments_matrix[4] - forces_moments_matrix[5] + 
-               forces_moments_matrix[6] - forces_moments_matrix[7];
+    // 3. Initialize with drag torque (only y component is non-zero)
+    double tau_B[3] = {0};
+    tau_B[1] = cblas_ddot(4, forces_moments_matrix + 4, 1, (double[]){1,-1,1,-1}, 1);
 
-    // 4. Add thrust torques using BLAS
+    // 4. Add thrust torques
+    // Compute all cross products at once
     for(int i = 0; i < 4; i++) {
         double f_vector[3] = {0, forces_moments_matrix[i], 0};
-        double pos[3] = {rotor_positions[i*3], rotor_positions[i*3+1], rotor_positions[i*3+2]};
-        double tau_thrust[3];
-        crossVec3f(pos, f_vector, tau_thrust);
-        addVec3f(tau_B, tau_thrust, tau_B);
+        workspace[i*3] = rotor_positions[i*3+1]*f_vector[2] - rotor_positions[i*3+2]*f_vector[1];
+        workspace[i*3+1] = rotor_positions[i*3+2]*f_vector[0] - rotor_positions[i*3]*f_vector[2];
+        workspace[i*3+2] = rotor_positions[i*3]*f_vector[1] - rotor_positions[i*3+1]*f_vector[0];
     }
+    
+    // Sum all torques at once
+    cblas_dgemv(CblasRowMajor, CblasTrans, 4, 3, 1.0, workspace, 3, 
+                (double[]){1,1,1,1}, 1, 1.0, tau_B, 1);
 
-    // 5. Transform thrust to world frame
-    double f_thrust_W[3];
-    cblas_dgemv(CblasRowMajor,CblasNoTrans,3,3,1.0,q->R_W_B,3,f_B_thrust,1,0.0,f_thrust_W,1);
-
-    // Calculate linear acceleration
-    double linear_acceleration_W[3];
-    for(int i = 0; i < 3; i++) {
-        linear_acceleration_W[i] = f_thrust_W[i] / MASS;
-    }
+    // 5. Transform thrust to world frame and calculate linear acceleration
+    double f_thrust_W[3], linear_acceleration_W[3];
+    cblas_dgemv(CblasRowMajor, CblasNoTrans, 3, 3, 1.0, 
+                q->R_W_B, 3, f_B_thrust, 1, 0.0, f_thrust_W, 1);
+    
+    vdDiv(3, f_thrust_W, (double[]){MASS,MASS,MASS}, linear_acceleration_W);
     linear_acceleration_W[1] -= GRAVITY;
 
     // 6. Calculate angular acceleration
-    double I_mat[9];
+    double I_mat[9], h_B[3], w_cross_h[3], angular_acceleration_B[3];
     vecToDiagMat3f(q->inertia, I_mat);
     
-    double h_B[3];
-    cblas_dgemv(CblasRowMajor,CblasNoTrans,3,3,1.0,I_mat,3,q->angular_velocity_B,1,0.0,h_B,1);
-
-    double w_cross_h[3];
+    cblas_dgemv(CblasRowMajor, CblasNoTrans, 3, 3, 1.0, 
+                I_mat, 3, q->angular_velocity_B, 1, 0.0, h_B, 1);
+    
     crossVec3f(q->angular_velocity_B, h_B, w_cross_h);
-
-    double angular_acceleration_B[3];
-    for(int i = 0; i < 3; i++) {
-        angular_acceleration_B[i] = (-w_cross_h[i] + tau_B[i]) / q->inertia[i];
-    }
+    
+    vdDiv(3, tau_B, q->inertia, angular_acceleration_B);
+    cblas_daxpy(3, -1.0, w_cross_h, 1, angular_acceleration_B, 1);
 
     // 7. Update states with Euler integration
-    cblas_daxpy(3,dt,linear_acceleration_W,1,q->linear_velocity_W,1);
-    cblas_daxpy(3,dt,q->linear_velocity_W,1,q->linear_position_W,1);
-    cblas_daxpy(3,dt,angular_acceleration_B,1,q->angular_velocity_B,1);
+    cblas_daxpy(3, dt, linear_acceleration_W, 1, q->linear_velocity_W, 1);
+    cblas_daxpy(3, dt, q->linear_velocity_W, 1, q->linear_position_W, 1);
+    cblas_daxpy(3, dt, angular_acceleration_B, 1, q->angular_velocity_B, 1);
 
     q->linear_position_W[1] = fmax(0.0, q->linear_position_W[1]);
 
@@ -152,39 +148,35 @@ void update_quad(Quad* q, double dt) {
     double w_hat[9];
     so3hat(q->angular_velocity_B, w_hat);
     
-    double R_dot[9];
-    cblas_dgemm(CblasRowMajor,CblasNoTrans,CblasNoTrans,3,3,3,1.0,q->R_W_B,3,w_hat,3,0.0,R_dot,3);
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, 
+                3, 3, 3, 1.0, q->R_W_B, 3, w_hat, 3, 0.0, workspace, 3);
     
-    double R_dot_scaled[9];
-    for(int i = 0; i < 9; i++) R_dot_scaled[i] = dt * R_dot[i];
-    
-    for(int i = 0; i < 9; i++) q->R_W_B[i] += R_dot_scaled[i];
+    cblas_daxpy(9, dt, workspace, 1, q->R_W_B, 1);
     
     orthonormalize_rotation_matrix(q->R_W_B);
 
-    // 9. Calculate sensor readings
+    // 9. Calculate sensor readings with noise
     double R_B_W[9];
     transpMat3f(q->R_W_B, R_B_W);
     
-    double linear_acceleration_B[3];
-    cblas_dgemv(CblasRowMajor,CblasNoTrans,3,3,1.0,R_B_W,3,linear_acceleration_W,1,0.0,linear_acceleration_B,1);
+    vdRngGaussian(VSL_RNG_METHOD_GAUSSIAN_BOXMULLER2, stream, 6, 
+                  workspace, 0.0, ACCEL_NOISE_STDDEV);
+    
+    cblas_dgemv(CblasRowMajor, CblasNoTrans, 3, 3, 1.0, 
+                R_B_W, 3, linear_acceleration_W, 1, 0.0, q->linear_acceleration_B_s, 1);
     
     double gravity_B[3];
-    double gravity_W[3] = {0, GRAVITY, 0};
-    cblas_dgemv(CblasRowMajor,CblasNoTrans,3,3,1.0,R_B_W,3,gravity_W,1,0.0,gravity_B,1);
+    cblas_dgemv(CblasRowMajor, CblasNoTrans, 3, 3, 1.0, 
+                R_B_W, 3, (double[]){0,GRAVITY,0}, 1, 0.0, gravity_B, 1);
     
-    // Generate all random numbers at once
-    double noise[6];
-    vdRngGaussian(VSL_RNG_METHOD_GAUSSIAN_BOXMULLER, stream, 3, noise, 0.0, ACCEL_NOISE_STDDEV);
-    vdRngGaussian(VSL_RNG_METHOD_GAUSSIAN_BOXMULLER, stream, 3, noise+3, 0.0, GYRO_NOISE_STDDEV);
-
-    // 10. Update sensor readings
     for(int i = 0; i < 3; i++) {
-        q->linear_acceleration_B_s[i] = linear_acceleration_B[i] - gravity_B[i] + noise[i] + q->accel_bias[i];
-        q->angular_velocity_B_s[i] = q->angular_velocity_B[i] + noise[i+3] + q->gyro_bias[i];
+        q->linear_acceleration_B_s[i] = q->linear_acceleration_B_s[i] - 
+                                      gravity_B[i] + workspace[i] + q->accel_bias[i];
+        q->angular_velocity_B_s[i] = q->angular_velocity_B[i] + 
+                                    workspace[i+3] + q->gyro_bias[i];
     }
 
-    // 11. Update rotor speeds
+    // 10. Update rotor speeds
     for(int i = 0; i < 4; i++) {
         q->omega[i] = fmax(OMEGA_MIN, fmin(OMEGA_MAX, q->omega_next[i]));
     }

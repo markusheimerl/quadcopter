@@ -5,8 +5,8 @@ BASE_CFLAGS = -O3 -march=native -ffast-math -I./rasterizer
 BASE_LDFLAGS = -lm -flto
 
 ifeq ($(USE_ONEAPI),true)
-CFLAGS = $(BASE_CFLAGS) -DONEAPI -I${MKLROOT}/include -DMKL_ILP64 -m64
-LDFLAGS = -L${MKLROOT}/lib/intel64 -lmkl_intel_ilp64 -lmkl_sequential -lmkl_core -lpthread -ldl $(BASE_LDFLAGS)
+CFLAGS = $(BASE_CFLAGS) -DONEAPI -DMKL_ILP64
+LDFLAGS = -lmkl_intel_ilp64 -lmkl_sequential -lmkl_core $(BASE_LDFLAGS)
 PREREQ = check-env
 else
 CFLAGS = $(BASE_CFLAGS)
