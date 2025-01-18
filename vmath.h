@@ -56,17 +56,11 @@ void multScalMat3f(double s, const double* m, double* result) {
 }
 
 // Vector Operations
-#ifdef CBLAS
-void crossVec3f(const double* a, const double* b, double* result) {
-    cblas_dgemv(CblasRowMajor, CblasNoTrans, 3, 3, 1.0, (const double[9]){0, -a[2], a[1], a[2], 0, -a[0], -a[1], a[0], 0}, 3, b, 1, 0.0, result, 1);
-}
-#else
 void crossVec3f(const double* a, const double* b, double* result) {
     result[0] = a[1]*b[2] - a[2]*b[1];
     result[1] = a[2]*b[0] - a[0]*b[2];
     result[2] = a[0]*b[1] - a[1]*b[0];
 }
-#endif
 
 void multScalVec3f(double s, const double* v, double* result) {
     for(int i = 0; i < 3; i++) result[i] = s * v[i];
