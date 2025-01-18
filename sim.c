@@ -63,6 +63,7 @@ int main() {
     }
     
     printf("\nSimulation completed after %.1f seconds.\n", t_physics);
+    save_sim(sim);
     free_sim(sim);
     return 0;
 }

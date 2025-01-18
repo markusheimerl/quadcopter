@@ -10,7 +10,8 @@
 typedef struct {
     Mesh** meshes;
     Quad* quad;
-    uint8_t *frame_buffer;
+    uint8_t **frame_buffers;
+    int size_frame_buffers;
     ge_GIF *gif;
     bool render;
 } Sim;
@@ -30,9 +31,8 @@ Sim* init_sim(const char* prefix, bool render){
         snprintf(tex_path, sizeof(tex_path), "%srasterizer/ground.bmp", prefix);
         sim->meshes[1] = create_mesh(path, tex_path);
             
-        sim->frame_buffer = calloc(WIDTH * HEIGHT * 3, sizeof(uint8_t));
-        strftime(path, sizeof(path), "%Y-%m-%d_%H-%M-%S_flight.gif", localtime(&(time_t){time(NULL)}));
-        sim->gif = ge_new_gif(path, WIDTH, HEIGHT, 4, -1, 0);
+        sim->frame_buffers = NULL;
+        sim->size_frame_buffers = 0;
         transform_mesh(sim->meshes[1], (double[3]){0.0, -0.2, 0.0}, 1.0, (double[9]){1,0,0, 0,1,0, 0,0,1});
     }
     sim->render = render;
@@ -42,17 +42,26 @@ Sim* init_sim(const char* prefix, bool render){
 
 void render_sim(Sim* sim){
     transform_mesh(sim->meshes[0], sim->quad->linear_position_W, 0.5, sim->quad->R_W_B);
-    memset(sim->frame_buffer, 0, WIDTH * HEIGHT * 3);
     vertex_shader(sim->meshes, 2, (double[3]){-2.0, 2.0, -2.0}, (double[3]){0.0, 0.0, 0.0});
-    rasterize(sim->frame_buffer, sim->meshes, 2);
-    ge_add_frame(sim->gif, sim->frame_buffer, 6);
+    sim->frame_buffers = realloc(sim->frame_buffers, (sim->size_frame_buffers + 1) * sizeof(uint8_t*));
+    sim->frame_buffers[sim->size_frame_buffers] = calloc(WIDTH * HEIGHT * 3, sizeof(uint8_t));
+    rasterize(sim->frame_buffers[sim->size_frame_buffers], sim->meshes, 2);
+    sim->size_frame_buffers++;
+}
+
+void save_sim(Sim* sim){
+    char filename[256];
+    strftime(filename, sizeof(filename), "%Y%m%d_%H%M%S_flight.gif", localtime(&(time_t){time(NULL)}));
+    write_gif(filename, WIDTH, HEIGHT, sim->frame_buffers, sim->size_frame_buffers);
 }
 
 void free_sim(Sim* sim){
     if(sim->render){
         free_meshes(sim->meshes, 2);
-        free(sim->frame_buffer);
-        ge_close_gif(sim->gif);
+        for(int i = 0; i < sim->size_frame_buffers; i++){
+            free(sim->frame_buffers[i]);
+        }
+        free(sim->frame_buffers);
     }
     free(sim->quad);
     free(sim);
