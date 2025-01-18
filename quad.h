@@ -4,7 +4,6 @@
 #include "vmath.h"
 #ifdef ONEAPI
 #include <mkl.h>
-#include <mkl_vsl.h>
 #endif
 
 // Constants
