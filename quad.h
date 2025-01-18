@@ -109,14 +109,12 @@ void update_quad(Quad* q, double dt) {
     }
     
     double tau_B[3] = {0};
-    cblas_dgemv(CblasRowMajor, CblasTrans, 4, 3, 1.0, workspace, 3, 
-                (double[]){1,1,1,1}, 1, 0.0, tau_B, 1);
+    cblas_dgemv(CblasRowMajor, CblasTrans, 4, 3, 1.0, workspace, 3, (double[]){1,1,1,1}, 1, 0.0, tau_B, 1);
     tau_B[1] += cblas_ddot(4, forces_moments_matrix + 4, 1, (double[]){1,-1,1,-1}, 1);
 
     // 5. and 6. Transform thrust and calculate accelerations
     double linear_acceleration_W[3], f_thrust_W[3];
-    cblas_dgemv(CblasRowMajor, CblasNoTrans, 3, 3, 1.0, 
-                q->R_W_B, 3, f_B_thrust, 1, 0.0, f_thrust_W, 1);
+    cblas_dgemv(CblasRowMajor, CblasNoTrans, 3, 3, 1.0, q->R_W_B, 3, f_B_thrust, 1, 0.0, f_thrust_W, 1);
     
     vdDiv(3, f_thrust_W, (double[]){MASS,MASS,MASS}, linear_acceleration_W);
     linear_acceleration_W[1] -= GRAVITY;
@@ -125,8 +123,7 @@ void update_quad(Quad* q, double dt) {
     vecToDiagMat3f(q->inertia, I_mat);
     
     // Combine angular acceleration calculations
-    cblas_dgemv(CblasRowMajor, CblasNoTrans, 3, 3, 1.0, 
-                I_mat, 3, q->angular_velocity_B, 1, 0.0, h_B, 1);
+    cblas_dgemv(CblasRowMajor, CblasNoTrans, 3, 3, 1.0, I_mat, 3, q->angular_velocity_B, 1, 0.0, h_B, 1);
     crossVec3f(q->angular_velocity_B, h_B, w_cross_h);
     vdDiv(3, tau_B, q->inertia, angular_acceleration_B);
     cblas_daxpy(3, -1.0, w_cross_h, 1, angular_acceleration_B, 1);
@@ -141,8 +138,7 @@ void update_quad(Quad* q, double dt) {
     double w_hat[9];
     so3hat(q->angular_velocity_B, w_hat);
     
-    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, 
-                3, 3, 3, dt, q->R_W_B, 3, w_hat, 3, 1.0, q->R_W_B, 3);
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, 3, 3, 3, dt, q->R_W_B, 3, w_hat, 3, 1.0, q->R_W_B, 3);
     
     orthonormalize_rotation_matrix(q->R_W_B);
 
@@ -150,22 +146,16 @@ void update_quad(Quad* q, double dt) {
     double R_B_W[9];
     transpMat3f(q->R_W_B, R_B_W);
     
-    vdRngGaussian(VSL_RNG_METHOD_GAUSSIAN_BOXMULLER2, stream, 6, 
-                  workspace, 0.0, ACCEL_NOISE_STDDEV);
+    vdRngGaussian(VSL_RNG_METHOD_GAUSSIAN_BOXMULLER2, stream, 6, workspace, 0.0, ACCEL_NOISE_STDDEV);
     
     double gravity_B[3];
-    cblas_dgemv(CblasRowMajor, CblasNoTrans, 3, 3, 1.0, 
-                R_B_W, 3, (double[]){0,GRAVITY,0}, 1, 0.0, gravity_B, 1);
-    
-    cblas_dgemv(CblasRowMajor, CblasNoTrans, 3, 3, 1.0, 
-                R_B_W, 3, linear_acceleration_W, 1, 0.0, q->linear_acceleration_B_s, 1);
+    cblas_dgemv(CblasRowMajor, CblasNoTrans, 3, 3, 1.0, R_B_W, 3, (double[]){0,GRAVITY,0}, 1, 0.0, gravity_B, 1);
+    cblas_dgemv(CblasRowMajor, CblasNoTrans, 3, 3, 1.0, R_B_W, 3, linear_acceleration_W, 1, 0.0, q->linear_acceleration_B_s, 1);
     
     // Combine bias and noise addition
     for(int i = 0; i < 3; i++) {
-        q->linear_acceleration_B_s[i] = q->linear_acceleration_B_s[i] - 
-                                      gravity_B[i] + workspace[i] + q->accel_bias[i];
-        q->angular_velocity_B_s[i] = q->angular_velocity_B[i] + 
-                                    workspace[i+3] + q->gyro_bias[i];
+        q->linear_acceleration_B_s[i] = q->linear_acceleration_B_s[i] - gravity_B[i] + workspace[i] + q->accel_bias[i];
+        q->angular_velocity_B_s[i] = q->angular_velocity_B[i] + workspace[i+3] + q->gyro_bias[i];
     }
 
     // 10. Update rotor speeds
