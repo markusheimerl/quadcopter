@@ -30,7 +30,7 @@ typedef struct {
     double linear_velocity_W[3];
     double angular_velocity_B[3];
     double R_W_B[9];
-    double I[3];
+    double inertia[3];
     double omega_next[4];
 
     // Sensor variables
@@ -46,7 +46,7 @@ void reset_quad(Quad* q, double x, double y, double z) {
     memcpy(q->linear_velocity_W, (double[]){0.0, 0.0, 0.0}, 3 * sizeof(double));
     memcpy(q->angular_velocity_B, (double[]){0.0, 0.0, 0.0}, 3 * sizeof(double));
     memcpy(q->R_W_B, (double[]){1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0}, 9 * sizeof(double));
-    memcpy(q->I, (double[]){0.01, 0.02, 0.01}, 3 * sizeof(double));
+    memcpy(q->inertia, (double[]){0.01, 0.02, 0.01}, 3 * sizeof(double));
     memcpy(q->omega_next, (double[]){0.0, 0.0, 0.0, 0.0}, 4 * sizeof(double));
     memcpy(q->linear_acceleration_B_s, (double[]){0.0, 0.0, 0.0}, 3 * sizeof(double));
     memcpy(q->angular_velocity_B_s, (double[]){0.0, 0.0, 0.0}, 3 * sizeof(double));
@@ -107,7 +107,7 @@ void update_quad(Quad* q, double dt){
 
     // 6. Calculate angular acceleration
     double I_mat[9];
-    vecToDiagMat3f(q->I, I_mat);
+    vecToDiagMat3f(q->inertia, I_mat);
     
     double h_B[3];
     multMatVec3f(I_mat, q->angular_velocity_B, h_B);
@@ -117,7 +117,7 @@ void update_quad(Quad* q, double dt){
 
     double angular_acceleration_B[3];
     for(int i = 0; i < 3; i++) {
-        angular_acceleration_B[i] = (-w_cross_h[i] + tau_B[i]) / q->I[i];
+        angular_acceleration_B[i] = (-w_cross_h[i] + tau_B[i]) / q->inertia[i];
     }
 
     // 7. Update states with Euler integration
@@ -235,7 +235,7 @@ void control_quad(Quad* q, double* control_input) {
 
     // Add angular momentum terms
     double I_mat[9], temp_vec3[3], temp_vec4[3];
-    vecToDiagMat3f(q->I, I_mat);
+    vecToDiagMat3f(q->inertia, I_mat);
     multMatVec3f(I_mat, q->angular_velocity_B, temp_vec3);
     crossVec3f(q->angular_velocity_B, temp_vec3, temp_vec4);
     addVec3f(tau_B_control, temp_vec4, tau_B_control);

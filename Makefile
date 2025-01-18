@@ -1,6 +1,6 @@
 CC = clang
-CFLAGS = -O3 -march=native -ffast-math -I./rasterizer
-LDFLAGS = -lm -flto
+CFLAGS = -O3 -march=native -ffast-math -I./rasterizer -DCBLAS
+LDFLAGS = -lopenblas -lm -flto
 
 TARGET = sim.out
 SRC = sim.c
