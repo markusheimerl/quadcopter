@@ -2,6 +2,10 @@
 #define QUAD_H
 
 #include "vmath.h"
+#ifdef ONEAPI
+#include <mkl.h>
+#include <mkl_vsl.h>
+#endif
 
 // Constants
 #define K_F 0.0004905
@@ -71,7 +75,122 @@ static double gaussian_noise(double stddev) {
     return sqrt(-2.0 * log(u1)) * cos(2.0 * M_PI * u2) * stddev;
 }
 
-void update_quad(Quad* q, double dt){
+void update_quad(Quad* q, double dt) {
+#ifdef ONEAPI
+    static double forces_moments_matrix[8];      // [f1,f2,f3,f4,m1,m2,m3,m4]
+    static const double rotor_positions[12] = {-L,0,L, L,0,L, L,0,-L, -L,0,-L};
+    static double workspace[48];
+    static VSLStreamStatePtr stream;
+    static int initialized = 0;
+    
+    if (!initialized) {
+        vslNewStream(&stream, VSL_BRNG_MT19937, time(NULL));
+        initialized = 1;
+    }
+
+    // 1. Calculate rotor forces/moments
+    for(int i = 0; i < 4; i++) {
+        q->omega[i] = fmax(fmin(q->omega[i], OMEGA_MAX), OMEGA_MIN);
+        double omega_sq = q->omega[i] * fabs(q->omega[i]);
+        forces_moments_matrix[i] = K_F * omega_sq;    // Forces
+        forces_moments_matrix[i+4] = K_M * omega_sq;  // Moments
+    }
+
+    // 2. Calculate total thrust force in body frame
+    double f_B_thrust[3] = {0, 0, 0};
+    f_B_thrust[1] = forces_moments_matrix[0] + forces_moments_matrix[1] + 
+                    forces_moments_matrix[2] + forces_moments_matrix[3];
+
+    // 3. Initialize with drag torque
+    double tau_B[3] = {0, 0, 0};
+    tau_B[1] = forces_moments_matrix[4] - forces_moments_matrix[5] + 
+               forces_moments_matrix[6] - forces_moments_matrix[7];
+
+    // 4. Add thrust torques using BLAS
+    for(int i = 0; i < 4; i++) {
+        double f_vector[3] = {0, forces_moments_matrix[i], 0};
+        double pos[3] = {rotor_positions[i*3], rotor_positions[i*3+1], rotor_positions[i*3+2]};
+        double tau_thrust[3];
+        crossVec3f(pos, f_vector, tau_thrust);
+        addVec3f(tau_B, tau_thrust, tau_B);
+    }
+
+    // 5. Transform thrust to world frame
+    double f_thrust_W[3];
+    cblas_dgemv(CblasRowMajor,CblasNoTrans,3,3,1.0,q->R_W_B,3,f_B_thrust,1,0.0,f_thrust_W,1);
+
+    // Calculate linear acceleration
+    double linear_acceleration_W[3];
+    for(int i = 0; i < 3; i++) {
+        linear_acceleration_W[i] = f_thrust_W[i] / MASS;
+    }
+    linear_acceleration_W[1] -= GRAVITY;
+
+    // 6. Calculate angular acceleration
+    double I_mat[9];
+    vecToDiagMat3f(q->inertia, I_mat);
+    
+    double h_B[3];
+    cblas_dgemv(CblasRowMajor,CblasNoTrans,3,3,1.0,I_mat,3,q->angular_velocity_B,1,0.0,h_B,1);
+
+    double w_cross_h[3];
+    crossVec3f(q->angular_velocity_B, h_B, w_cross_h);
+
+    double angular_acceleration_B[3];
+    for(int i = 0; i < 3; i++) {
+        angular_acceleration_B[i] = (-w_cross_h[i] + tau_B[i]) / q->inertia[i];
+    }
+
+    // 7. Update states with Euler integration
+    cblas_daxpy(3,dt,linear_acceleration_W,1,q->linear_velocity_W,1);
+    cblas_daxpy(3,dt,q->linear_velocity_W,1,q->linear_position_W,1);
+    cblas_daxpy(3,dt,angular_acceleration_B,1,q->angular_velocity_B,1);
+
+    q->linear_position_W[1] = fmax(0.0, q->linear_position_W[1]);
+
+    // 8. Update rotation matrix
+    double w_hat[9];
+    so3hat(q->angular_velocity_B, w_hat);
+    
+    double R_dot[9];
+    cblas_dgemm(CblasRowMajor,CblasNoTrans,CblasNoTrans,3,3,3,1.0,q->R_W_B,3,w_hat,3,0.0,R_dot,3);
+    
+    double R_dot_scaled[9];
+    for(int i = 0; i < 9; i++) R_dot_scaled[i] = dt * R_dot[i];
+    
+    for(int i = 0; i < 9; i++) q->R_W_B[i] += R_dot_scaled[i];
+    
+    orthonormalize_rotation_matrix(q->R_W_B);
+
+    // 9. Calculate sensor readings
+    double R_B_W[9];
+    transpMat3f(q->R_W_B, R_B_W);
+    
+    double linear_acceleration_B[3];
+    cblas_dgemv(CblasRowMajor,CblasNoTrans,3,3,1.0,R_B_W,3,linear_acceleration_W,1,0.0,linear_acceleration_B,1);
+    
+    double gravity_B[3];
+    double gravity_W[3] = {0, GRAVITY, 0};
+    cblas_dgemv(CblasRowMajor,CblasNoTrans,3,3,1.0,R_B_W,3,gravity_W,1,0.0,gravity_B,1);
+    
+    // Generate all random numbers at once
+    double noise[6];
+    vdRngGaussian(VSL_RNG_METHOD_GAUSSIAN_BOXMULLER, stream, 3, noise, 0.0, ACCEL_NOISE_STDDEV);
+    vdRngGaussian(VSL_RNG_METHOD_GAUSSIAN_BOXMULLER, stream, 3, noise+3, 0.0, GYRO_NOISE_STDDEV);
+
+    // 10. Update sensor readings
+    for(int i = 0; i < 3; i++) {
+        q->linear_acceleration_B_s[i] = linear_acceleration_B[i] - gravity_B[i] + noise[i] + q->accel_bias[i];
+        q->angular_velocity_B_s[i] = q->angular_velocity_B[i] + noise[i+3] + q->gyro_bias[i];
+    }
+
+    // 11. Update rotor speeds
+    for(int i = 0; i < 4; i++) {
+        q->omega[i] = fmax(OMEGA_MIN, fmin(OMEGA_MAX, q->omega_next[i]));
+    }
+
+#else
+
     // 1. Declare arrays and calculate rotor forces/moments
     double f[4], m[4];
     for(int i = 0; i < 4; i++) {
@@ -163,6 +282,9 @@ void update_quad(Quad* q, double dt){
     for(int i = 0; i < 4; i++) {
         q->omega[i] = fmax(OMEGA_MIN, fmin(OMEGA_MAX, q->omega_next[i]));
     }
+
+#endif
+
 }
 
 void control_quad(Quad* q, double* control_input) {

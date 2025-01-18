@@ -2,7 +2,6 @@
 #define VMATH_H
 
 #include <math.h>
-#include <cblas.h>
 
 // 3x3 Matrix Operations
 void multMat3f(const double* a, const double* b, double* result) {
