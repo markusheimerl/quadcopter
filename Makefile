@@ -1,29 +1,11 @@
-USE_ONEAPI = true
-
 CC = clang
-BASE_CFLAGS = -O3 -march=native -ffast-math -I./rasterizer
-BASE_LDFLAGS = -lm -flto
-
-ifeq ($(USE_ONEAPI),true)
-CFLAGS = $(BASE_CFLAGS) -DONEAPI -DMKL_ILP64
-LDFLAGS = -lmkl_intel_ilp64 -lmkl_sequential -lmkl_core $(BASE_LDFLAGS)
-PREREQ = check-env
-else
-CFLAGS = $(BASE_CFLAGS)
-LDFLAGS = $(BASE_LDFLAGS)
-PREREQ =
-endif
+CFLAGS = -O3 -march=native -ffast-math -I./rasterizer
+LDFLAGS = -lm -flto
 
 TARGET = sim.out
 SRC = sim.c
 
-check-env:
-	@if [ -z "$$MKLROOT" ]; then \
-		echo "MKLROOT is not set. Please run: source /opt/intel/oneapi/setvars.sh"; \
-		exit 1; \
-	fi
-
-$(TARGET): $(PREREQ) $(SRC)
+$(TARGET): $(SRC)
 	$(CC) $(CFLAGS) $(SRC) $(LDFLAGS) -o $(TARGET)
 
 run: $(TARGET)
@@ -32,4 +14,4 @@ run: $(TARGET)
 clean:
 	rm -f $(TARGET) *.gif
 
-.PHONY: check-env run clean
+.PHONY: run clean
