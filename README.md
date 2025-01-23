@@ -7,5 +7,8 @@ A quadcopter printed circuit board
 
 
 ``` sh
+sudo add-apt-repository ppa:kicad/kicad-8.0-releases
+sudo apt update
+sudo apt install kicad
 kicad-cli sch export svg drone.kicad_sch -o output_image
 ```
