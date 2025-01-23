@@ -1,9 +1,9 @@
 # quad
 A quadcopter printed circuit board
 
-![image](https://github.com/ratisbonrobotics/drone/assets/149831926/ca73d6d1-41e3-425e-b51a-48b5f8c18408)
-![image](https://github.com/ratisbonrobotics/drone/assets/149831926/81ee0bea-3d01-427b-8c20-06429374bebd)
-![image](https://github.com/ratisbonrobotics/drone/assets/149831926/c266eeb9-4a0b-45ac-baba-4c1b8c998e4e)
+![image](https://raw.githubusercontent.com/markusheimerl/quad/3f04bb0489eefd0a6364144f415133f1339fff0e/output_image/drone-motors.png)
+![image](https://raw.githubusercontent.com/markusheimerl/quad/3f04bb0489eefd0a6364144f415133f1339fff0e/output_image/drone-imu.png)
+![image](https://raw.githubusercontent.com/markusheimerl/quad/3f04bb0489eefd0a6364144f415133f1339fff0e/output_image/drone-power.png)
 
 
 ``` sh
