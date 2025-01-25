@@ -186,7 +186,16 @@ void save_png(const char* filename, unsigned char* pixels, int width, int height
 
 // Render scene
 void render(const Mesh* mesh, const Texture* texture, unsigned char* pixels, int width, int height) {
-    Vec3 camera_pos = {0.0f, 0.0f, -5.0f};
+    // Camera parameters
+    Vec3 camera_pos = {3.0f, 2.0f, -3.0f};
+    Vec3 look_at = {0.0f, 0.0f, 0.0f};
+    Vec3 up = {0.0f, 1.0f, 0.0f};
+    
+    // Calculate camera coordinate system
+    Vec3 forward = vec3_normalize(vec3_sub(look_at, camera_pos));
+    Vec3 right = vec3_normalize(vec3_cross(forward, up));
+    Vec3 camera_up = vec3_cross(right, forward);
+    
     float fov = 60.0f;
     float scale = tanf((fov * 0.5f) * M_PI / 180.0f);
     float aspect = (float)width / height;
@@ -196,7 +205,16 @@ void render(const Mesh* mesh, const Texture* texture, unsigned char* pixels, int
             float ray_x = (2.0f * ((x + 0.5f) / width) - 1.0f) * aspect * scale;
             float ray_y = (1.0f - 2.0f * ((y + 0.5f) / height)) * scale;
 
-            Ray ray = {camera_pos, vec3_normalize((Vec3){ray_x, ray_y, 1.0f})};
+            // Calculate ray direction using camera basis vectors
+            Vec3 ray_dir = vec3_normalize(vec3_add(
+                vec3_add(
+                    vec3_mul(right, ray_x),
+                    vec3_mul(camera_up, ray_y)
+                ),
+                forward
+            ));
+
+            Ray ray = {camera_pos, ray_dir};
             float closest_t = INFINITY;
             bool hit = false;
             Vec2 hit_uv = {0, 0};
