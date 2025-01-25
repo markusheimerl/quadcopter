@@ -12,4 +12,4 @@ run: $(TARGET)
 	./$(TARGET)
 
 clean:
-	rm -f *.out *.gif
+	rm -f *.out *.png
