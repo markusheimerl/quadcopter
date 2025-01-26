@@ -1,6 +1,6 @@
 CC = clang
-CFLAGS = -O3 -march=native -ffast-math -I./rasterizer
-LDFLAGS = -lm -flto
+CFLAGS = -O3 -march=native -ffast-math -Wall -Wextra -Iraytracer
+LDFLAGS = -static -lm -lwebp -lwebpmux -lpthread  -flto
 
 TARGET = sim.out
 SRC = sim.c
@@ -9,7 +9,7 @@ $(TARGET): $(SRC)
 	$(CC) $(CFLAGS) $(SRC) $(LDFLAGS) -o $(TARGET)
 
 run: $(TARGET)
-	./$(TARGET)
+	@time ./$(TARGET)
 
 clean:
 	rm -f $(TARGET) *.gif
