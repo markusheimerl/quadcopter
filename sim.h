@@ -63,18 +63,20 @@ void render_sim(Sim* sim){
     float scale[3] = {1.0f, 1.0f, 1.0f};
     float transform[16], temp[16];
     
-    mat4_scale(temp, scale);
-    mat4_translate(transform, pos);
-    mat4_multiply(transform, transform, temp);
-    
-    // Apply rotation from quad
+    // Create rotation matrix
     float rotation[16] = {
-        sim->quad->R_W_B[0], sim->quad->R_W_B[1], sim->quad->R_W_B[2], 0,
-        sim->quad->R_W_B[3], sim->quad->R_W_B[4], sim->quad->R_W_B[5], 0,
-        sim->quad->R_W_B[6], sim->quad->R_W_B[7], sim->quad->R_W_B[8], 0,
+        sim->quad->R_W_B[0], sim->quad->R_W_B[3], sim->quad->R_W_B[6], 0,
+        sim->quad->R_W_B[1], sim->quad->R_W_B[4], sim->quad->R_W_B[7], 0,
+        sim->quad->R_W_B[2], sim->quad->R_W_B[5], sim->quad->R_W_B[8], 0,
         0, 0, 0, 1
     };
-    mat4_multiply(transform, transform, rotation);
+    
+    // Apply transformations in correct order: scale -> rotate -> translate
+    mat4_scale(transform, scale);
+    mat4_multiply(temp, rotation, transform);
+    float translation[16];
+    mat4_translate(translation, pos);
+    mat4_multiply(transform, translation, temp);
     
     transform_mesh(sim->meshes[0], transform);
 
