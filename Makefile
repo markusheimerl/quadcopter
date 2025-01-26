@@ -12,6 +12,6 @@ run: $(TARGET)
 	@time ./$(TARGET)
 
 clean:
-	rm -f $(TARGET) *.gif
+	rm -f $(TARGET) *.webp
 
 .PHONY: run clean
