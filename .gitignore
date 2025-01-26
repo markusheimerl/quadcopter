@@ -50,4 +50,5 @@ Module.symvers
 Mkfile.old
 dkms.conf
 
-*.webp
+*.csv
+*.gif
