@@ -1,3 +1,6 @@
 [submodule "rasterizer"]
 	path = rasterizer
 	url = https://github.com/markusheimerl/rasterizer.git
+[submodule "raytracer"]
+	path = raytracer
+	url = https://github.com/markusheimerl/raytracer.git
