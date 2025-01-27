@@ -2,8 +2,8 @@ CC = clang
 CFLAGS = -O3 -march=native -ffast-math -Wall -Wextra
 LDFLAGS = -static -lm -lwebp -lwebpmux -lpthread -flto
 
-TARGET = main.out
-SRC = main.c
+TARGET = raytracer.out
+SRC = raytracer.c
 
 $(TARGET): $(SRC)
 	$(CC) $(CFLAGS) $(SRC) $(LDFLAGS) -o $(TARGET)

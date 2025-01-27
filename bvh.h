@@ -1,7 +1,7 @@
 #ifndef BVH_H
 #define BVH_H
 
-#include "raytracer.h"
+#include "ray.h"
 
 typedef struct {
     Vec3 min;
