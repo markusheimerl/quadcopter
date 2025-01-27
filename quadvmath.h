@@ -1,5 +1,5 @@
-#ifndef VMATH_H
-#define VMATH_H
+#ifndef QUADVMATH_H
+#define QUADVMATH_H
 
 #include <math.h>
 

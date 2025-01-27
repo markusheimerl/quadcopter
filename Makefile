@@ -1,5 +1,5 @@
 CC = clang
-CFLAGS = -O3 -march=native -ffast-math -Wall -Wextra
+CFLAGS = -O3 -march=native -ffast-math -Wall -Wextra -Iraytracer
 LDFLAGS = -static -lm -lwebp -lwebpmux -lpthread -flto
 
 TARGET = main.out

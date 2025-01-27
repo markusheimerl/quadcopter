@@ -1,7 +1,7 @@
 #ifndef QUAD_H
 #define QUAD_H
 
-#include "vmath.h"
+#include "quadvmath.h"
 
 // Constants
 #define K_F 0.0004905
