@@ -1,4 +1,5 @@
 #include "scene.h"
+#include <time.h>
 
 int main() {
     // Create scene with 60 frames
@@ -52,7 +53,9 @@ int main() {
     }
 
     // Save all frames as animated WebP
-    save_scene(&scene, "output.webp");
+    char filename[64];
+    strftime(filename, sizeof(filename), "%Y%m%d_%H%M%S_rendering.webp", localtime(&(time_t){time(NULL)}));
+    save_scene(&scene, filename);
 
     // Cleanup
     destroy_scene(&scene);
