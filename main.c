@@ -16,7 +16,7 @@ int main() {
     // Set up light
     set_scene_light(&scene,
         (Vec3){1.0f, 1.0f, -1.0f},     // Direction
-        (Vec3){1.0f, 1.0f, 1.0f}       // White light
+        (Vec3){1.4f, 1.4f, 1.4f}       // White light
     );
     
     // Add meshes to scene
