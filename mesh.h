@@ -17,23 +17,24 @@ typedef struct {
 typedef struct {
     Triangle* triangles;
     size_t triangle_count;
+    unsigned char* texture_data;
+    int texture_width;
+    int texture_height;
 } Mesh;
 
-typedef struct {
-    unsigned char* data;
-    int width, height;
-} Texture;
-
-Mesh load_obj(const char* filename) {
+Mesh create_mesh(const char* obj_filename, const char* texture_filename) {
+    Mesh mesh = {NULL, 0, NULL, 0, 0};
+    
+    // Load geometry
     Vec3* vertices = malloc(1000000 * sizeof(Vec3));
     Vec2* texcoords = malloc(1000000 * sizeof(Vec2));
     int vertex_count = 0, texcoord_count = 0, triangle_count = 0;
-    Mesh mesh = {malloc(1000000 * sizeof(Triangle)), 0};
+    mesh.triangles = malloc(1000000 * sizeof(Triangle));
 
-    FILE* file = fopen(filename, "r");
+    FILE* file = fopen(obj_filename, "r");
     if (!file) { 
-        fprintf(stderr, "Failed to open %s\n", filename); 
-        exit(1); 
+        fprintf(stderr, "Failed to open %s\n", obj_filename); 
+        goto cleanup;
     }
 
     char line[256];
@@ -63,61 +64,58 @@ Mesh load_obj(const char* filename) {
         }
     }
     mesh.triangle_count = triangle_count;
+    fclose(file);
+
+    // Load texture
+    FILE* tex_file = fopen(texture_filename, "rb");
+    if (!tex_file) {
+        fprintf(stderr, "Failed to open texture %s\n", texture_filename);
+        goto cleanup;
+    }
+
+    fseek(tex_file, 0, SEEK_END);
+    size_t file_size = ftell(tex_file);
+    fseek(tex_file, 0, SEEK_SET);
+
+    uint8_t* file_data = malloc(file_size);
+    if (fread(file_data, 1, file_size, tex_file) != file_size) {
+        free(file_data);
+        fclose(tex_file);
+        goto cleanup;
+    }
+    fclose(tex_file);
+
+    mesh.texture_data = WebPDecodeRGBA(file_data, file_size, 
+                                      &mesh.texture_width, 
+                                      &mesh.texture_height);
+    free(file_data);
+
     printf("Loaded %d vertices, %d texcoords, %d triangles\n", 
            vertex_count, texcoord_count, triangle_count);
 
+cleanup:
     free(vertices);
     free(texcoords);
-    fclose(file);
     return mesh;
 }
 
-Texture load_texture(const char* filename) {
-    Texture tex = {NULL, 0, 0};
-    FILE* fp = fopen(filename, "rb");
-    if (!fp) return tex;
-
-    // Get file size
-    fseek(fp, 0, SEEK_END);
-    size_t file_size = ftell(fp);
-    fseek(fp, 0, SEEK_SET);
-
-    // Read file data
-    uint8_t* file_data = malloc(file_size);
-    if (fread(file_data, 1, file_size, fp) != file_size) {
-        free(file_data);
-        fclose(fp);
-        return tex;
-    }
-    fclose(fp);
-
-    // Get WebP image features
-    WebPBitstreamFeatures features;
-    if (WebPGetFeatures(file_data, file_size, &features) != VP8_STATUS_OK) {
-        free(file_data);
-        return tex;
-    }
-
-    // Decode WebP
-    tex.width = features.width;
-    tex.height = features.height;
-    tex.data = WebPDecodeRGBA(file_data, file_size, &tex.width, &tex.height);
-
-    free(file_data);
-    return tex;
+void destroy_mesh(Mesh* mesh) {
+    if (mesh->triangles) free(mesh->triangles);
+    if (mesh->texture_data) WebPFree(mesh->texture_data);
+    mesh->triangles = NULL;
+    mesh->texture_data = NULL;
+    mesh->triangle_count = 0;
 }
 
 void save_webp(const char* filename, unsigned char* pixels, int width, int height) {
-    // Convert RGB to RGBA (WebP encoder expects RGBA)
     uint8_t* rgba = malloc(width * height * 4);
     for (int i = 0; i < width * height; i++) {
-        rgba[i * 4] = pixels[i * 3];     // R
-        rgba[i * 4 + 1] = pixels[i * 3 + 1]; // G
-        rgba[i * 4 + 2] = pixels[i * 3 + 2]; // B
-        rgba[i * 4 + 3] = 255;           // A
+        rgba[i * 4] = pixels[i * 3];
+        rgba[i * 4 + 1] = pixels[i * 3 + 1];
+        rgba[i * 4 + 2] = pixels[i * 3 + 2];
+        rgba[i * 4 + 3] = 255;
     }
 
-    // Encode WebP
     uint8_t* output;
     size_t output_size = WebPEncodeRGBA(rgba, width, height, width * 4, 75, &output);
 
@@ -133,20 +131,20 @@ void save_webp(const char* filename, unsigned char* pixels, int width, int heigh
     free(rgba);
 }
 
-Vec3 sample_texture(const Texture* tex, float u, float v) {
+Vec3 sample_mesh_texture(const Mesh* mesh, float u, float v) {
     u = u - floorf(u);
     v = v - floorf(v);
-    int x = (int)(u * (tex->width - 1));
-    int y = (int)(v * (tex->height - 1));
-    int idx = (y * tex->width + x) * 4;
+    int x = (int)(u * (mesh->texture_width - 1));
+    int y = (int)(v * (mesh->texture_height - 1));
+    int idx = (y * mesh->texture_width + x) * 4;
     return (Vec3){
-        tex->data[idx] / 255.0f,
-        tex->data[idx + 1] / 255.0f,
-        tex->data[idx + 2] / 255.0f
+        mesh->texture_data[idx] / 255.0f,
+        mesh->texture_data[idx + 1] / 255.0f,
+        mesh->texture_data[idx + 2] / 255.0f
     };
 }
 
-void render(const Mesh* mesh, const Texture* texture, const Camera* camera,
+void render(const Mesh* mesh, const Camera* camera,
            unsigned char* pixels, int width, int height) {
     float aspect = (float)width / height;
 
@@ -161,7 +159,6 @@ void render(const Mesh* mesh, const Texture* texture, const Camera* camera,
             bool hit = false;
             Vec2 hit_uv = {0, 0};
 
-            // Mesh intersection testing
             for (size_t i = 0; i < mesh->triangle_count; i++) {
                 float t, u, v;
                 if (ray_triangle_intersect(ray, 
@@ -181,10 +178,9 @@ void render(const Mesh* mesh, const Texture* texture, const Camera* camera,
                 }
             }
 
-            // Write pixel color
             int idx = (y * width + x) * 3;
             if (hit) {
-                Vec3 color = sample_texture(texture, hit_uv.u, hit_uv.v);
+                Vec3 color = sample_mesh_texture(mesh, hit_uv.u, hit_uv.v);
                 pixels[idx] = (unsigned char)(color.x * 255.0f);
                 pixels[idx + 1] = (unsigned char)(color.y * 255.0f);
                 pixels[idx + 2] = (unsigned char)(color.z * 255.0f);
