@@ -27,7 +27,7 @@ int main() {
     Quad* quad = init_quad(0.0, 0.0, 0.0);
     
     // Initialize raytracer scene
-    Scene scene = create_scene(800, 600, 10000, 24, 1.0f);
+    Scene scene = create_scene(800, 600, 10000, 24, 0.9f);
     
     // Set up camera
     set_scene_camera(&scene,
