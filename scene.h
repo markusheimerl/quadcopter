@@ -5,9 +5,15 @@
 #include "bvh.h"
 
 typedef struct {
+    Vec3 direction;  // Direction the light is coming from
+    Vec3 color;      // Color and intensity of the light
+} DirectionalLight;
+
+typedef struct {
     Mesh* meshes;
     size_t mesh_count;
     Camera camera;
+    DirectionalLight light;
     unsigned char* pixels;
     int width;
     int height;
@@ -32,6 +38,11 @@ void add_mesh_to_scene(Scene* scene, Mesh mesh) {
 
 void set_scene_camera(Scene* scene, Vec3 position, Vec3 look_at, Vec3 up, float fov) {
     scene->camera = create_camera(position, look_at, up, fov);
+}
+
+void set_scene_light(Scene* scene, Vec3 direction, Vec3 color) {
+    scene->light.direction = vec3_normalize(vec3_negate(direction));
+    scene->light.color = color;
 }
 
 bool intersect_bvh(BVHNode* node, Ray ray, const Triangle* triangles,
@@ -98,6 +109,7 @@ void render_scene(Scene* scene) {
             float closest_t = INFINITY;
             bool hit = false;
             Vec2 hit_uv = {0, 0};
+            Vec3 hit_normal = {0, 0, 0};
             const Mesh* hit_mesh = NULL;
 
             // Check intersection with all meshes using BVH
@@ -113,21 +125,41 @@ void render_scene(Scene* scene) {
                     hit = true;
                     hit_mesh = current_mesh;
                     float w = 1.0f - u - v;
+
+                    // Interpolate texture coordinates
                     hit_uv.u = w * current_mesh->triangles[tri_idx].t0.u + 
                               u * current_mesh->triangles[tri_idx].t1.u + 
                               v * current_mesh->triangles[tri_idx].t2.u;
                     hit_uv.v = w * current_mesh->triangles[tri_idx].t0.v + 
                               u * current_mesh->triangles[tri_idx].t1.v + 
                               v * current_mesh->triangles[tri_idx].t2.v;
+
+                    // Interpolate normal
+                    hit_normal = vec3_normalize(vec3_add(
+                        vec3_add(
+                            vec3_mul(current_mesh->triangles[tri_idx].n0, w),
+                            vec3_mul(current_mesh->triangles[tri_idx].n1, u)
+                        ),
+                        vec3_mul(current_mesh->triangles[tri_idx].n2, v)
+                    ));
                 }
             }
 
             int idx = (y * scene->width + x) * 3;
             if (hit && hit_mesh) {
                 Vec3 color = sample_mesh_texture(hit_mesh, hit_uv.u, hit_uv.v);
-                scene->pixels[idx] = (unsigned char)(color.x * 255.0f);
-                scene->pixels[idx + 1] = (unsigned char)(color.y * 255.0f);
-                scene->pixels[idx + 2] = (unsigned char)(color.z * 255.0f);
+                
+                // Calculate diffuse lighting
+                float diffuse = fmaxf(vec3_dot(hit_normal, scene->light.direction), 0.2f);
+                
+                // Apply lighting
+                color = vec3_mul_vec3(color, scene->light.color);  // Multiply color by light color
+                color = vec3_mul(color, diffuse);                  // Scale by diffuse factor
+                
+                // Convert to RGB bytes
+                scene->pixels[idx] = (unsigned char)(fminf(color.x * 255.0f, 255.0f));
+                scene->pixels[idx + 1] = (unsigned char)(fminf(color.y * 255.0f, 255.0f));
+                scene->pixels[idx + 2] = (unsigned char)(fminf(color.z * 255.0f, 255.0f));
             } else {
                 scene->pixels[idx] = scene->pixels[idx + 1] = scene->pixels[idx + 2] = 50;
             }

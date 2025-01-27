@@ -12,6 +12,12 @@ int main() {
         60.0f
     );
     
+    // Set up light
+    set_scene_light(&scene,
+        (Vec3){-1.0f, -1.0f, -1.0f},  // Direction
+        (Vec3){1.0f, 1.0f, 1.0f}       // White light
+    );
+    
     // Add meshes to scene
     add_mesh_to_scene(&scene, create_mesh("drone.obj", "drone.webp"));
     add_mesh_to_scene(&scene, create_mesh("treasure.obj", "treasure.webp"));
