@@ -22,18 +22,20 @@ typedef struct {
     int current_frame;
     int width;
     int height;
+    float scale_factor;
     int duration_ms;
     int fps;
 } Scene;
 
-Scene create_scene(int width, int height, int duration_ms, int fps) {
+Scene create_scene(int width, int height, int duration_ms, int fps, float scale_factor) {
     int frame_count = (duration_ms * fps) / 1000;
-    
+
     Scene scene = {
         .meshes = NULL,
         .mesh_count = 0,
-        .width = width,
-        .height = height,
+        .width = (int)(width * scale_factor),
+        .height = (int)(height * scale_factor),
+        .scale_factor = scale_factor,
         .frame_count = frame_count,
         .current_frame = 0,
         .duration_ms = duration_ms,
@@ -227,36 +229,124 @@ void render_scene(Scene* scene) {
     }
 }
 
+// Cubic interpolation helper function
+float cubic_hermite(float A, float B, float C, float D, float t) {
+    float a = -A/2.0f + (3.0f*B)/2.0f - (3.0f*C)/2.0f + D/2.0f;
+    float b = A - (5.0f*B)/2.0f + 2.0f*C - D/2.0f;
+    float c = -A/2.0f + C/2.0f;
+    float d = B;
+
+    return a*t*t*t + b*t*t + c*t + d;
+}
+
+// Get pixel value safely with bounds checking
+uint32_t get_pixel_rgb(unsigned char* frame, int x, int y, int width, int height) {
+    if (x < 0) x = 0;
+    if (y < 0) y = 0;
+    if (x >= width) x = width - 1;
+    if (y >= height) y = height - 1;
+    
+    int idx = (y * width + x) * 3;
+    return (frame[idx] << 16) | (frame[idx + 1] << 8) | frame[idx + 2];
+}
+
+// Bicubic interpolation for a single pixel
+uint32_t bicubic_interpolate(unsigned char* frame, float x, float y, int width, int height) {
+    int x1 = (int)x;
+    int y1 = (int)y;
+    float fx = x - x1;
+    float fy = y - y1;
+
+    // Get 4x4 patch of pixels
+    uint32_t p[4][4];
+    for (int dy = -1; dy <= 2; dy++) {
+        for (int dx = -1; dx <= 2; dx++) {
+            p[dy+1][dx+1] = get_pixel_rgb(frame, x1 + dx, y1 + dy, width, height);
+        }
+    }
+
+    // Interpolate each color channel
+    float r[4], g[4], b[4];
+    
+    // Interpolate horizontally first
+    for (int i = 0; i < 4; i++) {
+        r[i] = cubic_hermite(
+            (p[i][0] >> 16) & 0xFF,
+            (p[i][1] >> 16) & 0xFF,
+            (p[i][2] >> 16) & 0xFF,
+            (p[i][3] >> 16) & 0xFF,
+            fx
+        );
+        g[i] = cubic_hermite(
+            (p[i][0] >> 8) & 0xFF,
+            (p[i][1] >> 8) & 0xFF,
+            (p[i][2] >> 8) & 0xFF,
+            (p[i][3] >> 8) & 0xFF,
+            fx
+        );
+        b[i] = cubic_hermite(
+            p[i][0] & 0xFF,
+            p[i][1] & 0xFF,
+            p[i][2] & 0xFF,
+            p[i][3] & 0xFF,
+            fx
+        );
+    }
+
+    // Interpolate vertically
+    int ri = (int)(cubic_hermite(r[0], r[1], r[2], r[3], fy) + 0.5f);
+    int gi = (int)(cubic_hermite(g[0], g[1], g[2], g[3], fy) + 0.5f);
+    int bi = (int)(cubic_hermite(b[0], b[1], b[2], b[3], fy) + 0.5f);
+
+    // Clamp results
+    ri = ri < 0 ? 0 : (ri > 255 ? 255 : ri);
+    gi = gi < 0 ? 0 : (gi > 255 ? 255 : gi);
+    bi = bi < 0 ? 0 : (bi > 255 ? 255 : bi);
+
+    return (0xFF << 24) | (ri << 16) | (gi << 8) | bi;
+}
+
 void save_scene(Scene* scene, const char* filename) {
+    // Calculate scaled dimensions
+    int scaled_width = (int)(scene->width / scene->scale_factor + 0.5f);
+    int scaled_height = (int)(scene->height / scene->scale_factor + 0.5f);
+
     // Prepare WebP animation configuration
     WebPAnimEncoderOptions anim_config;
     WebPAnimEncoderOptionsInit(&anim_config);
-    WebPAnimEncoder* enc = WebPAnimEncoderNew(scene->width, scene->height, &anim_config);
+    WebPAnimEncoder* enc = WebPAnimEncoderNew(scaled_width, scaled_height, &anim_config);
     
     // Configure each frame
     WebPConfig config;
     WebPConfigInit(&config);
     config.image_hint = WEBP_HINT_GRAPH;
     
-    // Prepare picture
+    // Prepare picture with scaled dimensions
     WebPPicture pic;
     WebPPictureInit(&pic);
-    pic.width = scene->width;
-    pic.height = scene->height;
+    pic.width = scaled_width;
+    pic.height = scaled_height;
     pic.use_argb = 1;
     WebPPictureAlloc(&pic);
 
     // Add each frame to the animation
     for (int frame = 0; frame < scene->frame_count; frame++) {
-        // Convert frame to ARGB format
-        for (int i = 0; i < scene->width * scene->height; i++) {
-            pic.argb[i] = (0xFF << 24) |                           // Alpha
-                         (scene->frames[frame][i * 3] << 16) |     // Red
-                         (scene->frames[frame][i * 3 + 1] << 8) |  // Green
-                         scene->frames[frame][i * 3 + 2];          // Blue
+        // Scale up the frame using bicubic interpolation
+        for (int y = 0; y < scaled_height; y++) {
+            for (int x = 0; x < scaled_width; x++) {
+                float src_x = x * (scene->width - 1.0f) / (scaled_width - 1.0f);
+                float src_y = y * (scene->height - 1.0f) / (scaled_height - 1.0f);
+                
+                pic.argb[y * scaled_width + x] = bicubic_interpolate(
+                    scene->frames[frame],
+                    src_x,
+                    src_y,
+                    scene->width,
+                    scene->height
+                );
+            }
         }
         
-        // Add frame to animation
         int timestamp = frame * (scene->duration_ms / scene->frame_count);
         WebPAnimEncoderAdd(enc, &pic, timestamp, &config);
     }
