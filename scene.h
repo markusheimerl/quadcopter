@@ -231,6 +231,7 @@ void save_scene(Scene* scene, const char* filename) {
     WebPConfigInit(&config);
     config.lossless = 1;
     config.method = 4;
+    config.quality = 100;
     config.image_hint = WEBP_HINT_GRAPH;
     
     // Prepare picture
