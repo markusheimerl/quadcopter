@@ -1,6 +1,6 @@
 CC = clang
 CFLAGS = -O3 -march=native -ffast-math -Wall -Wextra
-LDFLAGS = -flto -lm -lwebp
+LDFLAGS = -flto -lm -lwebp -lwebpmux
 
 TARGET = main.out
 SRC = main.c

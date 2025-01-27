@@ -1,8 +1,8 @@
 #include "scene.h"
 
 int main() {
-    // Create scene
-    Scene scene = create_scene(800, 600);
+    // Create scene with 60 frames
+    Scene scene = create_scene(800, 600, 60);
     
     // Set up camera
     set_scene_camera(&scene,
@@ -20,20 +20,38 @@ int main() {
     
     // Add meshes to scene
     Mesh drone = create_mesh("drone.obj", "drone.webp");
-    set_mesh_position(&drone, (Vec3){0.0f, 1.0f, 0.0f});
-    set_mesh_rotation(&drone, (Vec3){0.0f, M_PI / 4, 0.0f});  // Rotate 45 degrees around Y axis
     add_mesh_to_scene(&scene, drone);
     
     Mesh treasure = create_mesh("treasure.obj", "treasure.webp");
-    set_mesh_position(&treasure, (Vec3){1.0f, 0.0f, 1.0f});  // Move treasure to the right and forward
     add_mesh_to_scene(&scene, treasure);
     
     Mesh ground = create_mesh("ground.obj", "ground.webp");
-    set_mesh_position(&ground, (Vec3){0.0f, 0.0f, 0.0f});  // Keep ground at origin
+    set_mesh_position(&ground, (Vec3){0.0f, 0.0f, 0.0f});
     add_mesh_to_scene(&scene, ground);
 
-    // Render and save
-    render_scene(&scene);
+    // Render each frame
+    for (int frame = 0; frame < scene.frame_count; frame++) {
+        float t = frame * (2.0f * M_PI / 60.0f);
+        
+        // Animate drone
+        set_mesh_position(&scene.meshes[0], 
+            (Vec3){2.0f * cosf(t), 1.0f + 0.2f * sinf(2*t), 2.0f * sinf(t)});
+        set_mesh_rotation(&scene.meshes[0], 
+            (Vec3){0.1f * sinf(t), t, 0.1f * cosf(t)});
+        
+        // Animate treasure
+        set_mesh_position(&scene.meshes[1], 
+            (Vec3){1.0f, 0.1f * sinf(t), 1.0f});
+        set_mesh_rotation(&scene.meshes[1], 
+            (Vec3){0, t * 0.5f, 0});
+            
+        // Render frame
+        render_scene(&scene);
+        next_frame(&scene);
+        printf("Frame %d rendered\n", frame);
+    }
+
+    // Save all frames as animated WebP
     save_scene(&scene, "output.webp");
 
     // Cleanup

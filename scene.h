@@ -3,6 +3,8 @@
 
 #include "mesh.h"
 #include "bvh.h"
+#include <webp/encode.h>
+#include <webp/mux.h>
 
 typedef struct {
     Vec3 direction;  // Direction the light is coming from
@@ -14,19 +16,29 @@ typedef struct {
     size_t mesh_count;
     Camera camera;
     DirectionalLight light;
-    unsigned char* pixels;
+    unsigned char** frames;  // Array of frame buffers
+    int frame_count;        // Total number of frames
+    int current_frame;      // Current frame being rendered
     int width;
     int height;
 } Scene;
 
-Scene create_scene(int width, int height) {
+Scene create_scene(int width, int height, int frame_count) {
     Scene scene = {
         .meshes = NULL,
         .mesh_count = 0,
         .width = width,
         .height = height,
-        .pixels = malloc(width * height * 3)
+        .frame_count = frame_count,
+        .current_frame = 0,
+        .frames = malloc(frame_count * sizeof(unsigned char*))
     };
+    
+    // Allocate memory for each frame
+    for (int i = 0; i < frame_count; i++) {
+        scene.frames[i] = malloc(width * height * 3);
+    }
+    
     return scene;
 }
 
@@ -43,6 +55,13 @@ void set_scene_camera(Scene* scene, Vec3 position, Vec3 look_at, Vec3 up, float 
 void set_scene_light(Scene* scene, Vec3 direction, Vec3 color) {
     scene->light.direction = vec3_normalize(direction);
     scene->light.color = color;
+}
+
+void next_frame(Scene* scene) {
+    scene->current_frame++;
+    if (scene->current_frame >= scene->frame_count) {
+        scene->current_frame = scene->frame_count - 1;
+    }
 }
 
 bool intersect_bvh(BVHNode* node, Ray ray, const Triangle* triangles,
@@ -98,6 +117,7 @@ bool intersect_bvh(BVHNode* node, Ray ray, const Triangle* triangles,
 
 void render_scene(Scene* scene) {
     float aspect = (float)scene->width / scene->height;
+    unsigned char* current_frame = scene->frames[scene->current_frame];
 
     for (int y = 0; y < scene->height; y++) {
         for (int x = 0; x < scene->width; x++) {
@@ -186,43 +206,72 @@ void render_scene(Scene* scene) {
                 }
                 
                 // Apply lighting
-                color = vec3_mul_vec3(color, scene->light.color);  // Multiply color by light color
-                color = vec3_mul(color, diffuse);                  // Scale by diffuse factor
+                color = vec3_mul_vec3(color, scene->light.color);
+                color = vec3_mul(color, diffuse);
                 
                 // Convert to RGB bytes
-                scene->pixels[idx] = (unsigned char)(fminf(color.x * 255.0f, 255.0f));
-                scene->pixels[idx + 1] = (unsigned char)(fminf(color.y * 255.0f, 255.0f));
-                scene->pixels[idx + 2] = (unsigned char)(fminf(color.z * 255.0f, 255.0f));
+                current_frame[idx] = (unsigned char)(fminf(color.x * 255.0f, 255.0f));
+                current_frame[idx + 1] = (unsigned char)(fminf(color.y * 255.0f, 255.0f));
+                current_frame[idx + 2] = (unsigned char)(fminf(color.z * 255.0f, 255.0f));
             } else {
-                scene->pixels[idx] = scene->pixels[idx + 1] = scene->pixels[idx + 2] = 50;
+                current_frame[idx] = current_frame[idx + 1] = current_frame[idx + 2] = 50;
             }
         }
     }
 }
 
 void save_scene(Scene* scene, const char* filename) {
-    uint8_t* rgba = malloc(scene->width * scene->height * 4);
-    for (int i = 0; i < scene->width * scene->height; i++) {
-        rgba[i * 4] = scene->pixels[i * 3];
-        rgba[i * 4 + 1] = scene->pixels[i * 3 + 1];
-        rgba[i * 4 + 2] = scene->pixels[i * 3 + 2];
-        rgba[i * 4 + 3] = 255;
-    }
+    // Prepare WebP animation configuration
+    WebPAnimEncoderOptions anim_config;
+    WebPAnimEncoderOptionsInit(&anim_config);
+    WebPAnimEncoder* enc = WebPAnimEncoderNew(scene->width, scene->height, &anim_config);
+    
+    // Configure each frame
+    WebPConfig config;
+    WebPConfigInit(&config);
+    config.lossless = 1;
+    config.method = 4;
+    config.image_hint = WEBP_HINT_GRAPH;
+    
+    // Prepare picture
+    WebPPicture pic;
+    WebPPictureInit(&pic);
+    pic.width = scene->width;
+    pic.height = scene->height;
+    pic.use_argb = 1;
+    WebPPictureAlloc(&pic);
 
-    uint8_t* output;
-    size_t output_size = WebPEncodeRGBA(rgba, scene->width, scene->height, 
-                                       scene->width * 4, 75, &output);
-
-    if (output_size > 0) {
-        FILE* fp = fopen(filename, "wb");
-        if (fp) {
-            fwrite(output, output_size, 1, fp);
-            fclose(fp);
+    // Add each frame to the animation
+    for (int frame = 0; frame < scene->frame_count; frame++) {
+        // Convert frame to ARGB format
+        for (int i = 0; i < scene->width * scene->height; i++) {
+            pic.argb[i] = (0xFF << 24) |                           // Alpha
+                         (scene->frames[frame][i * 3] << 16) |     // Red
+                         (scene->frames[frame][i * 3 + 1] << 8) |  // Green
+                         scene->frames[frame][i * 3 + 2];          // Blue
         }
-        WebPFree(output);
+        
+        // Add frame to animation (50ms delay between frames)
+        WebPAnimEncoderAdd(enc, &pic, frame * 50, &config);
     }
-
-    free(rgba);
+    
+    // Finalize animation
+    WebPAnimEncoderAdd(enc, NULL, scene->frame_count * 50, NULL);
+    WebPData webp_data;
+    WebPDataInit(&webp_data);
+    WebPAnimEncoderAssemble(enc, &webp_data);
+    
+    // Save to file
+    FILE* fp = fopen(filename, "wb");
+    if (fp) {
+        fwrite(webp_data.bytes, webp_data.size, 1, fp);
+        fclose(fp);
+    }
+    
+    // Cleanup
+    WebPDataClear(&webp_data);
+    WebPAnimEncoderDelete(enc);
+    WebPPictureFree(&pic);
 }
 
 void destroy_scene(Scene* scene) {
@@ -230,9 +279,15 @@ void destroy_scene(Scene* scene) {
         destroy_mesh(&scene->meshes[i]);
     }
     free(scene->meshes);
-    free(scene->pixels);
+    
+    // Free all frame buffers
+    for (int i = 0; i < scene->frame_count; i++) {
+        free(scene->frames[i]);
+    }
+    free(scene->frames);
+    
     scene->meshes = NULL;
-    scene->pixels = NULL;
+    scene->frames = NULL;
     scene->mesh_count = 0;
 }
 
