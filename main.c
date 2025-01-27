@@ -1,6 +1,29 @@
 #include "scene.h"
 #include <time.h>
 
+void update_progress_bar(int frame, int total_frames, clock_t start_time) {
+    printf("\r[");
+    int barWidth = 30;
+    int pos = barWidth * (frame + 1) / total_frames;
+    
+    for (int i = 0; i < barWidth; i++) {
+        if (i < pos) printf("=");
+        else if (i == pos) printf(">");
+        else printf(" ");
+    }
+
+    float progress = (frame + 1.0f) / total_frames * 100.0f;
+    float elapsed = (clock() - start_time) / (float)CLOCKS_PER_SEC;
+    float estimated_total = elapsed * total_frames / (frame + 1);
+    float remaining = estimated_total - elapsed;
+
+    printf("] %.1f%% | Frame %d/%d | %.1fs elapsed | %.1fs remaining", 
+        progress, frame + 1, total_frames, elapsed, remaining);
+    fflush(stdout);
+
+    if (frame == total_frames - 1) printf("\n");
+}
+
 int main() {
     // Create scene with 60 frames
     Scene scene = create_scene(800, 600, 60);
@@ -30,6 +53,9 @@ int main() {
     set_mesh_position(&ground, (Vec3){0.0f, 0.0f, 0.0f});
     add_mesh_to_scene(&scene, ground);
 
+    // Initialize timer for progress bar
+    clock_t start_time = clock();
+
     // Render each frame
     for (int frame = 0; frame < scene.frame_count; frame++) {
         float t = frame * (2.0f * M_PI / 60.0f);
@@ -49,12 +75,15 @@ int main() {
         // Render frame
         render_scene(&scene);
         next_frame(&scene);
-        printf("Frame %d rendered\n", frame);
+        
+        // Update progress bar
+        update_progress_bar(frame, scene.frame_count, start_time);
     }
 
     // Save all frames as animated WebP
     char filename[64];
-    strftime(filename, sizeof(filename), "%Y%m%d_%H%M%S_rendering.webp", localtime(&(time_t){time(NULL)}));
+    strftime(filename, sizeof(filename), "%Y%m%d_%H%M%S_rendering.webp", 
+             localtime(&(time_t){time(NULL)}));
     save_scene(&scene, filename);
 
     // Cleanup
