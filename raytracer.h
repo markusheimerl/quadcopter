@@ -30,6 +30,12 @@ float vec3_length(Vec3 v) { return sqrtf(vec3_dot(v, v)); }
 Vec3 vec3_normalize(Vec3 v) { return vec3_div(v, vec3_length(v)); }
 Vec3 vec3_mul_vec3(Vec3 a, Vec3 b) { return (Vec3){a.x * b.x, a.y * b.y, a.z * b.z}; }
 
+Ray transform_ray(Ray ray, Vec3 translation) {
+    // Move ray origin in opposite direction of mesh translation
+    Vec3 new_origin = vec3_sub(ray.origin, translation);
+    return (Ray){new_origin, ray.direction};
+}
+
 bool ray_triangle_intersect(Ray ray, Vec3 v0, Vec3 v1, Vec3 v2, 
                           float* t, float* u_out, float* v_out) {
     const float EPSILON = 0.0000001f;

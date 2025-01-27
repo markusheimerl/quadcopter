@@ -119,7 +119,10 @@ void render_scene(Scene* scene) {
                 float u, v;
                 int tri_idx;
                 
-                if (intersect_bvh(current_mesh->bvh.root, ray, current_mesh->triangles,
+                // Transform ray to mesh local space
+                Ray transformed_ray = transform_ray(ray, current_mesh->transform.position);
+                
+                if (intersect_bvh(current_mesh->bvh.root, transformed_ray, current_mesh->triangles,
                                  &t, &u, &v, &tri_idx) && t < closest_t) {
                     closest_t = t;
                     hit = true;
@@ -152,7 +155,7 @@ void render_scene(Scene* scene) {
                 // Calculate diffuse lighting
                 float diffuse = 0.2f;  // Ambient light level
                 
-                // Calculate shadow ray origin (slightly offset from surface to prevent self-shadowing)
+                // Calculate hit point in world space using original ray
                 Vec3 hit_point = vec3_add(ray.origin, vec3_mul(ray.direction, closest_t));
                 Vec3 shadow_origin = vec3_add(hit_point, vec3_mul(hit_normal, 0.001f));
                 Ray shadow_ray = {shadow_origin, scene->light.direction};
@@ -165,7 +168,11 @@ void render_scene(Scene* scene) {
                     float shadow_u, shadow_v;
                     int shadow_tri_idx;
                     
-                    if (intersect_bvh(current_mesh->bvh.root, shadow_ray, 
+                    // Transform shadow ray to mesh local space
+                    Ray transformed_shadow_ray = transform_ray(shadow_ray, 
+                                                            current_mesh->transform.position);
+                    
+                    if (intersect_bvh(current_mesh->bvh.root, transformed_shadow_ray, 
                                     current_mesh->triangles,
                                     &shadow_t, &shadow_u, &shadow_v, 
                                     &shadow_tri_idx)) {

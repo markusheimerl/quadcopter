@@ -11,16 +11,22 @@
 #include "bvh.h"
 
 typedef struct {
+    Vec3 position;  // Translation vector
+} Transform;
+
+// Modify the Mesh struct
+typedef struct {
     Triangle* triangles;
     size_t triangle_count;
     unsigned char* texture_data;
     int texture_width;
     int texture_height;
     BVH bvh;
+    Transform transform;  // Add this line
 } Mesh;
 
 Mesh create_mesh(const char* obj_filename, const char* texture_filename) {
-    Mesh mesh = {NULL, 0, NULL, 0, 0, {}};
+    Mesh mesh = {NULL, 0, NULL, 0, 0, {}, {(Vec3){0, 0, 0}}};
     
     // Load geometry
     Vec3* vertices = malloc(1000000 * sizeof(Vec3));
@@ -109,6 +115,10 @@ cleanup:
     free(texcoords);
     free(normals);
     return mesh;
+}
+
+void set_mesh_position(Mesh* mesh, Vec3 position) {
+    mesh->transform.position = position;
 }
 
 void destroy_mesh(Mesh* mesh) {

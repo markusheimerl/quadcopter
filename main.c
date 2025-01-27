@@ -19,10 +19,18 @@ int main() {
     );
     
     // Add meshes to scene
-    add_mesh_to_scene(&scene, create_mesh("drone.obj", "drone.webp"));
-    add_mesh_to_scene(&scene, create_mesh("treasure.obj", "treasure.webp"));
-    add_mesh_to_scene(&scene, create_mesh("ground.obj", "ground.webp"));
+    Mesh drone = create_mesh("drone.obj", "drone.webp");
+    set_mesh_position(&drone, (Vec3){0.0f, 1.0f, 0.0f});  // Raise drone up by 1 unit
+    add_mesh_to_scene(&scene, drone);
     
+    Mesh treasure = create_mesh("treasure.obj", "treasure.webp");
+    set_mesh_position(&treasure, (Vec3){1.0f, 0.0f, 1.0f});  // Move treasure to the right and forward
+    add_mesh_to_scene(&scene, treasure);
+    
+    Mesh ground = create_mesh("ground.obj", "ground.webp");
+    set_mesh_position(&ground, (Vec3){0.0f, 0.0f, 0.0f});  // Keep ground at origin
+    add_mesh_to_scene(&scene, ground);
+
     // Render and save
     render_scene(&scene);
     save_scene(&scene, "output.webp");
