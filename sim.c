@@ -14,10 +14,14 @@
 int main() {
     srand(time(NULL));
     
-    // Initialize random target position
+    // Initialize random target position and yaw
     double target_x = (double)rand() / RAND_MAX * 4.0 - 2.0;  // Range: -2 to 2
     double target_y = 1.5;  // Fixed height
     double target_z = (double)rand() / RAND_MAX * 4.0 - 2.0;  // Range: -2 to 2
+    double target_yaw = (double)rand() / RAND_MAX * 2.0 * M_PI;  // Range: 0 to 2π
+    
+    printf("Target position: (%.2f, %.2f, %.2f) with yaw: %.2f rad\n", 
+           target_x, target_y, target_z, target_yaw);
     
     // Initialize quadcopter
     Quad* quad = init_quad(0.0, 0.0, 0.0);
@@ -67,7 +71,7 @@ int main() {
             double control_input[7] = {
                 target_x, target_y, target_z,  // Position
                 0.0, 0.0, 0.0,                 // Velocity
-                0.0                            // Yaw
+                target_yaw                     // Desired yaw angle
             };
             control_quad(quad, control_input);
             t_control = 0.0;
