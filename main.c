@@ -1,8 +1,8 @@
 #include "scene.h"
 
 int main() {
-    // Create scene with 4 seconds duration at 24 fps and a scaling factor
-    Scene scene = create_scene(800, 600, 8000, 24, 1.0f);
+    // Create scene with 4 seconds duration at 24 fps and a scaling factor of 0.9
+    Scene scene = create_scene(800, 600, 4000, 24, 0.9f);
     
     // Set up camera
     set_scene_camera(&scene,
