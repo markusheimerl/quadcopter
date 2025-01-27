@@ -146,47 +146,29 @@ Vec3 sample_texture(const Texture* tex, float u, float v) {
     };
 }
 
-void render(const Mesh* mesh, const Texture* texture, unsigned char* pixels, int width, int height) {
-    // Camera parameters
-    Vec3 camera_pos = {3.0f, 2.0f, -3.0f};
-    Vec3 look_at = {0.0f, 0.0f, 0.0f};
-    Vec3 up = {0.0f, 1.0f, 0.0f};
-    
-    // Calculate camera coordinate system
-    Vec3 forward = vec3_normalize(vec3_sub(look_at, camera_pos));
-    Vec3 right = vec3_normalize(vec3_cross(forward, up));
-    Vec3 camera_up = vec3_cross(right, forward);
-    
-    float fov = 60.0f;
-    float scale = tanf((fov * 0.5f) * M_PI / 180.0f);
+void render(const Mesh* mesh, const Texture* texture, const Camera* camera,
+           unsigned char* pixels, int width, int height) {
     float aspect = (float)width / height;
 
     for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
-            float ray_x = (2.0f * ((x + 0.5f) / width) - 1.0f) * aspect * scale;
-            float ray_y = (1.0f - 2.0f * ((y + 0.5f) / height)) * scale;
-
-            // Calculate ray direction using camera basis vectors
-            Vec3 ray_dir = vec3_normalize(vec3_add(
-                vec3_add(
-                    vec3_mul(right, ray_x),
-                    vec3_mul(camera_up, ray_y)
-                ),
-                forward
-            ));
-
-            Ray ray = {camera_pos, ray_dir};
+            Ray ray = get_camera_ray(camera, 
+                                   (x + 0.5f) / width, 
+                                   (y + 0.5f) / height, 
+                                   aspect);
+            
             float closest_t = INFINITY;
             bool hit = false;
             Vec2 hit_uv = {0, 0};
 
+            // Mesh intersection testing
             for (size_t i = 0; i < mesh->triangle_count; i++) {
                 float t, u, v;
                 if (ray_triangle_intersect(ray, 
-                                        mesh->triangles[i].v0,
-                                        mesh->triangles[i].v1,
-                                        mesh->triangles[i].v2,
-                                        &t, &u, &v) && t < closest_t) {
+                                         mesh->triangles[i].v0,
+                                         mesh->triangles[i].v1,
+                                         mesh->triangles[i].v2,
+                                         &t, &u, &v) && t < closest_t) {
                     closest_t = t;
                     hit = true;
                     float w = 1.0f - u - v;
@@ -199,6 +181,7 @@ void render(const Mesh* mesh, const Texture* texture, unsigned char* pixels, int
                 }
             }
 
+            // Write pixel color
             int idx = (y * width + x) * 3;
             if (hit) {
                 Vec3 color = sample_texture(texture, hit_uv.u, hit_uv.v);

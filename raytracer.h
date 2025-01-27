@@ -7,6 +7,7 @@
 typedef struct { float x, y, z; } Vec3;
 typedef struct { float u, v; } Vec2;
 typedef struct { Vec3 origin, direction; } Ray;
+typedef struct { Vec3 position; Vec3 look_at; Vec3 up; float fov; } Camera;
 
 Vec3 vec3_add(Vec3 a, Vec3 b) { return (Vec3){a.x + b.x, a.y + b.y, a.z + b.z}; }
 Vec3 vec3_sub(Vec3 a, Vec3 b) { return (Vec3){a.x - b.x, a.y - b.y, a.z - b.z}; }
@@ -48,6 +49,30 @@ bool ray_triangle_intersect(Ray ray, Vec3 v0, Vec3 v1, Vec3 v2,
     *u_out = u;
     *v_out = v;
     return *t > EPSILON;
+}
+
+Camera create_camera(Vec3 position, Vec3 look_at, Vec3 up, float fov) {
+    return (Camera){position, look_at, up, fov};
+}
+
+Ray get_camera_ray(const Camera* camera, float x, float y, float aspect) {
+    Vec3 forward = vec3_normalize(vec3_sub(camera->look_at, camera->position));
+    Vec3 right = vec3_normalize(vec3_cross(forward, camera->up));
+    Vec3 camera_up = vec3_cross(right, forward);
+    
+    float scale = tanf((camera->fov * 0.5f) * M_PI / 180.0f);
+    float ray_x = (2.0f * x - 1.0f) * aspect * scale;
+    float ray_y = (1.0f - 2.0f * y) * scale;
+
+    Vec3 ray_dir = vec3_normalize(vec3_add(
+        vec3_add(
+            vec3_mul(right, ray_x),
+            vec3_mul(camera_up, ray_y)
+        ),
+        forward
+    ));
+
+    return (Ray){camera->position, ray_dir};
 }
 
 #endif
