@@ -4,11 +4,12 @@
 #include "mesh.h"
 #include "bvh.h"
 #include <webp/encode.h>
+#include <time.h>
 #include <webp/mux.h>
 
 typedef struct {
-    Vec3 direction;  // Direction the light is coming from
-    Vec3 color;      // Color and intensity of the light
+    Vec3 direction;
+    Vec3 color;
 } DirectionalLight;
 
 typedef struct {
@@ -16,14 +17,18 @@ typedef struct {
     size_t mesh_count;
     Camera camera;
     DirectionalLight light;
-    unsigned char** frames;  // Array of frame buffers
-    int frame_count;        // Total number of frames
-    int current_frame;      // Current frame being rendered
+    unsigned char** frames;
+    int frame_count;
+    int current_frame;
     int width;
     int height;
+    int duration_ms;
+    int fps;
 } Scene;
 
-Scene create_scene(int width, int height, int frame_count) {
+Scene create_scene(int width, int height, int duration_ms, int fps) {
+    int frame_count = (duration_ms * fps) / 1000;
+    
     Scene scene = {
         .meshes = NULL,
         .mesh_count = 0,
@@ -31,6 +36,8 @@ Scene create_scene(int width, int height, int frame_count) {
         .height = height,
         .frame_count = frame_count,
         .current_frame = 0,
+        .duration_ms = duration_ms,
+        .fps = fps,
         .frames = malloc(frame_count * sizeof(unsigned char*))
     };
     
@@ -229,9 +236,6 @@ void save_scene(Scene* scene, const char* filename) {
     // Configure each frame
     WebPConfig config;
     WebPConfigInit(&config);
-    config.lossless = 1;
-    config.method = 4;
-    config.quality = 100;
     config.image_hint = WEBP_HINT_GRAPH;
     
     // Prepare picture
@@ -252,12 +256,13 @@ void save_scene(Scene* scene, const char* filename) {
                          scene->frames[frame][i * 3 + 2];          // Blue
         }
         
-        // Add frame to animation (50ms delay between frames)
-        WebPAnimEncoderAdd(enc, &pic, frame * 50, &config);
+        // Add frame to animation
+        int timestamp = frame * (scene->duration_ms / scene->frame_count);
+        WebPAnimEncoderAdd(enc, &pic, timestamp, &config);
     }
     
     // Finalize animation
-    WebPAnimEncoderAdd(enc, NULL, scene->frame_count * 50, NULL);
+    WebPAnimEncoderAdd(enc, NULL, scene->duration_ms, NULL);
     WebPData webp_data;
     WebPDataInit(&webp_data);
     WebPAnimEncoderAssemble(enc, &webp_data);
@@ -290,6 +295,29 @@ void destroy_scene(Scene* scene) {
     scene->meshes = NULL;
     scene->frames = NULL;
     scene->mesh_count = 0;
+}
+
+void update_progress_bar(int frame, int total_frames, clock_t start_time) {
+    printf("\r[");
+    int barWidth = 30;
+    int pos = barWidth * (frame + 1) / total_frames;
+    
+    for (int i = 0; i < barWidth; i++) {
+        if (i < pos) printf("=");
+        else if (i == pos) printf(">");
+        else printf(" ");
+    }
+
+    float progress = (frame + 1.0f) / total_frames * 100.0f;
+    float elapsed = (clock() - start_time) / (float)CLOCKS_PER_SEC;
+    float estimated_total = elapsed * total_frames / (frame + 1);
+    float remaining = estimated_total - elapsed;
+
+    printf("] %.1f%% | Frame %d/%d | %.1fs elapsed | %.1fs remaining", 
+        progress, frame + 1, total_frames, elapsed, remaining);
+    fflush(stdout);
+
+    if (frame == total_frames - 1) printf("\n");
 }
 
 #endif
