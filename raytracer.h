@@ -8,6 +8,10 @@ typedef struct { float x, y, z; } Vec3;
 typedef struct { float u, v; } Vec2;
 typedef struct { Vec3 origin, direction; } Ray;
 typedef struct { Vec3 position; Vec3 look_at; Vec3 up; float fov; } Camera;
+typedef struct {
+    Vec3 v0, v1, v2;      // Vertices
+    Vec2 t0, t1, t2;      // Texture coordinates
+} Triangle;
 
 Vec3 vec3_add(Vec3 a, Vec3 b) { return (Vec3){a.x + b.x, a.y + b.y, a.z + b.z}; }
 Vec3 vec3_sub(Vec3 a, Vec3 b) { return (Vec3){a.x - b.x, a.y - b.y, a.z - b.z}; }

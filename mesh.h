@@ -8,11 +8,7 @@
 #include <math.h>
 #include <webp/decode.h>
 #include <webp/encode.h>
-
-typedef struct {
-    Vec3 v0, v1, v2;      // Vertices
-    Vec2 t0, t1, t2;      // Texture coordinates
-} Triangle;
+#include "bvh.h"
 
 typedef struct {
     Triangle* triangles;
@@ -20,10 +16,11 @@ typedef struct {
     unsigned char* texture_data;
     int texture_width;
     int texture_height;
+    BVH bvh;
 } Mesh;
 
 Mesh create_mesh(const char* obj_filename, const char* texture_filename) {
-    Mesh mesh = {NULL, 0, NULL, 0, 0};
+    Mesh mesh = {NULL, 0, NULL, 0, 0, {}};
     
     // Load geometry
     Vec3* vertices = malloc(1000000 * sizeof(Vec3));
@@ -90,6 +87,8 @@ Mesh create_mesh(const char* obj_filename, const char* texture_filename) {
                                       &mesh.texture_height);
     free(file_data);
 
+    mesh.bvh = create_bvh(mesh.triangles, triangle_count);
+
     printf("Loaded %d vertices, %d texcoords, %d triangles\n", 
            vertex_count, texcoord_count, triangle_count);
 
@@ -102,6 +101,7 @@ cleanup:
 void destroy_mesh(Mesh* mesh) {
     if (mesh->triangles) free(mesh->triangles);
     if (mesh->texture_data) WebPFree(mesh->texture_data);
+    destroy_bvh(&mesh->bvh);
     mesh->triangles = NULL;
     mesh->texture_data = NULL;
     mesh->triangle_count = 0;

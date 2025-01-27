@@ -2,6 +2,7 @@
 #define SCENE_H
 
 #include "mesh.h"
+#include "bvh.h"
 
 typedef struct {
     Mesh* meshes;
@@ -33,6 +34,57 @@ void set_scene_camera(Scene* scene, Vec3 position, Vec3 look_at, Vec3 up, float 
     scene->camera = create_camera(position, look_at, up, fov);
 }
 
+bool intersect_bvh(BVHNode* node, Ray ray, const Triangle* triangles,
+                   float* t_out, float* u_out, float* v_out, int* tri_idx) {
+    if (!ray_aabb_intersect(ray, node->bounds)) return false;
+
+    bool hit = false;
+    float closest_t = *t_out;
+
+    if (node->left == NULL && node->right == NULL) {
+        // Leaf node - test all triangles
+        for (int i = 0; i < node->triangle_count; i++) {
+            float t, u, v;
+            if (ray_triangle_intersect(ray,
+                triangles[node->start_idx + i].v0,
+                triangles[node->start_idx + i].v1,
+                triangles[node->start_idx + i].v2,
+                &t, &u, &v) && t < closest_t) {
+                closest_t = t;
+                *t_out = t;
+                *u_out = u;
+                *v_out = v;
+                *tri_idx = node->start_idx + i;
+                hit = true;
+            }
+        }
+    } else {
+        // Internal node - recurse
+        float t1 = INFINITY, t2 = INFINITY;
+        float u1, v1, u2, v2;
+        int idx1, idx2;
+
+        bool hit1 = node->left ? intersect_bvh(node->left, ray, triangles, &t1, &u1, &v1, &idx1) : false;
+        bool hit2 = node->right ? intersect_bvh(node->right, ray, triangles, &t2, &u2, &v2, &idx2) : false;
+
+        if (hit1 && (!hit2 || t1 < t2)) {
+            *t_out = t1;
+            *u_out = u1;
+            *v_out = v1;
+            *tri_idx = idx1;
+            hit = true;
+        } else if (hit2) {
+            *t_out = t2;
+            *u_out = u2;
+            *v_out = v2;
+            *tri_idx = idx2;
+            hit = true;
+        }
+    }
+
+    return hit;
+}
+
 void render_scene(Scene* scene) {
     float aspect = (float)scene->width / scene->height;
 
@@ -48,27 +100,25 @@ void render_scene(Scene* scene) {
             Vec2 hit_uv = {0, 0};
             const Mesh* hit_mesh = NULL;
 
-            // Check intersection with all meshes
+            // Check intersection with all meshes using BVH
             for (size_t m = 0; m < scene->mesh_count; m++) {
                 const Mesh* current_mesh = &scene->meshes[m];
-                for (size_t i = 0; i < current_mesh->triangle_count; i++) {
-                    float t, u, v;
-                    if (ray_triangle_intersect(ray, 
-                                             current_mesh->triangles[i].v0,
-                                             current_mesh->triangles[i].v1,
-                                             current_mesh->triangles[i].v2,
-                                             &t, &u, &v) && t < closest_t) {
-                        closest_t = t;
-                        hit = true;
-                        hit_mesh = current_mesh;
-                        float w = 1.0f - u - v;
-                        hit_uv.u = w * current_mesh->triangles[i].t0.u + 
-                                  u * current_mesh->triangles[i].t1.u + 
-                                  v * current_mesh->triangles[i].t2.u;
-                        hit_uv.v = w * current_mesh->triangles[i].t0.v + 
-                                  u * current_mesh->triangles[i].t1.v + 
-                                  v * current_mesh->triangles[i].t2.v;
-                    }
+                float t = closest_t;
+                float u, v;
+                int tri_idx;
+                
+                if (intersect_bvh(current_mesh->bvh.root, ray, current_mesh->triangles,
+                                 &t, &u, &v, &tri_idx) && t < closest_t) {
+                    closest_t = t;
+                    hit = true;
+                    hit_mesh = current_mesh;
+                    float w = 1.0f - u - v;
+                    hit_uv.u = w * current_mesh->triangles[tri_idx].t0.u + 
+                              u * current_mesh->triangles[tri_idx].t1.u + 
+                              v * current_mesh->triangles[tri_idx].t2.u;
+                    hit_uv.v = w * current_mesh->triangles[tri_idx].t0.v + 
+                              u * current_mesh->triangles[tri_idx].t1.v + 
+                              v * current_mesh->triangles[tri_idx].t2.v;
                 }
             }
 
