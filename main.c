@@ -2,7 +2,7 @@
 
 int main() {
     // Create scene with 4 seconds duration at 24 fps and a scaling factor
-    Scene scene = create_scene(800, 600, 4000, 24, 0.9f);
+    Scene scene = create_scene(800, 600, 4000, 24, 1.0f);
     
     // Set up camera
     set_scene_camera(&scene,
@@ -44,7 +44,7 @@ int main() {
         
         // Animate treasure
         set_mesh_position(&scene.meshes[1], 
-            (Vec3){1.0f, 0.1f * sinf(t), 1.0f});
+            (Vec3){1.0f, 0.5f + 0.1f * sinf(t), 1.0f});
         set_mesh_rotation(&scene.meshes[1], 
             (Vec3){0, t * 0.5f, 0});
             
