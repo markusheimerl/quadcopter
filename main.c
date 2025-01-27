@@ -15,6 +15,7 @@ int main() {
     // Add meshes to scene
     add_mesh_to_scene(&scene, create_mesh("drone.obj", "drone.webp"));
     add_mesh_to_scene(&scene, create_mesh("treasure.obj", "treasure.webp"));
+    add_mesh_to_scene(&scene, create_mesh("ground.obj", "ground.webp"));
     
     // Render and save
     render_scene(&scene);
