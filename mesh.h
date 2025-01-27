@@ -1,122 +1,29 @@
+#ifndef MESH_H
+#define MESH_H
+
+#include "raytracer.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdbool.h>
 #include <math.h>
 #include <webp/decode.h>
 #include <webp/encode.h>
 
-// Basic types
-typedef struct { float x, y, z; } Vec3;
-typedef struct { float u, v; } Vec2;
-typedef struct { Vec3 origin, direction; } Ray;
 typedef struct {
     Vec3 v0, v1, v2;      // Vertices
     Vec2 t0, t1, t2;      // Texture coordinates
 } Triangle;
+
 typedef struct {
     Triangle* triangles;
     size_t triangle_count;
 } Mesh;
+
 typedef struct {
     unsigned char* data;
     int width, height;
 } Texture;
 
-// Vector operations
-Vec3 vec3_add(Vec3 a, Vec3 b) { return (Vec3){a.x + b.x, a.y + b.y, a.z + b.z}; }
-Vec3 vec3_sub(Vec3 a, Vec3 b) { return (Vec3){a.x - b.x, a.y - b.y, a.z - b.z}; }
-Vec3 vec3_mul(Vec3 a, float t) { return (Vec3){a.x * t, a.y * t, a.z * t}; }
-Vec3 vec3_div(Vec3 a, float t) { return vec3_mul(a, 1.0f/t); }
-float vec3_dot(Vec3 a, Vec3 b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
-Vec3 vec3_cross(Vec3 a, Vec3 b) {
-    return (Vec3){
-        a.y * b.z - a.z * b.y,
-        a.z * b.x - a.x * b.z,
-        a.x * b.y - a.y * b.x
-    };
-}
-float vec3_length(Vec3 v) { return sqrtf(vec3_dot(v, v)); }
-Vec3 vec3_normalize(Vec3 v) { return vec3_div(v, vec3_length(v)); }
-
-// Ray-triangle intersection using Möller–Trumbore algorithm
-bool ray_triangle_intersect(Ray ray, Triangle triangle, float* t, float* u_out, float* v_out) {
-    const float EPSILON = 0.0000001f;
-    Vec3 edge1 = vec3_sub(triangle.v1, triangle.v0);
-    Vec3 edge2 = vec3_sub(triangle.v2, triangle.v0);
-    Vec3 h = vec3_cross(ray.direction, edge2);
-    float a = vec3_dot(edge1, h);
-
-    if (a > -EPSILON && a < EPSILON) return false;
-
-    float f = 1.0f / a;
-    Vec3 s = vec3_sub(ray.origin, triangle.v0);
-    float u = f * vec3_dot(s, h);
-
-    if (u < 0.0f || u > 1.0f) return false;
-
-    Vec3 q = vec3_cross(s, edge1);
-    float v = f * vec3_dot(ray.direction, q);
-
-    if (v < 0.0f || u + v > 1.0f) return false;
-
-    *t = f * vec3_dot(edge2, q);
-    *u_out = u;
-    *v_out = v;
-    return *t > EPSILON;
-}
-
-// Load texture from webp
-Texture load_texture(const char* filename) {
-    Texture tex = {NULL, 0, 0};
-    FILE* fp = fopen(filename, "rb");
-    if (!fp) return tex;
-
-    // Get file size
-    fseek(fp, 0, SEEK_END);
-    size_t file_size = ftell(fp);
-    fseek(fp, 0, SEEK_SET);
-
-    // Read file data
-    uint8_t* file_data = malloc(file_size);
-    if (fread(file_data, 1, file_size, fp) != file_size) {
-        free(file_data);
-        fclose(fp);
-        return tex;
-    }
-    fclose(fp);
-
-    // Get WebP image features
-    WebPBitstreamFeatures features;
-    if (WebPGetFeatures(file_data, file_size, &features) != VP8_STATUS_OK) {
-        free(file_data);
-        return tex;
-    }
-
-    // Decode WebP
-    tex.width = features.width;
-    tex.height = features.height;
-    tex.data = WebPDecodeRGBA(file_data, file_size, &tex.width, &tex.height);
-
-    free(file_data);
-    return tex;
-}
-
-// Sample texture at UV coordinates
-Vec3 sample_texture(const Texture* tex, float u, float v) {
-    u = u - floorf(u);
-    v = v - floorf(v);
-    int x = (int)(u * (tex->width - 1));
-    int y = (int)(v * (tex->height - 1));
-    int idx = (y * tex->width + x) * 4;
-    return (Vec3){
-        tex->data[idx] / 255.0f,
-        tex->data[idx + 1] / 255.0f,
-        tex->data[idx + 2] / 255.0f
-    };
-}
-
-// Load OBJ file
 Mesh load_obj(const char* filename) {
     Vec3* vertices = malloc(1000000 * sizeof(Vec3));
     Vec2* texcoords = malloc(1000000 * sizeof(Vec2));
@@ -124,7 +31,10 @@ Mesh load_obj(const char* filename) {
     Mesh mesh = {malloc(1000000 * sizeof(Triangle)), 0};
 
     FILE* file = fopen(filename, "r");
-    if (!file) { fprintf(stderr, "Failed to open %s\n", filename); exit(1); }
+    if (!file) { 
+        fprintf(stderr, "Failed to open %s\n", filename); 
+        exit(1); 
+    }
 
     char line[256];
     while (fgets(line, sizeof(line), file)) {
@@ -162,6 +72,41 @@ Mesh load_obj(const char* filename) {
     return mesh;
 }
 
+Texture load_texture(const char* filename) {
+    Texture tex = {NULL, 0, 0};
+    FILE* fp = fopen(filename, "rb");
+    if (!fp) return tex;
+
+    // Get file size
+    fseek(fp, 0, SEEK_END);
+    size_t file_size = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+
+    // Read file data
+    uint8_t* file_data = malloc(file_size);
+    if (fread(file_data, 1, file_size, fp) != file_size) {
+        free(file_data);
+        fclose(fp);
+        return tex;
+    }
+    fclose(fp);
+
+    // Get WebP image features
+    WebPBitstreamFeatures features;
+    if (WebPGetFeatures(file_data, file_size, &features) != VP8_STATUS_OK) {
+        free(file_data);
+        return tex;
+    }
+
+    // Decode WebP
+    tex.width = features.width;
+    tex.height = features.height;
+    tex.data = WebPDecodeRGBA(file_data, file_size, &tex.width, &tex.height);
+
+    free(file_data);
+    return tex;
+}
+
 void save_webp(const char* filename, unsigned char* pixels, int width, int height) {
     // Convert RGB to RGBA (WebP encoder expects RGBA)
     uint8_t* rgba = malloc(width * height * 4);
@@ -188,7 +133,19 @@ void save_webp(const char* filename, unsigned char* pixels, int width, int heigh
     free(rgba);
 }
 
-// Render scene
+Vec3 sample_texture(const Texture* tex, float u, float v) {
+    u = u - floorf(u);
+    v = v - floorf(v);
+    int x = (int)(u * (tex->width - 1));
+    int y = (int)(v * (tex->height - 1));
+    int idx = (y * tex->width + x) * 4;
+    return (Vec3){
+        tex->data[idx] / 255.0f,
+        tex->data[idx + 1] / 255.0f,
+        tex->data[idx + 2] / 255.0f
+    };
+}
+
 void render(const Mesh* mesh, const Texture* texture, unsigned char* pixels, int width, int height) {
     // Camera parameters
     Vec3 camera_pos = {3.0f, 2.0f, -3.0f};
@@ -225,7 +182,11 @@ void render(const Mesh* mesh, const Texture* texture, unsigned char* pixels, int
 
             for (size_t i = 0; i < mesh->triangle_count; i++) {
                 float t, u, v;
-                if (ray_triangle_intersect(ray, mesh->triangles[i], &t, &u, &v) && t < closest_t) {
+                if (ray_triangle_intersect(ray, 
+                                        mesh->triangles[i].v0,
+                                        mesh->triangles[i].v1,
+                                        mesh->triangles[i].v2,
+                                        &t, &u, &v) && t < closest_t) {
                     closest_t = t;
                     hit = true;
                     float w = 1.0f - u - v;
@@ -251,24 +212,4 @@ void render(const Mesh* mesh, const Texture* texture, unsigned char* pixels, int
     }
 }
 
-int main() {
-    const int width = 800;
-    const int height = 600;
-    
-    Mesh mesh = load_obj("drone.obj");
-    Texture texture = load_texture("drone.webp");
-    if (!texture.data) {
-        fprintf(stderr, "Failed to load texture\n");
-        free(mesh.triangles);
-        return 1;
-    }
-
-    unsigned char* pixels = malloc(width * height * 3);
-    render(&mesh, &texture, pixels, width, height);
-    save_webp("output.webp", pixels, width, height);
-
-    free(mesh.triangles);
-    WebPFree(texture.data);
-    free(pixels);
-    return 0;
-}
+#endif
