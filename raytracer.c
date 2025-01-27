@@ -3,7 +3,8 @@
 #include <string.h>
 #include <stdbool.h>
 #include <math.h>
-#include <png.h>
+#include <webp/decode.h>
+#include <webp/encode.h>
 
 // Basic types
 typedef struct { float x, y, z; } Vec3;
@@ -65,41 +66,39 @@ bool ray_triangle_intersect(Ray ray, Triangle triangle, float* t, float* u_out, 
     return *t > EPSILON;
 }
 
-// Load texture from PNG
+// Load texture from webp
 Texture load_texture(const char* filename) {
     Texture tex = {NULL, 0, 0};
     FILE* fp = fopen(filename, "rb");
     if (!fp) return tex;
 
-    png_structp png = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
-    png_infop info = png_create_info_struct(png);
-    png_init_io(png, fp);
-    png_read_info(png, info);
+    // Get file size
+    fseek(fp, 0, SEEK_END);
+    size_t file_size = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
 
-    tex.width = png_get_image_width(png, info);
-    tex.height = png_get_image_height(png, info);
-    png_byte color_type = png_get_color_type(png, info);
-    png_byte bit_depth = png_get_bit_depth(png, info);
-
-    if (bit_depth == 16) png_set_strip_16(png);
-    if (color_type == PNG_COLOR_TYPE_PALETTE) png_set_palette_to_rgb(png);
-    if (color_type == PNG_COLOR_TYPE_GRAY && bit_depth < 8) png_set_expand_gray_1_2_4_to_8(png);
-    if (png_get_valid(png, info, PNG_INFO_tRNS)) png_set_tRNS_to_alpha(png);
-    if (color_type == PNG_COLOR_TYPE_RGB ||
-        color_type == PNG_COLOR_TYPE_GRAY ||
-        color_type == PNG_COLOR_TYPE_PALETTE) png_set_filler(png, 0xFF, PNG_FILLER_AFTER);
-    if (color_type == PNG_COLOR_TYPE_GRAY ||
-        color_type == PNG_COLOR_TYPE_GRAY_ALPHA) png_set_gray_to_rgb(png);
-
-    png_read_update_info(png, info);
-    tex.data = malloc(tex.height * tex.width * 4);
-    png_bytep* row_pointers = malloc(sizeof(png_bytep) * tex.height);
-    for(int y = 0; y < tex.height; y++) row_pointers[y] = tex.data + y * tex.width * 4;
-
-    png_read_image(png, row_pointers);
-    free(row_pointers);
-    png_destroy_read_struct(&png, &info, NULL);
+    // Read file data
+    uint8_t* file_data = malloc(file_size);
+    if (fread(file_data, 1, file_size, fp) != file_size) {
+        free(file_data);
+        fclose(fp);
+        return tex;
+    }
     fclose(fp);
+
+    // Get WebP image features
+    WebPBitstreamFeatures features;
+    if (WebPGetFeatures(file_data, file_size, &features) != VP8_STATUS_OK) {
+        free(file_data);
+        return tex;
+    }
+
+    // Decode WebP
+    tex.width = features.width;
+    tex.height = features.height;
+    tex.data = WebPDecodeRGBA(file_data, file_size, &tex.width, &tex.height);
+
+    free(file_data);
     return tex;
 }
 
@@ -163,25 +162,30 @@ Mesh load_obj(const char* filename) {
     return mesh;
 }
 
-// Save PNG file
-void save_png(const char* filename, unsigned char* pixels, int width, int height) {
-    FILE* fp = fopen(filename, "wb");
-    if (!fp) return;
-
-    png_structp png = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
-    png_infop info = png_create_info_struct(png);
-    png_init_io(png, fp);
-    png_set_IHDR(png, info, width, height, 8, PNG_COLOR_TYPE_RGB,
-                 PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
-    png_write_info(png, info);
-
-    for (int y = 0; y < height; y++) {
-        png_write_row(png, pixels + y * width * 3);
+void save_webp(const char* filename, unsigned char* pixels, int width, int height) {
+    // Convert RGB to RGBA (WebP encoder expects RGBA)
+    uint8_t* rgba = malloc(width * height * 4);
+    for (int i = 0; i < width * height; i++) {
+        rgba[i * 4] = pixels[i * 3];     // R
+        rgba[i * 4 + 1] = pixels[i * 3 + 1]; // G
+        rgba[i * 4 + 2] = pixels[i * 3 + 2]; // B
+        rgba[i * 4 + 3] = 255;           // A
     }
 
-    png_write_end(png, NULL);
-    png_destroy_write_struct(&png, &info);
-    fclose(fp);
+    // Encode WebP
+    uint8_t* output;
+    size_t output_size = WebPEncodeRGBA(rgba, width, height, width * 4, 75, &output);
+
+    if (output_size > 0) {
+        FILE* fp = fopen(filename, "wb");
+        if (fp) {
+            fwrite(output, output_size, 1, fp);
+            fclose(fp);
+        }
+        WebPFree(output);
+    }
+
+    free(rgba);
 }
 
 // Render scene
@@ -252,7 +256,7 @@ int main() {
     const int height = 600;
     
     Mesh mesh = load_obj("drone.obj");
-    Texture texture = load_texture("drone.png");
+    Texture texture = load_texture("drone.webp");
     if (!texture.data) {
         fprintf(stderr, "Failed to load texture\n");
         free(mesh.triangles);
@@ -261,10 +265,10 @@ int main() {
 
     unsigned char* pixels = malloc(width * height * 3);
     render(&mesh, &texture, pixels, width, height);
-    save_png("output.png", pixels, width, height);
+    save_webp("output.webp", pixels, width, height);
 
     free(mesh.triangles);
-    free(texture.data);
+    WebPFree(texture.data);
     free(pixels);
     return 0;
 }

@@ -1,6 +1,6 @@
 CC = clang
 CFLAGS = -O3 -march=native -ffast-math -Wall -Wextra
-LDFLAGS = -flto -lm -lpng
+LDFLAGS = -flto -lm -lwebp
 
 TARGET = raytracer.out
 SRC = raytracer.c
@@ -12,4 +12,4 @@ run: $(TARGET)
 	./$(TARGET)
 
 clean:
-	rm -f *.out output.png
+	rm -f *.out output.webp
