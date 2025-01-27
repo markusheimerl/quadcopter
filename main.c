@@ -20,7 +20,8 @@ int main() {
     
     // Add meshes to scene
     Mesh drone = create_mesh("drone.obj", "drone.webp");
-    set_mesh_position(&drone, (Vec3){0.0f, 1.0f, 0.0f});  // Raise drone up by 1 unit
+    set_mesh_position(&drone, (Vec3){0.0f, 1.0f, 0.0f});
+    set_mesh_rotation(&drone, (Vec3){0.0f, M_PI / 4, 0.0f});  // Rotate 45 degrees around Y axis
     add_mesh_to_scene(&scene, drone);
     
     Mesh treasure = create_mesh("treasure.obj", "treasure.webp");

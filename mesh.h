@@ -10,10 +10,6 @@
 #include <webp/encode.h>
 #include "bvh.h"
 
-typedef struct {
-    Vec3 position;  // Translation vector
-} Transform;
-
 // Modify the Mesh struct
 typedef struct {
     Triangle* triangles;
@@ -22,12 +18,22 @@ typedef struct {
     int texture_width;
     int texture_height;
     BVH bvh;
-    Transform transform;  // Add this line
+    Transform transform;
 } Mesh;
 
 Mesh create_mesh(const char* obj_filename, const char* texture_filename) {
-    Mesh mesh = {NULL, 0, NULL, 0, 0, {}, {(Vec3){0, 0, 0}}};
-    
+    Mesh mesh = {
+        .triangles = NULL,
+        .triangle_count = 0,
+        .texture_data = NULL,
+        .texture_width = 0,
+        .texture_height = 0,
+        .bvh = {0},
+        .transform = {
+            .position = {0, 0, 0},
+            .rotation = {0, 0, 0}
+        }
+    };
     // Load geometry
     Vec3* vertices = malloc(1000000 * sizeof(Vec3));
     Vec2* texcoords = malloc(1000000 * sizeof(Vec2));
@@ -119,6 +125,10 @@ cleanup:
 
 void set_mesh_position(Mesh* mesh, Vec3 position) {
     mesh->transform.position = position;
+}
+
+void set_mesh_rotation(Mesh* mesh, Vec3 rotation) {
+    mesh->transform.rotation = rotation;
 }
 
 void destroy_mesh(Mesh* mesh) {

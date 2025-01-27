@@ -120,7 +120,7 @@ void render_scene(Scene* scene) {
                 int tri_idx;
                 
                 // Transform ray to mesh local space
-                Ray transformed_ray = transform_ray(ray, current_mesh->transform.position);
+                Ray transformed_ray = transform_ray(ray, current_mesh->transform);
                 
                 if (intersect_bvh(current_mesh->bvh.root, transformed_ray, current_mesh->triangles,
                                  &t, &u, &v, &tri_idx) && t < closest_t) {
@@ -169,8 +169,7 @@ void render_scene(Scene* scene) {
                     int shadow_tri_idx;
                     
                     // Transform shadow ray to mesh local space
-                    Ray transformed_shadow_ray = transform_ray(shadow_ray, 
-                                                            current_mesh->transform.position);
+                    Ray transformed_shadow_ray = transform_ray(shadow_ray, current_mesh->transform);
                     
                     if (intersect_bvh(current_mesh->bvh.root, transformed_shadow_ray, 
                                     current_mesh->triangles,
