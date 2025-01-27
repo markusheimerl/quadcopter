@@ -12,4 +12,4 @@ run: $(TARGET)
 	./$(TARGET)
 
 clean:
-	rm -f *.out output.webp
+	rm -f *.out *_rendering.webp
