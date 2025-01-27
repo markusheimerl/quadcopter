@@ -174,6 +174,9 @@ void render_scene(Scene* scene) {
                         ),
                         vec3_mul(current_mesh->triangles[tri_idx].n2, v)
                     ));
+
+                    // Transform the interpolated normal according to the mesh's transformation
+                    hit_normal = transform_normal(hit_normal, hit_mesh->transform);
                 }
             }
 

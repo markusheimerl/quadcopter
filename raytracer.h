@@ -38,6 +38,23 @@ Ray transform_ray(Ray ray, Transform transform) {
     return (Ray){new_origin, vec3_normalize(new_direction)};
 }
 
+Vec3 transform_normal(Vec3 normal, Transform transform) {
+    // Create rotation matrices
+    Mat4 rot_x = mat4_rotation_x(transform.rotation.x);
+    Mat4 rot_y = mat4_rotation_y(transform.rotation.y);
+    Mat4 rot_z = mat4_rotation_z(transform.rotation.z);
+    
+    // Combine rotations
+    Mat4 rotation = mat4_multiply(rot_z,
+                    mat4_multiply(rot_y, rot_x));
+    
+    // Transform normal using only the rotation part
+    // Note: We use the transpose of the inverse for normal transformation
+    Mat4 normal_transform = mat4_transpose(mat4_inverse(rotation));
+    
+    return vec3_normalize(mat4_transform_vector(normal_transform, normal));
+}
+
 bool ray_triangle_intersect(Ray ray, Vec3 v0, Vec3 v1, Vec3 v2, 
                           float* t, float* u_out, float* v_out) {
     const float EPSILON = 0.0000001f;

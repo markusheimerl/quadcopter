@@ -239,4 +239,14 @@ Mat4 mat4_inverse(Mat4 m) {
     return result;
 }
 
+Mat4 mat4_transpose(Mat4 m) {
+    Mat4 result;
+    for (int i = 0; i < 4; i++) {
+        for (int j = 0; j < 4; j++) {
+            result.m[i][j] = m.m[j][i];
+        }
+    }
+    return result;
+}
+
 #endif
