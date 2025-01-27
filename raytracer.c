@@ -26,7 +26,6 @@ int main() {
     add_mesh_to_scene(&scene, treasure);
     
     Mesh ground = create_mesh("ground.obj", "ground.webp");
-    set_mesh_position(&ground, (Vec3){0.0f, 0.0f, 0.0f});
     add_mesh_to_scene(&scene, ground);
 
     // Initialize timer for progress bar
