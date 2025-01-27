@@ -150,7 +150,34 @@ void render_scene(Scene* scene) {
                 Vec3 color = sample_mesh_texture(hit_mesh, hit_uv.u, hit_uv.v);
                 
                 // Calculate diffuse lighting
-                float diffuse = fmaxf(vec3_dot(hit_normal, scene->light.direction), 0.2f);
+                float diffuse = 0.2f;  // Ambient light level
+                
+                // Calculate shadow ray origin (slightly offset from surface to prevent self-shadowing)
+                Vec3 hit_point = vec3_add(ray.origin, vec3_mul(ray.direction, closest_t));
+                Vec3 shadow_origin = vec3_add(hit_point, vec3_mul(hit_normal, 0.001f));
+                Ray shadow_ray = {shadow_origin, scene->light.direction};
+                
+                // Check if point is in shadow
+                bool in_shadow = false;
+                for (size_t m = 0; m < scene->mesh_count && !in_shadow; m++) {
+                    const Mesh* current_mesh = &scene->meshes[m];
+                    float shadow_t = INFINITY;
+                    float shadow_u, shadow_v;
+                    int shadow_tri_idx;
+                    
+                    if (intersect_bvh(current_mesh->bvh.root, shadow_ray, 
+                                    current_mesh->triangles,
+                                    &shadow_t, &shadow_u, &shadow_v, 
+                                    &shadow_tri_idx)) {
+                        in_shadow = true;
+                    }
+                }
+                
+                // Add direct lighting if not in shadow
+                if (!in_shadow) {
+                    diffuse = fmaxf(diffuse, 
+                        vec3_dot(hit_normal, scene->light.direction));
+                }
                 
                 // Apply lighting
                 color = vec3_mul_vec3(color, scene->light.color);  // Multiply color by light color
