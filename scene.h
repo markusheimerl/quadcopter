@@ -41,7 +41,7 @@ void set_scene_camera(Scene* scene, Vec3 position, Vec3 look_at, Vec3 up, float 
 }
 
 void set_scene_light(Scene* scene, Vec3 direction, Vec3 color) {
-    scene->light.direction = vec3_normalize(vec3_negate(direction));
+    scene->light.direction = vec3_normalize(direction);
     scene->light.color = color;
 }
 

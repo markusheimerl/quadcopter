@@ -6,7 +6,7 @@ int main() {
     
     // Set up camera
     set_scene_camera(&scene,
-        (Vec3){3.0f, 2.0f, -3.0f},
+        (Vec3){-3.0f, 3.0f, -3.0f},
         (Vec3){0.0f, 0.0f, 0.0f},
         (Vec3){0.0f, 1.0f, 0.0f},
         60.0f
@@ -14,7 +14,7 @@ int main() {
     
     // Set up light
     set_scene_light(&scene,
-        (Vec3){-1.0f, -1.0f, -1.0f},  // Direction
+        (Vec3){1.0f, 1.0f, -1.0f},     // Direction
         (Vec3){1.0f, 1.0f, 1.0f}       // White light
     );
     
