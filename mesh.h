@@ -25,7 +25,8 @@ Mesh create_mesh(const char* obj_filename, const char* texture_filename) {
     // Load geometry
     Vec3* vertices = malloc(1000000 * sizeof(Vec3));
     Vec2* texcoords = malloc(1000000 * sizeof(Vec2));
-    int vertex_count = 0, texcoord_count = 0, triangle_count = 0;
+    Vec3* normals = malloc(1000000 * sizeof(Vec3));
+    int vertex_count = 0, texcoord_count = 0, normal_count = 0, triangle_count = 0;
     mesh.triangles = malloc(1000000 * sizeof(Triangle));
 
     FILE* file = fopen(obj_filename, "r");
@@ -47,16 +48,27 @@ Mesh create_mesh(const char* obj_filename, const char* texture_filename) {
                 &texcoords[texcoord_count].u,
                 &texcoords[texcoord_count].v);
             texcoord_count++;
+        } else if (line[0] == 'v' && line[1] == 'n') {
+            sscanf(line + 3, "%f %f %f",
+                &normals[normal_count].x,
+                &normals[normal_count].y,
+                &normals[normal_count].z);
+            normal_count++;
         } else if (line[0] == 'f') {
-            int v1, v2, v3, t1, t2, t3;
-            sscanf(line + 2, "%d/%d/%*d %d/%d/%*d %d/%d/%*d",
-                &v1, &t1, &v2, &t2, &v3, &t3);
+            int v1, v2, v3, t1, t2, t3, n1, n2, n3;
+            sscanf(line + 2, "%d/%d/%d %d/%d/%d %d/%d/%d",
+                &v1, &t1, &n1,
+                &v2, &t2, &n2,
+                &v3, &t3, &n3);
             mesh.triangles[triangle_count].v0 = vertices[v1-1];
             mesh.triangles[triangle_count].v1 = vertices[v2-1];
             mesh.triangles[triangle_count].v2 = vertices[v3-1];
             mesh.triangles[triangle_count].t0 = texcoords[t1-1];
             mesh.triangles[triangle_count].t1 = texcoords[t2-1];
             mesh.triangles[triangle_count].t2 = texcoords[t3-1];
+            mesh.triangles[triangle_count].n0 = normals[n1-1];
+            mesh.triangles[triangle_count].n1 = normals[n2-1];
+            mesh.triangles[triangle_count].n2 = normals[n3-1];
             triangle_count++;
         }
     }
@@ -89,12 +101,13 @@ Mesh create_mesh(const char* obj_filename, const char* texture_filename) {
 
     mesh.bvh = create_bvh(mesh.triangles, triangle_count);
 
-    printf("Loaded %d vertices, %d texcoords, %d triangles\n", 
-           vertex_count, texcoord_count, triangle_count);
+    printf("Loaded %d vertices, %d texcoords, %d normals, %d triangles\n", 
+           vertex_count, texcoord_count, normal_count, triangle_count);
 
 cleanup:
     free(vertices);
     free(texcoords);
+    free(normals);
     return mesh;
 }
 
