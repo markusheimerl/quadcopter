@@ -48,7 +48,6 @@ int main() {
     add_mesh_to_scene(&scene, drone);
     
     Mesh ground = create_mesh("raytracer/ground.obj", "raytracer/ground.webp");
-    set_mesh_position(&ground, (Vec3){0.0f, 0.0f, 0.0f});
     add_mesh_to_scene(&scene, ground);
 
     // Initialize timers
