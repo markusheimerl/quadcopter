@@ -11,18 +11,31 @@ int main() {
         60.0f
     );
     
-    Mesh mesh = create_mesh("drone.obj", "drone.webp");
-    if (!mesh.triangles || !mesh.texture_data) {
-        fprintf(stderr, "Failed to load mesh or texture\n");
-        destroy_mesh(&mesh);
+    // Load both meshes
+    Mesh drone_mesh = create_mesh("drone.obj", "drone.webp");
+    Mesh treasure_mesh = create_mesh("treasure.obj", "treasure.webp");
+    
+    if (!drone_mesh.triangles || !drone_mesh.texture_data ||
+        !treasure_mesh.triangles || !treasure_mesh.texture_data) {
+        fprintf(stderr, "Failed to load meshes or textures\n");
+        destroy_mesh(&drone_mesh);
+        destroy_mesh(&treasure_mesh);
         return 1;
     }
 
     unsigned char* pixels = malloc(width * height * 3);
-    render(&mesh, &camera, pixels, width, height);
+    
+    // Create an array of meshes
+    Mesh meshes[] = {drone_mesh, treasure_mesh};
+    size_t mesh_count = sizeof(meshes) / sizeof(meshes[0]);
+    
+    // Render all meshes
+    render_scene(meshes, mesh_count, &camera, pixels, width, height);
     save_webp("output.webp", pixels, width, height);
 
-    destroy_mesh(&mesh);
+    // Cleanup
+    destroy_mesh(&drone_mesh);
+    destroy_mesh(&treasure_mesh);
     free(pixels);
     return 0;
 }
