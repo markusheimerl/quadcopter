@@ -50,4 +50,4 @@ Module.symvers
 Mkfile.old
 dkms.conf
 
-*_flight.webp
+# *_flight.webp
