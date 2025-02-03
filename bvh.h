@@ -79,7 +79,7 @@ bool ray_aabb_intersect(Ray ray, AABB box) {
 }
 
 BVHNode* create_bvh_node(Triangle* triangles, int start, int count) {
-    BVHNode* node = malloc(sizeof(BVHNode));
+    BVHNode* node = (BVHNode*)malloc(sizeof(BVHNode));
     node->start_idx = start;
     node->triangle_count = count;
     node->left = node->right = NULL;

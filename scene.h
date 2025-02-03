@@ -30,29 +30,28 @@ typedef struct {
 Scene create_scene(int width, int height, int duration_ms, int fps, float scale_factor) {
     int frame_count = (duration_ms * fps) / 1000;
 
-    Scene scene = {
-        .meshes = NULL,
-        .mesh_count = 0,
-        .width = (int)(width * scale_factor),
-        .height = (int)(height * scale_factor),
-        .scale_factor = scale_factor,
-        .frame_count = frame_count,
-        .current_frame = 0,
-        .duration_ms = duration_ms,
-        .fps = fps,
-        .frames = malloc(frame_count * sizeof(unsigned char*))
-    };
+    Scene scene;
+    scene.meshes = NULL;
+    scene.mesh_count = 0;
+    scene.width = (int)(width * scale_factor);
+    scene.height = (int)(height * scale_factor);
+    scene.scale_factor = scale_factor;
+    scene.frame_count = frame_count;
+    scene.current_frame = 0;
+    scene.duration_ms = duration_ms;
+    scene.fps = fps;
+    scene.frames = (unsigned char**)malloc(frame_count * sizeof(unsigned char*));
     
     // Allocate memory for each frame
     for (int i = 0; i < frame_count; i++) {
-        scene.frames[i] = malloc(width * height * 3);
+        scene.frames[i] = (unsigned char*)malloc(width * height * 3);
     }
     
     return scene;
 }
 
 void add_mesh_to_scene(Scene* scene, Mesh mesh) {
-    scene->meshes = realloc(scene->meshes, (scene->mesh_count + 1) * sizeof(Mesh));
+    scene->meshes = (Mesh*)realloc(scene->meshes, (scene->mesh_count + 1) * sizeof(Mesh));
     scene->meshes[scene->mesh_count] = mesh;
     scene->mesh_count++;
 }

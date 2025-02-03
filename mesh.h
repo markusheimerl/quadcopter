@@ -34,16 +34,19 @@ Mesh create_mesh(const char* obj_filename, const char* texture_filename) {
         }
     };
     // Load geometry
-    Vec3* vertices = malloc(1000000 * sizeof(Vec3));
-    Vec2* texcoords = malloc(1000000 * sizeof(Vec2));
-    Vec3* normals = malloc(1000000 * sizeof(Vec3));
+    Vec3* vertices = (Vec3*)malloc(1000000 * sizeof(Vec3));
+    Vec2* texcoords = (Vec2*)malloc(1000000 * sizeof(Vec2));
+    Vec3* normals = (Vec3*)malloc(1000000 * sizeof(Vec3));
     int vertex_count = 0, texcoord_count = 0, normal_count = 0, triangle_count = 0;
-    mesh.triangles = malloc(1000000 * sizeof(Triangle));
+    mesh.triangles = (Triangle*)malloc(1000000 * sizeof(Triangle));
 
     FILE* file = fopen(obj_filename, "r");
     if (!file) { 
         fprintf(stderr, "Failed to open %s\n", obj_filename); 
-        goto cleanup;
+        free(vertices);
+        free(texcoords);
+        free(normals);
+        return mesh;
     }
 
     char line[256];
@@ -90,18 +93,24 @@ Mesh create_mesh(const char* obj_filename, const char* texture_filename) {
     FILE* tex_file = fopen(texture_filename, "rb");
     if (!tex_file) {
         fprintf(stderr, "Failed to open texture %s\n", texture_filename);
-        goto cleanup;
+        free(vertices);
+        free(texcoords);
+        free(normals);
+        return mesh;
     }
 
     fseek(tex_file, 0, SEEK_END);
     size_t file_size = ftell(tex_file);
     fseek(tex_file, 0, SEEK_SET);
 
-    uint8_t* file_data = malloc(file_size);
+    uint8_t* file_data = (uint8_t*)malloc(file_size);
     if (fread(file_data, 1, file_size, tex_file) != file_size) {
         free(file_data);
         fclose(tex_file);
-        goto cleanup;
+        free(vertices);
+        free(texcoords);
+        free(normals);
+        return mesh;
     }
     fclose(tex_file);
 
@@ -115,7 +124,6 @@ Mesh create_mesh(const char* obj_filename, const char* texture_filename) {
     printf("Loaded %d vertices, %d texcoords, %d normals, %d triangles\n", 
            vertex_count, texcoord_count, normal_count, triangle_count);
 
-cleanup:
     free(vertices);
     free(texcoords);
     free(normals);

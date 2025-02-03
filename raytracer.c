@@ -57,8 +57,8 @@ int main() {
 
     // Save all frames as animated WebP
     char filename[64];
-    strftime(filename, sizeof(filename), "%Y%m%d_%H%M%S_rendering.webp", 
-             localtime(&(time_t){time(NULL)}));
+    time_t current_time = time(NULL);
+    strftime(filename, sizeof(filename), "%Y%m%d_%H%M%S_rendering.webp", localtime(&current_time));
     save_scene(&scene, filename);
 
     // Cleanup
