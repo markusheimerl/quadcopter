@@ -198,12 +198,6 @@ typedef struct {
     double R_W_B[9];
     double inertia[3];
     double omega_next[4];
-
-    // Sensor variables
-    double linear_acceleration_B_s[3]; // Accelerometer
-    double angular_velocity_B_s[3]; // Gyroscope
-    double accel_bias[3];
-    double gyro_bias[3];
 } Quad;
 
 void reset_quad(Quad* q, double x, double y, double z) {
@@ -214,12 +208,6 @@ void reset_quad(Quad* q, double x, double y, double z) {
     memcpy(q->R_W_B, (double[]){1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0}, 9 * sizeof(double));
     memcpy(q->inertia, (double[]){0.01, 0.02, 0.01}, 3 * sizeof(double));
     memcpy(q->omega_next, (double[]){0.0, 0.0, 0.0, 0.0}, 4 * sizeof(double));
-    memcpy(q->linear_acceleration_B_s, (double[]){0.0, 0.0, 0.0}, 3 * sizeof(double));
-    memcpy(q->angular_velocity_B_s, (double[]){0.0, 0.0, 0.0}, 3 * sizeof(double));
-    for(int i = 0; i < 3; i++) {
-        q->accel_bias[i] = (2.0*((double)rand()/RAND_MAX) - 1.0) * ACCEL_BIAS;
-        q->gyro_bias[i] = (2.0*((double)rand()/RAND_MAX) - 1.0) * GYRO_BIAS;
-    }
 }
 
 Quad* init_quad(double x, double y, double z) {
@@ -230,11 +218,6 @@ Quad* init_quad(double x, double y, double z) {
 
 void print_quad(Quad* q) {
     printf("\rP: %.2f %.2f %.2f | R: %.2f %.2f %.2f %.2f", q->linear_position_W[0], q->linear_position_W[1], q->linear_position_W[2], q->omega[0], q->omega[1], q->omega[2], q->omega[3]);
-}
-
-static double gaussian_noise(double stddev) {
-    double u1 = (double)rand() / RAND_MAX, u2 = (double)rand() / RAND_MAX;
-    return sqrt(-2.0 * log(u1)) * cos(2.0 * M_PI * u2) * stddev;
 }
 
 void update_quad(Quad* q, double dt) {
@@ -312,19 +295,7 @@ void update_quad(Quad* q, double dt) {
     // 9. Ensure rotation matrix stays orthonormal
     orthonormalize_rotation_matrix(q->R_W_B);
 
-    // 10. Calculate sensor readings with noise
-    double linear_acceleration_B[3], R_B_W[9];
-    transpMat3f(q->R_W_B, R_B_W);
-    multMatVec3f(R_B_W, linear_acceleration_W, linear_acceleration_B);
-    double gravity_B[3];
-    multMatVec3f(R_B_W, (double[3]){0, GRAVITY, 0}, gravity_B);
-    subVec3f(linear_acceleration_B, gravity_B, linear_acceleration_B);
-    for(int i = 0; i < 3; i++) {
-        q->linear_acceleration_B_s[i] = linear_acceleration_B[i] + gaussian_noise(ACCEL_NOISE_STDDEV) + q->accel_bias[i];
-        q->angular_velocity_B_s[i] = q->angular_velocity_B[i] + gaussian_noise(GYRO_NOISE_STDDEV) + q->gyro_bias[i];
-    }
-
-    // 11. Update rotor speeds
+    // 10. Update rotor speeds
     for(int i = 0; i < 4; i++) {
         q->omega[i] = fmax(OMEGA_MIN, fmin(OMEGA_MAX, q->omega_next[i]));
     }
