@@ -185,7 +185,6 @@ void orthonormalize_rotation_matrix(double* R) {
 #define K_W 0.6
 
 typedef struct {
-    // State variables
     double omega[4];
     double linear_position_W[3];
     double linear_velocity_W[3];
@@ -205,7 +204,7 @@ void reset_quad(Quad* q, double x, double y, double z) {
     memcpy(q->omega_next, (double[]){0.0, 0.0, 0.0, 0.0}, 4 * sizeof(double));
 }
 
-Quad* init_quad(double x, double y, double z) {
+Quad* create_quad(double x, double y, double z) {
     Quad* quad = malloc(sizeof(Quad));
     reset_quad(quad, x, y, z);
     return quad;

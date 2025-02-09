@@ -24,7 +24,7 @@ int main() {
            target_x, target_y, target_z, target_yaw);
     
     // Initialize quadcopter
-    Quad* quad = init_quad(0.0, 0.0, 0.0);
+    Quad* quad = create_quad(0.0, 0.0, 0.0);
     
     // Initialize raytracer scene
     Scene scene = create_scene(400, 300, 10000, 24, 0.4f);
