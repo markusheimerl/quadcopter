@@ -212,7 +212,16 @@ Quad* init_quad(double x, double y, double z) {
 }
 
 void update_quad(Quad* q, double dt) {
-    // 1. Declare arrays and calculate rotor forces/moments
+    // State variables:
+    // p ∈ ℝ³     Position in world frame
+    // v ∈ ℝ³     Velocity in world frame
+    // R ∈ SO(3)  Rotation matrix from body to world
+    // ω ∈ ℝ³     Angular velocity in body frame
+    // ω_i ∈ ℝ    Rotor speeds
+
+    // Rotor forces and moments:
+    // f_i = k_f * |ω_i| * ω_i    (thrust force)
+    // m_i = k_m * |ω_i| * ω_i    (drag moment)
     double f[4], m[4];
     for(int i = 0; i < 4; i++) {
         double omega_sq = q->omega[i] * fabs(q->omega[i]);
@@ -220,73 +229,85 @@ void update_quad(Quad* q, double dt) {
         m[i] = K_M * omega_sq;
     }
 
-    // 2. Calculate total thrust force in body frame (only y component is non-zero)
-    double f_B_thrust[3] = {0, f[0] + f[1] + f[2] + f[3], 0};
-
-    // 3. Initialize with drag torque (only y component is non-zero)
+    // Net thrust and torques:
+    // T = Σf_i
+    // τ = Σ(r_i × F_i) + τ_drag
+    double thrust = f[0] + f[1] + f[2] + f[3];
     double tau_B[3] = {0, m[0] - m[1] + m[2] - m[3], 0};
-
-    // 4. Add thrust torques
+    
+    const double r[4][3] = {
+        {-L, 0,  L},  // Rotor 0
+        { L, 0,  L},  // Rotor 1
+        { L, 0, -L},  // Rotor 2
+        {-L, 0, -L}   // Rotor 3
+    };
+    
     for(int i = 0; i < 4; i++) {
         double f_vector[3] = {0, f[i], 0};
         double tau_thrust[3];
-        crossVec3f((double [4][3]){{-L, 0,  L}, { L, 0,  L}, { L, 0, -L}, {-L, 0, -L}}[i], f_vector, tau_thrust);
+        crossVec3f(r[i], f_vector, tau_thrust);
         addVec3f(tau_B, tau_thrust, tau_B);
     }
 
-    // 5. Transform thrust to world frame and calculate linear acceleration
+    // Linear dynamics:
+    // p̈ = 1/m * F_W + [0; -g; 0]
+    // where F_W = R_W_B * [0; T; 0]
+    double f_B_thrust[3] = {0, thrust, 0};
     double f_thrust_W[3];
     multMatVec3f(q->R_W_B, f_B_thrust, f_thrust_W);
-    
+
     double linear_acceleration_W[3];
     for(int i = 0; i < 3; i++) {
         linear_acceleration_W[i] = f_thrust_W[i] / MASS;
     }
-    linear_acceleration_W[1] -= GRAVITY;  // Add gravity
+    linear_acceleration_W[1] -= GRAVITY;
 
-    // 6. Calculate angular acceleration
-    double I_mat[9];
-    vecToDiagMat3f(q->inertia, I_mat);
-    
-    double h_B[3];
-    multMatVec3f(I_mat, q->angular_velocity_B, h_B);
-
-    double w_cross_h[3];
-    crossVec3f(q->angular_velocity_B, h_B, w_cross_h);
-
-    double angular_acceleration_B[3];
-    for(int i = 0; i < 3; i++) {
-        angular_acceleration_B[i] = (-w_cross_h[i] + tau_B[i]) / q->inertia[i];
-    }
-
-    // 7. Update states with Euler integration
+    // State evolution:
+    // v(t+dt) = v(t) + dt * v̇(t)
+    // p(t+dt) = p(t) + dt * v(t+dt)
     for(int i = 0; i < 3; i++) {
         q->linear_velocity_W[i] += dt * linear_acceleration_W[i];
         q->linear_position_W[i] += dt * q->linear_velocity_W[i];
-        q->angular_velocity_B[i] += dt * angular_acceleration_B[i];
     }
 
-    // Ensure the quadcopter doesn't go below ground level
     if (q->linear_position_W[1] < 0.0) q->linear_position_W[1] = 0.0;
 
-    // 8. Update rotation matrix
+    // Angular dynamics:
+    // ω̇ = I⁻¹(τ_B - ω × (Iω))
+    double I_mat[9];
+    vecToDiagMat3f(q->inertia, I_mat);
+    
+    double h_B[3], w_cross_h[3];
+    multMatVec3f(I_mat, q->angular_velocity_B, h_B);
+    crossVec3f(q->angular_velocity_B, h_B, w_cross_h);
+
+    // State evolution (Euler integration):
+    // ω(t+dt) = ω(t) + dt * ω̇(t)
+    for(int i = 0; i < 3; i++) {
+        double angular_acc = (-w_cross_h[i] + tau_B[i]) / q->inertia[i];
+        q->angular_velocity_B[i] += dt * angular_acc;
+    }
+
+    // Rotation dynamics:
+    // Ṙ = R[ω]ₓ
+    // where [ω]ₓ is the skew-symmetric matrix:
+    // [ω]ₓ = [ 0   -ω₃   ω₂ ]
+    //        [ ω₃   0   -ω₁ ]
+    //        [-ω₂   ω₁   0  ]
     double w_hat[9];
     so3hat(q->angular_velocity_B, w_hat);
-
     double R_dot[9];
     multMat3f(q->R_W_B, w_hat, R_dot);
 
+    // State evolution (Euler integration):
+    // R(t+dt) = R(t) + dt * Ṙ(t)
     double R_dot_scaled[9];
     multScalMat3f(dt, R_dot, R_dot_scaled);
-
-    double R_new[9];
-    addMat3f(q->R_W_B, R_dot_scaled, R_new);
-    for (int i = 0; i < 9; i++) q->R_W_B[i] = R_new[i];
-
-    // 9. Ensure rotation matrix stays orthonormal
+    addMat3f(q->R_W_B, R_dot_scaled, q->R_W_B);
     orthonormalize_rotation_matrix(q->R_W_B);
 
-    // 10. Update rotor speeds
+    // Rotor speed update with saturation:
+    // ω_i(t+dt) = clamp(ω_i_next, ω_min, ω_max)
     for(int i = 0; i < 4; i++) {
         q->omega[i] = fmax(OMEGA_MIN, fmin(OMEGA_MAX, q->omega_next[i]));
     }
