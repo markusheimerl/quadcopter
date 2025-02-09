@@ -179,11 +179,6 @@ void orthonormalize_rotation_matrix(double* R) {
 #define OMEGA_MIN 30.0
 #define OMEGA_MAX 70.0
 
-#define ACCEL_NOISE_STDDEV 0.1
-#define GYRO_NOISE_STDDEV 0.01
-#define ACCEL_BIAS 0.05
-#define GYRO_BIAS 0.005
-
 #define K_P 0.2
 #define K_V 0.6
 #define K_R 0.6
@@ -214,10 +209,6 @@ Quad* init_quad(double x, double y, double z) {
     Quad* quad = malloc(sizeof(Quad));
     reset_quad(quad, x, y, z);
     return quad;
-}
-
-void print_quad(Quad* q) {
-    printf("\rP: %.2f %.2f %.2f | R: %.2f %.2f %.2f %.2f", q->linear_position_W[0], q->linear_position_W[1], q->linear_position_W[2], q->omega[0], q->omega[1], q->omega[2], q->omega[3]);
 }
 
 void update_quad(Quad* q, double dt) {
