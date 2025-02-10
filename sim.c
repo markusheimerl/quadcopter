@@ -106,6 +106,9 @@ int main() {
         t_render += DT_PHYSICS;
     }
 
+    printf("Final position: (%.2f, %.2f, %.2f)\n", 
+        quad->linear_position_W[0], quad->linear_position_W[1], quad->linear_position_W[2]);
+
     // Save animation
     char filename[64];
     strftime(filename, sizeof(filename), "%Y%m%d_%H%M%S_flight.webp", 
