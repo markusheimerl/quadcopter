@@ -312,7 +312,7 @@ void update_quad(Quad* q, double dt) {
     }
 }
 
-void control_quad(Quad* q, double* control_input) {
+void control_quad(Quad* q, const double* control_input) {
     // 1. Calculate position and velocity errors
     double error_p[3], error_v[3];
     subVec3f(q->linear_position_W, (double[]){control_input[0], control_input[1], control_input[2]}, error_p);
@@ -336,7 +336,7 @@ void control_quad(Quad* q, double* control_input) {
     double z_W_B[3];
     double y_body[3] = {0, 1, 0};
     multMatVec3f(q->R_W_B, y_body, z_W_B);
-    control_input[0] = dotVec3f(z_W_d, z_W_B);
+    double thrust = dotVec3f(z_W_d, z_W_B);
 
     // 4. Calculate desired rotation matrix
     double x_tilde_d_W[3] = {sin(control_input[6]), 0.0, cos(control_input[6])};
@@ -422,7 +422,7 @@ void control_quad(Quad* q, double* control_input) {
     double F_bar_inv[16];
     inv4Mat4f(F_bar, F_bar_inv);
     double omega_sign_square[4];
-    multMatVec4f(F_bar_inv, (double[]){control_input[0], tau_B_control[0], tau_B_control[1], tau_B_control[2]}, omega_sign_square);
+    multMatVec4f(F_bar_inv, (double[]){thrust, tau_B_control[0], tau_B_control[1], tau_B_control[2]}, omega_sign_square);
 
     for(int i = 0; i < 4; i++) {
         q->omega_next[i] = sqrt(fabs(omega_sign_square[i]));
