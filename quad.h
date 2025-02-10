@@ -205,7 +205,7 @@ void reset_quad(Quad* q, double x, double y, double z) {
 }
 
 Quad* create_quad(double x, double y, double z) {
-    Quad* quad = malloc(sizeof(Quad));
+    Quad* quad = (Quad*)malloc(sizeof(Quad));
     reset_quad(quad, x, y, z);
     return quad;
 }
