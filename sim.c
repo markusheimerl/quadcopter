@@ -10,24 +10,28 @@
 #define DT_PHYSICS  (1.0 / 1000.0)
 #define DT_CONTROL  (1.0 / 60.0)
 #define DT_RENDER   (1.0 / 24.0)
+#define SIM_TIME    10.0  // Simulation duration in seconds
 
 int main() {
     srand(time(NULL));
     
     // Initialize random target position and yaw
-    double target_x = (double)rand() / RAND_MAX * 4.0 - 2.0;  // Range: -2 to 2
-    double target_y = 1.5;  // Fixed height
-    double target_z = (double)rand() / RAND_MAX * 4.0 - 2.0;  // Range: -2 to 2
-    double target_yaw = (double)rand() / RAND_MAX * 2.0 * M_PI;  // Range: 0 to 2π
+    double target[7] = {
+        (double)rand() / RAND_MAX * 4.0 - 2.0,    // x: [-2,2]
+        (double)rand() / RAND_MAX * 2.0 + 0.5,    // y: [0.5,2.5]
+        (double)rand() / RAND_MAX * 4.0 - 2.0,    // z: [-2,2]
+        0.0, 0.0, 0.0,                            // Zero velocity target
+        (double)rand() / RAND_MAX * 2.0 * M_PI    // yaw: [0,2π]
+    };
     
     printf("Target position: (%.2f, %.2f, %.2f) with yaw: %.2f rad\n", 
-           target_x, target_y, target_z, target_yaw);
+           target[0], target[1], target[2], target[6]);
     
     // Initialize quadcopter
     Quad* quad = create_quad(0.0, 0.0, 0.0);
     
     // Initialize raytracer scene
-    Scene scene = create_scene(400, 300, 10000, 24, 0.4f);
+    Scene scene = create_scene(400, 300, (int)(SIM_TIME * 1000), 24, 0.4f);
     
     // Set up camera
     set_scene_camera(&scene,
@@ -54,11 +58,10 @@ int main() {
     double t_physics = 0.0;
     double t_control = 0.0;
     double t_render = 0.0;
-    int frame = 0;
     clock_t start_time = clock();
 
     // Main simulation loop
-    while (frame < scene.frame_count) {
+    for (int t = 0; t < (int)(SIM_TIME / DT_PHYSICS); t++) {
         // Physics update
         if (t_physics >= DT_PHYSICS) {
             update_quad(quad, DT_PHYSICS);
@@ -67,12 +70,7 @@ int main() {
         
         // Control update
         if (t_control >= DT_CONTROL) {
-            double control_input[7] = {
-                target_x, target_y, target_z,  // Position
-                0.0, 0.0, 0.0,                 // Velocity
-                target_yaw                     // Desired yaw angle
-            };
-            control_quad(quad, control_input);
+            control_quad(quad, target);
             t_control = 0.0;
         }
         
@@ -84,21 +82,21 @@ int main() {
                        (float)quad->linear_position_W[1], 
                        (float)quad->linear_position_W[2]});
             
-            // Convert rotation matrix to Euler angles for visualization
-            float roll = atan2f(quad->R_W_B[7], quad->R_W_B[8]);
-            float pitch = asinf(-quad->R_W_B[6]);
-            float yaw = atan2f(quad->R_W_B[3], quad->R_W_B[0]);
-            
-            set_mesh_rotation(&scene.meshes[0], (Vec3){roll, pitch, yaw});
+            set_mesh_rotation(&scene.meshes[0], 
+                (Vec3){
+                    atan2f(quad->R_W_B[7], quad->R_W_B[8]),  // roll
+                    asinf(-quad->R_W_B[6]),                  // pitch
+                    atan2f(quad->R_W_B[3], quad->R_W_B[0])   // yaw
+                }
+            );
             
             // Render frame
             render_scene(&scene);
             next_frame(&scene);
             
             // Update progress bar
-            update_progress_bar(frame, scene.frame_count, start_time);
+            update_progress_bar((int)(t * DT_PHYSICS / DT_RENDER), (int)(SIM_TIME * 24), start_time);
             
-            frame++;
             t_render = 0.0;
         }
         
@@ -117,7 +115,5 @@ int main() {
     // Cleanup
     destroy_scene(&scene);
     free(quad);
-    
-    printf("\nSimulation completed\n");
     return 0;
 }
