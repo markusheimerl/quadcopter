@@ -27,7 +27,11 @@ Mesh create_mesh(const char* obj_filename, const char* texture_filename) {
         .texture_data = NULL,
         .texture_width = 0,
         .texture_height = 0,
-        .bvh = {0},
+        .bvh = {
+            .root = NULL,
+            .triangles = NULL,
+            .triangle_count = 0
+        },
         .transform = {
             .position = {0, 0, 0},
             .rotation = {0, 0, 0}
