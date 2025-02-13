@@ -27,13 +27,13 @@ typedef struct {
 } Mat4;
 
 Mat4 mat4_identity() {
-    Mat4 m = {{0}};
+    Mat4 m = {.m = {{0.0f, 0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f, 0.0f}}};
     m.m[0][0] = m.m[1][1] = m.m[2][2] = m.m[3][3] = 1.0f;
     return m;
 }
 
 Mat4 mat4_multiply(Mat4 a, Mat4 b) {
-    Mat4 result = {{0}};
+    Mat4 result = {.m = {{0.0f, 0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f, 0.0f}}};
     for (int i = 0; i < 4; i++) {
         for (int j = 0; j < 4; j++) {
             for (int k = 0; k < 4; k++) {
@@ -103,7 +103,7 @@ Vec3 mat4_transform_vector(Mat4 m, Vec3 v) {
 }
 
 Mat4 mat4_inverse(Mat4 m) {
-    Mat4 inv = {{0}};
+    Mat4 inv = {.m = {{0.0f, 0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f, 0.0f}}};
     float det;
     int i;
 
@@ -229,7 +229,7 @@ Mat4 mat4_inverse(Mat4 m) {
 
     det = 1.0f / det;
 
-    Mat4 result = {{0}};
+    Mat4 result = {.m = {{0.0f, 0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f, 0.0f}}};
     for (i = 0; i < 4; i++) {
         for (int j = 0; j < 4; j++) {
             result.m[i][j] = inv.m[i][j] * det;
