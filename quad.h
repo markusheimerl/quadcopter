@@ -192,8 +192,13 @@ typedef struct {
     double R_W_B[9];
     double inertia[3];
     double omega_next[4];
+    
     double accel_measurement[3];
     double gyro_measurement[3];
+    double accel_bias[3];
+    double gyro_bias[3];
+    double accel_scale[3];
+    double gyro_scale[3];
 } Quad;
 
 void reset_quad(Quad* q, double x, double y, double z) {
@@ -206,6 +211,12 @@ void reset_quad(Quad* q, double x, double y, double z) {
     memcpy(q->omega_next, (double[]){0.0, 0.0, 0.0, 0.0}, 4 * sizeof(double));
     memset(q->accel_measurement, 0, 3 * sizeof(double));
     memset(q->gyro_measurement, 0, 3 * sizeof(double));
+    memset(q->accel_bias, 0, 3 * sizeof(double));
+    memset(q->gyro_bias, 0, 3 * sizeof(double));
+    for(int i = 0; i < 3; i++) {
+        q->accel_scale[i] = ((double)rand() / RAND_MAX - 0.5) * 0.02;
+        q->gyro_scale[i] = ((double)rand() / RAND_MAX - 0.5) * 0.02;
+    }
 }
 
 Quad* create_quad(double x, double y, double z) {
@@ -314,21 +325,31 @@ void update_quad(Quad* q, double dt) {
     double R_W_B_T[9];
     transpMat3f(q->R_W_B, R_W_B_T);
     multMatVec3f(R_W_B_T, linear_acceleration_W, q->accel_measurement);
-    
+
     // Add gravity in body frame
     double gravity_B[3];
     multMatVec3f(R_W_B_T, (double[]){0, -GRAVITY, 0}, gravity_B);
     addVec3f(q->accel_measurement, gravity_B, q->accel_measurement);
-    
-    // Add noise to accelerometer
+
+    // Update bias random walk and add noise to accelerometer
     for(int i = 0; i < 3; i++) {
-        q->accel_measurement[i] += ((double)rand() / (double)RAND_MAX - 0.5) * 0.01;
+        // Update bias with random walk
+        q->accel_bias[i] += ((double)rand() / RAND_MAX - 0.5) * 0.0001 * dt;
+        // Apply scale factor error, add bias and white noise
+        q->accel_measurement[i] = q->accel_measurement[i] * (1.0 + q->accel_scale[i]) + 
+                                q->accel_bias[i] + 
+                                ((double)rand() / RAND_MAX - 0.5) * 0.01;
     }
-    
-    // Update gyroscope with noise
+
+    // Update gyroscope measurements
     memcpy(q->gyro_measurement, q->angular_velocity_B, 3 * sizeof(double));
     for(int i = 0; i < 3; i++) {
-        q->gyro_measurement[i] += ((double)rand() / (double)RAND_MAX - 0.5) * 0.01;
+        // Update bias with random walk
+        q->gyro_bias[i] += ((double)rand() / RAND_MAX - 0.5) * 0.0001 * dt;
+        // Apply scale factor error, add bias and white noise
+        q->gyro_measurement[i] = q->gyro_measurement[i] * (1.0 + q->gyro_scale[i]) + 
+                                q->gyro_bias[i] + 
+                                ((double)rand() / RAND_MAX - 0.5) * 0.01;
     }
 
     // Rotor speed update with saturation:
