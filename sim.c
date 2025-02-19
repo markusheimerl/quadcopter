@@ -10,32 +10,28 @@
 #define DT_PHYSICS  (1.0 / 1000.0)
 #define DT_CONTROL  (1.0 / 60.0)
 #define DT_RENDER   (1.0 / 24.0)
-#define SIM_TIME    5.0  // Simulation duration in seconds
-
-// Helper function to calculate yaw to face target
-double calculate_target_yaw(double current_x, double current_z, double target_x, double target_z) {
-    return atan2(target_z - current_z, target_x - current_x) + M_PI;
-}
+#define SIM_TIME    10.0  // Simulation duration in seconds
 
 int main() {
     srand(time(NULL));
     
-    // Initialize random target position
+    // Initialize random target position and yaw
     double target[7] = {
         (double)rand() / RAND_MAX * 4.0 - 2.0,    // x: [-2,2]
         (double)rand() / RAND_MAX * 2.0 + 0.5,    // y: [0.5,2.5]
         (double)rand() / RAND_MAX * 4.0 - 2.0,    // z: [-2,2]
         0.0, 0.0, 0.0,                            // Zero velocity target
-        0.0                                       // yaw (will be calculated)
+        (double)rand() / RAND_MAX * 2.0 * M_PI    // yaw: [0,2π]
     };
     
-    printf("Target position: (%.2f, %.2f, %.2f)\n", target[0], target[1], target[2]);
+    printf("Target position: (%.2f, %.2f, %.2f) with yaw: %.2f rad\n", 
+           target[0], target[1], target[2], target[6]);
     
     // Initialize quadcopter
     Quad* quad = create_quad(0.0, 0.0, 0.0);
     
     // Initialize raytracer scene
-    Scene scene = create_scene(400, 300, (int)(SIM_TIME * 1000), 24, 0.9f);
+    Scene scene = create_scene(400, 300, (int)(SIM_TIME * 1000), 24, 0.4f);
     
     // Set up camera
     set_scene_camera(&scene,
@@ -74,14 +70,6 @@ int main() {
         
         // Control update
         if (t_control >= DT_CONTROL) {
-            // Calculate yaw to face target
-            target[6] = calculate_target_yaw(
-                quad->linear_position_W[0],
-                quad->linear_position_W[2],
-                target[0],
-                target[2]
-            );
-            
             control_quad(quad, target);
             t_control = 0.0;
         }
