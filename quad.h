@@ -192,6 +192,8 @@ typedef struct {
     double R_W_B[9];
     double inertia[3];
     double omega_next[4];
+    double accel_measurement[3];
+    double gyro_measurement[3];
 } Quad;
 
 void reset_quad(Quad* q, double x, double y, double z) {
@@ -202,6 +204,8 @@ void reset_quad(Quad* q, double x, double y, double z) {
     memcpy(q->R_W_B, (double[]){1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0}, 9 * sizeof(double));
     memcpy(q->inertia, (double[]){0.01, 0.02, 0.01}, 3 * sizeof(double));
     memcpy(q->omega_next, (double[]){0.0, 0.0, 0.0, 0.0}, 4 * sizeof(double));
+    memset(q->accel_measurement, 0, 3 * sizeof(double));
+    memset(q->gyro_measurement, 0, 3 * sizeof(double));
 }
 
 Quad* create_quad(double x, double y, double z) {
@@ -304,6 +308,28 @@ void update_quad(Quad* q, double dt) {
     multScalMat3f(dt, R_dot, R_dot_scaled);
     addMat3f(q->R_W_B, R_dot_scaled, q->R_W_B);
     orthonormalize_rotation_matrix(q->R_W_B);
+
+    // Update IMU measurements
+    // Convert world frame acceleration to body frame for accelerometer
+    double R_W_B_T[9];
+    transpMat3f(q->R_W_B, R_W_B_T);
+    multMatVec3f(R_W_B_T, linear_acceleration_W, q->accel_measurement);
+    
+    // Add gravity in body frame
+    double gravity_B[3];
+    multMatVec3f(R_W_B_T, (double[]){0, -GRAVITY, 0}, gravity_B);
+    addVec3f(q->accel_measurement, gravity_B, q->accel_measurement);
+    
+    // Add noise to accelerometer
+    for(int i = 0; i < 3; i++) {
+        q->accel_measurement[i] += ((double)rand() / (double)RAND_MAX - 0.5) * 0.01;
+    }
+    
+    // Update gyroscope with noise
+    memcpy(q->gyro_measurement, q->angular_velocity_B, 3 * sizeof(double));
+    for(int i = 0; i < 3; i++) {
+        q->gyro_measurement[i] += ((double)rand() / (double)RAND_MAX - 0.5) * 0.01;
+    }
 
     // Rotor speed update with saturation:
     // ω_i(t+dt) = clamp(ω_i_next, ω_min, ω_max)
