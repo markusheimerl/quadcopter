@@ -21,7 +21,7 @@ int main() {
         (double)rand() / RAND_MAX * 2.0 + 0.5,    // y: [0.5,2.5]
         (double)rand() / RAND_MAX * 4.0 - 2.0,    // z: [-2,2]
         0.0, 0.0, 0.0,                            // Zero velocity target
-        (double)rand() / RAND_MAX * 2.0 * M_PI    // yaw: [0,2π]
+        ((double)rand() / RAND_MAX * 2.0 - 1.0) * M_PI    // yaw: [-π,π]
     };
     
     printf("Target position: (%.2f, %.2f, %.2f) with yaw: %.2f rad\n", 
@@ -84,9 +84,9 @@ int main() {
             
             set_mesh_rotation(&scene.meshes[0], 
                 (Vec3){
-                    atan2f(quad->R_W_B[7], quad->R_W_B[8]),  // roll
-                    asinf(-quad->R_W_B[6]),                  // pitch
-                    atan2f(quad->R_W_B[3], quad->R_W_B[0])   // yaw
+                    atan2f(quad->R_W_B[7], quad->R_W_B[8]),
+                    asinf(-quad->R_W_B[6]),
+                    atan2f(quad->R_W_B[3], quad->R_W_B[0])
                 }
             );
             
@@ -106,8 +106,8 @@ int main() {
         t_render += DT_PHYSICS;
     }
 
-    printf("Final position: (%.2f, %.2f, %.2f)\n", 
-        quad->linear_position_W[0], quad->linear_position_W[1], quad->linear_position_W[2]);
+    printf("Final position: (%.2f, %.2f, %.2f) with yaw %.2f or ±%.2f (depending on interpretation)\n", 
+        quad->linear_position_W[0], quad->linear_position_W[1], quad->linear_position_W[2], asinf(-quad->R_W_B[6]), M_PI - fabs(asinf(-quad->R_W_B[6])));
 
     // Save animation
     char filename[64];
