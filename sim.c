@@ -12,6 +12,68 @@
 #define DT_RENDER   (1.0 / 24.0)
 #define SIM_TIME    10.0  // Simulation duration in seconds
 
+//────────────────────────────────────────────────────────────
+// A simple attitude estimator:
+// It integrates the gyroscope and uses the accelerometer to correct tilt drift.
+// The estimated rotation matrix R_est (from body to world) is updated by:
+//   Ṙ_est = R_est · hat(ω_meas + K_acc · error)
+// where error = acc_meas_normalized × (0, -1, 0)
+// (When the quad is in steady hover, the accelerometer reading in body frame
+// should be nearly (0, -g, 0), and the normalized value is (0,-1,0).)
+//────────────────────────────────────────────────────────────
+void update_estimator(Quad* q, double dt, double *R_est) {
+    // 1. Get the gyroscope measurement (in body frame)
+    double omega[3];
+    memcpy(omega, q->gyro_measurement, 3 * sizeof(double));
+    
+    // 2. Get accelerometer measurement and normalize it.
+    //    (We assume that for low accelerations the accelerometer measures gravity.)
+    double a[3];
+    memcpy(a, q->accel_measurement, 3 * sizeof(double));
+    double norm = sqrt(dotVec3f(a, a));
+    if (norm > 1e-6) {
+        a[0] /= norm; a[1] /= norm; a[2] /= norm;
+    }
+    
+    // 3. Compute an error signal from the accelerometer.
+    //    The expected acceleration (in body frame) when “down” is measured is (0, -1, 0).
+    double gravity_ref[3] = {0, -1, 0};
+    double error[3];
+    crossVec3f(a, gravity_ref, error);
+    // Correction gain – this is a tuning parameter.
+    double K_acc = 0.1;
+    double correction[3];
+    multScalVec3f(K_acc, error, correction);
+    
+    // 4. Combine to get a corrected rotation rate (in body frame)
+    double omega_corr[3];
+    for (int i = 0; i < 3; i++) {
+        omega_corr[i] = omega[i] + correction[i];
+    }
+    
+    // 5. Form the skew–symmetric matrix (hat operator) from omega_corr.
+    double omega_hat[9];
+    so3hat(omega_corr, omega_hat);
+    
+    // 6. Update the estimated rotation matrix.
+    //    Since dR/dt = R_est * omega_hat, using Euler integration:
+    double R_dot[9];
+    multMat3f(R_est, omega_hat, R_dot);
+    
+    double dR[9];
+    multScalMat3f(dt, R_dot, dR);
+    
+    // Use a temporary matrix to hold the new estimate:
+    double new_R[9];
+    for (int i = 0; i < 9; i++) {
+        new_R[i] = R_est[i] + dR[i];
+    }
+    memcpy(R_est, new_R, 9 * sizeof(double));
+    
+    // 7. Re-orthonormalize to keep R_est a proper rotation matrix.
+    orthonormalize_rotation_matrix(R_est);
+}
+
 int main() {
     srand(time(NULL));
     
@@ -29,6 +91,11 @@ int main() {
     
     // Initialize quadcopter
     Quad* quad = create_quad(0.0, 0.0, 0.0);
+    
+    // Initialize our estimated rotation matrix to identity.
+    double R_est[9] = { 1.0, 0.0, 0.0,
+                        0.0, 1.0, 0.0,
+                        0.0, 0.0, 1.0 };
     
     // Initialize raytracer scene
     Scene scene = create_scene(400, 300, (int)(SIM_TIME * 1000), 24, 0.4f);
@@ -70,6 +137,7 @@ int main() {
         
         // Control update
         if (t_control >= DT_CONTROL) {
+            update_estimator(quad, DT_CONTROL, R_est);
             control_quad(quad, target);
             t_control = 0.0;
         }
@@ -107,8 +175,23 @@ int main() {
     }
 
     printf("Final position: (%.2f, %.2f, %.2f) with yaw %.2f or ±%.2f (depending on interpretation)\n", 
-        quad->linear_position_W[0], quad->linear_position_W[1], quad->linear_position_W[2], asinf(-quad->R_W_B[6]), M_PI - fabs(asinf(-quad->R_W_B[6])));
-
+           quad->linear_position_W[0], quad->linear_position_W[1], quad->linear_position_W[2],
+           asinf(-quad->R_W_B[6]), M_PI - fabs(asinf(-quad->R_W_B[6])));
+    
+    //────────────────────────────────────────────
+    // Print the estimated vs true rotation matrices.
+    // Our matrices are stored in row-major order.
+    //────────────────────────────────────────────
+    printf("\nEstimated rotation matrix (R_est):\n");
+    for (int i = 0; i < 3; i++) {
+        printf("%.4f %.4f %.4f\n", R_est[i*3+0], R_est[i*3+1], R_est[i*3+2]);
+    }
+    
+    printf("\nTrue rotation matrix (quad->R_W_B):\n");
+    for (int i = 0; i < 3; i++) {
+        printf("%.4f %.4f %.4f\n", quad->R_W_B[i*3+0], quad->R_W_B[i*3+1], quad->R_W_B[i*3+2]);
+    }
+    
     // Save animation
     char filename[64];
     strftime(filename, sizeof(filename), "%Y%m%d_%H%M%S_flight.webp", 
