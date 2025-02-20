@@ -58,6 +58,16 @@ int main() {
     Mesh drone = create_mesh("raytracer/drone.obj", "raytracer/drone.webp");
     add_mesh_to_scene(&scene, drone);
     
+    // Add treasure chest at target location
+    Mesh treasure = create_mesh("raytracer/treasure.obj", "raytracer/treasure.webp");
+    add_mesh_to_scene(&scene, treasure);
+    
+    // Set treasure position and rotation
+    set_mesh_position(&scene.meshes[1], 
+        (Vec3){(float)target[0], (float)target[1], (float)target[2]});
+    set_mesh_rotation(&scene.meshes[1], 
+        (Vec3){0.0f, (float)target[6], 0.0f});
+    
     Mesh ground = create_mesh("raytracer/ground.obj", "raytracer/ground.webp");
     add_mesh_to_scene(&scene, ground);
 
@@ -100,6 +110,7 @@ int main() {
         
         // Render update
         if (t_render >= DT_RENDER) {
+            // Update drone position and rotation
             set_mesh_position(&scene.meshes[0], 
                 (Vec3){(float)quad.linear_position_W[0], 
                        (float)quad.linear_position_W[1], 
