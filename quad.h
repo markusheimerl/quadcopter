@@ -201,27 +201,27 @@ typedef struct {
     double gyro_scale[3];
 } Quad;
 
-void reset_quad(Quad* q, double x, double y, double z) {
-    memcpy(q->omega, (double[]){0.0, 0.0, 0.0, 0.0}, 4 * sizeof(double));
-    memcpy(q->linear_position_W, (double[]){x, y, z}, 3 * sizeof(double));
-    memcpy(q->linear_velocity_W, (double[]){0.0, 0.0, 0.0}, 3 * sizeof(double));
-    memcpy(q->angular_velocity_B, (double[]){0.0, 0.0, 0.0}, 3 * sizeof(double));
-    memcpy(q->R_W_B, (double[]){1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0}, 9 * sizeof(double));
-    memcpy(q->inertia, (double[]){0.01, 0.02, 0.01}, 3 * sizeof(double));
-    memcpy(q->omega_next, (double[]){0.0, 0.0, 0.0, 0.0}, 4 * sizeof(double));
-    memset(q->accel_measurement, 0, 3 * sizeof(double));
-    memset(q->gyro_measurement, 0, 3 * sizeof(double));
-    memset(q->accel_bias, 0, 3 * sizeof(double));
-    memset(q->gyro_bias, 0, 3 * sizeof(double));
+Quad create_quad(double x, double y, double z) {
+    Quad quad;
+    
+    memcpy(quad.omega, (double[]){0.0, 0.0, 0.0, 0.0}, 4 * sizeof(double));
+    memcpy(quad.linear_position_W, (double[]){x, y, z}, 3 * sizeof(double));
+    memcpy(quad.linear_velocity_W, (double[]){0.0, 0.0, 0.0}, 3 * sizeof(double));
+    memcpy(quad.angular_velocity_B, (double[]){0.0, 0.0, 0.0}, 3 * sizeof(double));
+    memcpy(quad.R_W_B, (double[]){1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0}, 9 * sizeof(double));
+    memcpy(quad.inertia, (double[]){0.01, 0.02, 0.01}, 3 * sizeof(double));
+    memcpy(quad.omega_next, (double[]){0.0, 0.0, 0.0, 0.0}, 4 * sizeof(double));
+    
+    memset(quad.accel_measurement, 0, 3 * sizeof(double));
+    memset(quad.gyro_measurement, 0, 3 * sizeof(double));
+    memset(quad.accel_bias, 0, 3 * sizeof(double));
+    memset(quad.gyro_bias, 0, 3 * sizeof(double));
+    
     for(int i = 0; i < 3; i++) {
-        q->accel_scale[i] = ((double)rand() / RAND_MAX - 0.5) * 0.02;
-        q->gyro_scale[i] = ((double)rand() / RAND_MAX - 0.5) * 0.02;
+        quad.accel_scale[i] = ((double)rand() / RAND_MAX - 0.5) * 0.02;
+        quad.gyro_scale[i] = ((double)rand() / RAND_MAX - 0.5) * 0.02;
     }
-}
-
-Quad* create_quad(double x, double y, double z) {
-    Quad* quad = (Quad*)malloc(sizeof(Quad));
-    reset_quad(quad, x, y, z);
+    
     return quad;
 }
 

@@ -28,7 +28,7 @@ int main() {
            target[0], target[1], target[2], target[6]);
     
     // Initialize quadcopter
-    Quad* quad = create_quad(0.0, 0.0, 0.0);
+    Quad quad = create_quad(0.0, 0.0, 0.0);
     
     // Initialize state estimator
     StateEstimator estimator = {
@@ -71,45 +71,45 @@ int main() {
     for (int t = 0; t < (int)(SIM_TIME / DT_PHYSICS); t++) {
         // Physics update
         if (t_physics >= DT_PHYSICS) {
-            update_quad(quad, DT_PHYSICS);
+            update_quad(&quad, DT_PHYSICS);
             t_physics = 0.0;
         }
         
         // Control update
         if (t_control >= DT_CONTROL) {
             update_estimator(
-                quad->gyro_measurement,
-                quad->accel_measurement,
+                quad.gyro_measurement,
+                quad.accel_measurement,
                 DT_CONTROL,
                 &estimator
             );
             
             double new_omega[4];
             control_quad_commands(
-                quad->linear_position_W,
-                quad->linear_velocity_W,
+                quad.linear_position_W,
+                quad.linear_velocity_W,
                 estimator.R,
                 estimator.angular_velocity,
-                quad->inertia,
+                quad.inertia,
                 target,
                 new_omega
             );
-            memcpy(quad->omega_next, new_omega, 4 * sizeof(double));
+            memcpy(quad.omega_next, new_omega, 4 * sizeof(double));
             t_control = 0.0;
         }
         
         // Render update
         if (t_render >= DT_RENDER) {
             set_mesh_position(&scene.meshes[0], 
-                (Vec3){(float)quad->linear_position_W[0], 
-                       (float)quad->linear_position_W[1], 
-                       (float)quad->linear_position_W[2]});
+                (Vec3){(float)quad.linear_position_W[0], 
+                       (float)quad.linear_position_W[1], 
+                       (float)quad.linear_position_W[2]});
             
             set_mesh_rotation(&scene.meshes[0], 
                 (Vec3){
-                    atan2f(quad->R_W_B[7], quad->R_W_B[8]),
-                    asinf(-quad->R_W_B[6]),
-                    atan2f(quad->R_W_B[3], quad->R_W_B[0])
+                    atan2f(quad.R_W_B[7], quad.R_W_B[8]),
+                    asinf(-quad.R_W_B[6]),
+                    atan2f(quad.R_W_B[3], quad.R_W_B[0])
                 }
             );
             
@@ -126,8 +126,8 @@ int main() {
     }
 
     printf("\nFinal position: (%.2f, %.2f, %.2f) with yaw %.2f or ±%.2f\n", 
-           quad->linear_position_W[0], quad->linear_position_W[1], quad->linear_position_W[2],
-           asinf(-quad->R_W_B[6]), M_PI - fabs(asinf(-quad->R_W_B[6])));
+           quad.linear_position_W[0], quad.linear_position_W[1], quad.linear_position_W[2],
+           asinf(-quad.R_W_B[6]), M_PI - fabs(asinf(-quad.R_W_B[6])));
 
     // Save animation
     char filename[64];
@@ -136,6 +136,5 @@ int main() {
 
     // Cleanup
     destroy_scene(&scene);
-    free(quad);
     return 0;
 }
