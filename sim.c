@@ -21,22 +21,23 @@
 // (When the quad is in steady hover, the accelerometer reading in body frame
 // should be nearly (0, -g, 0), and the normalized value is (0,-1,0).)
 //────────────────────────────────────────────────────────────
-void update_estimator(Quad* q, double dt, double *R_est) {
+void update_estimator(const double *gyro_measurement, const double *accel_measurement, 
+                     double dt, double *R_est) {
     // 1. Get the gyroscope measurement (in body frame)
     double omega[3];
-    memcpy(omega, q->gyro_measurement, 3 * sizeof(double));
+    memcpy(omega, gyro_measurement, 3 * sizeof(double));
     
     // 2. Get accelerometer measurement and normalize it.
     //    (We assume that for low accelerations the accelerometer measures gravity.)
     double a[3];
-    memcpy(a, q->accel_measurement, 3 * sizeof(double));
+    memcpy(a, accel_measurement, 3 * sizeof(double));
     double norm = sqrt(dotVec3f(a, a));
     if (norm > 1e-6) {
         a[0] /= norm; a[1] /= norm; a[2] /= norm;
     }
     
     // 3. Compute an error signal from the accelerometer.
-    //    The expected acceleration (in body frame) when “down” is measured is (0, -1, 0).
+    //    The expected acceleration (in body frame) when "down" is measured is (0, -1, 0).
     double gravity_ref[3] = {0, -1, 0};
     double error[3];
     crossVec3f(a, gravity_ref, error);
@@ -137,7 +138,7 @@ int main() {
         
         // Control update
         if (t_control >= DT_CONTROL) {
-            update_estimator(quad, DT_CONTROL, R_est);
+            update_estimator(quad->gyro_measurement, quad->accel_measurement, DT_CONTROL, R_est);
             control_quad(quad, target);
             t_control = 0.0;
         }
