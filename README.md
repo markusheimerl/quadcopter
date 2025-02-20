@@ -1,4 +1,4 @@
 # sim
 A quadcoptor simulation
 
-![simulation](https://raw.githubusercontent.com/markusheimerl/sim/0413f67af5dca50051ec5d2baa0308743cca3fc0/20250127_144944_flight.webp)
+![simulation](https://raw.githubusercontent.com/markusheimerl/sim/e8e89e311573e043fd14c7ee5b575ee990232c86/20250220_121143_flight.webp)
