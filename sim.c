@@ -139,7 +139,17 @@ int main() {
         // Control update
         if (t_control >= DT_CONTROL) {
             update_estimator(quad->gyro_measurement, quad->accel_measurement, DT_CONTROL, R_est);
-            control_quad(quad, target);
+            double new_omega[4];
+            control_quad_commands(
+                quad->linear_position_W,
+                quad->linear_velocity_W,
+                quad->R_W_B,
+                quad->angular_velocity_B,
+                quad->inertia,
+                target,
+                new_omega
+            );
+            memcpy(quad->omega_next, new_omega, 4 * sizeof(double));
             t_control = 0.0;
         }
         

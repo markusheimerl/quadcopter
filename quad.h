@@ -359,11 +359,22 @@ void update_quad(Quad* q, double dt) {
     }
 }
 
-void control_quad(Quad* q, const double* control_input) {
+void control_quad_commands(
+    // Current state
+    const double* position,     // linear_position_W[3]
+    const double* velocity,     // linear_velocity_W[3]
+    const double* R_W_B,       // R_W_B[9]
+    const double* omega,        // angular_velocity_B[3]
+    const double* inertia,     // inertia[3]
+    // Target state
+    const double* control_input,// target state[7]
+    // Output
+    double* omega_next         // omega_next[4]
+) {
     // 1. Calculate position and velocity errors
     double error_p[3], error_v[3];
-    subVec3f(q->linear_position_W, (double[]){control_input[0], control_input[1], control_input[2]}, error_p);
-    subVec3f(q->linear_velocity_W, (double[]){control_input[3], control_input[4], control_input[5]}, error_v);
+    subVec3f(position, (double[]){control_input[0], control_input[1], control_input[2]}, error_p);
+    subVec3f(velocity, (double[]){control_input[3], control_input[4], control_input[5]}, error_v);
 
     // 2. Calculate desired force vector in world frame
     double z_W_d[3], temp[3];
@@ -382,7 +393,7 @@ void control_quad(Quad* q, const double* control_input) {
     // 3. Calculate thrust magnitude
     double z_W_B[3];
     double y_body[3] = {0, 1, 0};
-    multMatVec3f(q->R_W_B, y_body, z_W_B);
+    multMatVec3f(R_W_B, y_body, z_W_B);
     double thrust = dotVec3f(z_W_d, z_W_B);
 
     // 4. Calculate desired rotation matrix
@@ -405,9 +416,9 @@ void control_quad(Quad* q, const double* control_input) {
     // 5. Calculate rotation error
     double R_W_d_T[9], R_W_B_T[9], temp_mat1[9], temp_mat2[9], temp_mat3[9];
     transpMat3f(R_W_d, R_W_d_T);
-    transpMat3f(q->R_W_B, R_W_B_T);
+    transpMat3f(R_W_B, R_W_B_T);
 
-    multMat3f(R_W_d_T, q->R_W_B, temp_mat1);
+    multMat3f(R_W_d_T, R_W_B, temp_mat1);
     multMat3f(R_W_B_T, R_W_d, temp_mat2);
     subMat3f(temp_mat1, temp_mat2, temp_mat3);
 
@@ -417,9 +428,9 @@ void control_quad(Quad* q, const double* control_input) {
 
     // 6. Calculate angular velocity error
     double temp_vec[3], error_w[3];
-    multMat3f(R_W_d_T, q->R_W_B, temp_mat1);
+    multMat3f(R_W_d_T, R_W_B, temp_mat1);
     multMatVec3f(temp_mat1, (double[]){0.0, 0.0, 0.0}, temp_vec);
-    subVec3f(q->angular_velocity_B, temp_vec, error_w);
+    subVec3f(omega, temp_vec, error_w);
 
     // 7. Calculate control torque
     double tau_B_control[3], temp_vec2[3];
@@ -429,9 +440,9 @@ void control_quad(Quad* q, const double* control_input) {
 
     // Add angular momentum terms
     double I_mat[9], temp_vec3[3], temp_vec4[3];
-    vecToDiagMat3f(q->inertia, I_mat);
-    multMatVec3f(I_mat, q->angular_velocity_B, temp_vec3);
-    crossVec3f(q->angular_velocity_B, temp_vec3, temp_vec4);
+    vecToDiagMat3f(inertia, I_mat);
+    multMatVec3f(I_mat, omega, temp_vec3);
+    crossVec3f(omega, temp_vec3, temp_vec4);
     addVec3f(tau_B_control, temp_vec4, tau_B_control);
 
     // Add feedforward terms
@@ -472,7 +483,7 @@ void control_quad(Quad* q, const double* control_input) {
     multMatVec4f(F_bar_inv, (double[]){thrust, tau_B_control[0], tau_B_control[1], tau_B_control[2]}, omega_sign_square);
 
     for(int i = 0; i < 4; i++) {
-        q->omega_next[i] = sqrt(fabs(omega_sign_square[i]));
+        omega_next[i] = sqrt(fabs(omega_sign_square[i]));
     }
 }
 
