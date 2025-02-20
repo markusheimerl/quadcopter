@@ -12,38 +12,6 @@
 #define DT_RENDER   (1.0 / 24.0)
 #define SIM_TIME    10.0  // Simulation duration in seconds
 
-void update_estimator(const double *gyro, const double *accel, double dt, double *R_est) {
-    // 1. Normalize accelerometer reading
-    double acc_norm = sqrt(dotVec3f(accel, accel));
-    double a_norm[3] = {
-        accel[0] / acc_norm,
-        accel[1] / acc_norm,
-        accel[2] / acc_norm
-    };
-
-    // 2. Calculate error between measured and expected gravity direction
-    double error[3];
-    crossVec3f(a_norm, (double[]){0, -1, 0}, error);
-    
-    // 3. Apply correction to gyro measurement
-    double omega_corr[3];
-    for (int i = 0; i < 3; i++) {
-        omega_corr[i] = gyro[i] + 0.1 * error[i];  // 0.1 is correction gain
-    }
-    
-    // 4. Update rotation matrix
-    double omega_hat[9];
-    so3hat(omega_corr, omega_hat);
-    double R_dot[9];
-    multMat3f(R_est, omega_hat, R_dot);
-    
-    // 5. Integrate and orthonormalize
-    for (int i = 0; i < 9; i++) {
-        R_est[i] += dt * R_dot[i];
-    }
-    orthonormalize_rotation_matrix(R_est);
-}
-
 int main() {
     srand(time(NULL));
     
@@ -62,10 +30,12 @@ int main() {
     // Initialize quadcopter
     Quad* quad = create_quad(0.0, 0.0, 0.0);
     
-    // Initialize our estimated rotation matrix to identity.
-    double R_est[9] = { 1.0, 0.0, 0.0,
-                        0.0, 1.0, 0.0,
-                        0.0, 0.0, 1.0 };
+    // Initialize state estimator
+    StateEstimator estimator = {
+        .R = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0},
+        .angular_velocity = {0.0, 0.0, 0.0},
+        .gyro_bias = {0.0, 0.0, 0.0}
+    };
     
     // Initialize raytracer scene
     Scene scene = create_scene(400, 300, (int)(SIM_TIME * 1000), 24, 0.4f);
@@ -107,13 +77,19 @@ int main() {
         
         // Control update
         if (t_control >= DT_CONTROL) {
-            update_estimator(quad->gyro_measurement, quad->accel_measurement, DT_CONTROL, R_est);
+            update_estimator(
+                quad->gyro_measurement,
+                quad->accel_measurement,
+                DT_CONTROL,
+                &estimator
+            );
+            
             double new_omega[4];
             control_quad_commands(
                 quad->linear_position_W,
                 quad->linear_velocity_W,
-                R_est,
-                quad->angular_velocity_B,
+                estimator.R,
+                estimator.angular_velocity,
                 quad->inertia,
                 target,
                 new_omega
@@ -124,7 +100,6 @@ int main() {
         
         // Render update
         if (t_render >= DT_RENDER) {
-            // Update drone position and orientation in the scene
             set_mesh_position(&scene.meshes[0], 
                 (Vec3){(float)quad->linear_position_W[0], 
                        (float)quad->linear_position_W[1], 
@@ -138,13 +113,9 @@ int main() {
                 }
             );
             
-            // Render frame
             render_scene(&scene);
             next_frame(&scene);
-            
-            // Update progress bar
             update_progress_bar((int)(t * DT_PHYSICS / DT_RENDER), (int)(SIM_TIME * 24), start_time);
-            
             t_render = 0.0;
         }
         
@@ -154,28 +125,13 @@ int main() {
         t_render += DT_PHYSICS;
     }
 
-    printf("Final position: (%.2f, %.2f, %.2f) with yaw %.2f or ±%.2f (depending on interpretation)\n", 
+    printf("\nFinal position: (%.2f, %.2f, %.2f) with yaw %.2f or ±%.2f\n", 
            quad->linear_position_W[0], quad->linear_position_W[1], quad->linear_position_W[2],
            asinf(-quad->R_W_B[6]), M_PI - fabs(asinf(-quad->R_W_B[6])));
-    
-    //────────────────────────────────────────────
-    // Print the estimated vs true rotation matrices.
-    // Our matrices are stored in row-major order.
-    //────────────────────────────────────────────
-    printf("\nEstimated rotation matrix (R_est):\n");
-    for (int i = 0; i < 3; i++) {
-        printf("%.4f %.4f %.4f\n", R_est[i*3+0], R_est[i*3+1], R_est[i*3+2]);
-    }
-    
-    printf("\nTrue rotation matrix (quad->R_W_B):\n");
-    for (int i = 0; i < 3; i++) {
-        printf("%.4f %.4f %.4f\n", quad->R_W_B[i*3+0], quad->R_W_B[i*3+1], quad->R_W_B[i*3+2]);
-    }
-    
+
     // Save animation
     char filename[64];
-    strftime(filename, sizeof(filename), "%Y%m%d_%H%M%S_flight.webp", 
-             localtime(&(time_t){time(NULL)}));
+    strftime(filename, sizeof(filename), "%Y%m%d_%H%M%S_flight.webp", localtime(&(time_t){time(NULL)}));
     save_scene(&scene, filename);
 
     // Cleanup
