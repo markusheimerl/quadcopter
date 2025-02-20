@@ -12,66 +12,35 @@
 #define DT_RENDER   (1.0 / 24.0)
 #define SIM_TIME    10.0  // Simulation duration in seconds
 
-//────────────────────────────────────────────────────────────
-// A simple attitude estimator:
-// It integrates the gyroscope and uses the accelerometer to correct tilt drift.
-// The estimated rotation matrix R_est (from body to world) is updated by:
-//   Ṙ_est = R_est · hat(ω_meas + K_acc · error)
-// where error = acc_meas_normalized × (0, -1, 0)
-// (When the quad is in steady hover, the accelerometer reading in body frame
-// should be nearly (0, -g, 0), and the normalized value is (0,-1,0).)
-//────────────────────────────────────────────────────────────
-void update_estimator(const double *gyro_measurement, const double *accel_measurement, 
-                     double dt, double *R_est) {
-    // 1. Get the gyroscope measurement (in body frame)
-    double omega[3];
-    memcpy(omega, gyro_measurement, 3 * sizeof(double));
-    
-    // 2. Get accelerometer measurement and normalize it.
-    //    (We assume that for low accelerations the accelerometer measures gravity.)
-    double a[3];
-    memcpy(a, accel_measurement, 3 * sizeof(double));
-    double norm = sqrt(dotVec3f(a, a));
-    if (norm > 1e-6) {
-        a[0] /= norm; a[1] /= norm; a[2] /= norm;
-    }
-    
-    // 3. Compute an error signal from the accelerometer.
-    //    The expected acceleration (in body frame) when "down" is measured is (0, -1, 0).
-    double gravity_ref[3] = {0, -1, 0};
+void update_estimator(const double *gyro, const double *accel, double dt, double *R_est) {
+    // 1. Normalize accelerometer reading
+    double acc_norm = sqrt(dotVec3f(accel, accel));
+    double a_norm[3] = {
+        accel[0] / acc_norm,
+        accel[1] / acc_norm,
+        accel[2] / acc_norm
+    };
+
+    // 2. Calculate error between measured and expected gravity direction
     double error[3];
-    crossVec3f(a, gravity_ref, error);
-    // Correction gain – this is a tuning parameter.
-    double K_acc = 0.1;
-    double correction[3];
-    multScalVec3f(K_acc, error, correction);
+    crossVec3f(a_norm, (double[]){0, -1, 0}, error);
     
-    // 4. Combine to get a corrected rotation rate (in body frame)
+    // 3. Apply correction to gyro measurement
     double omega_corr[3];
     for (int i = 0; i < 3; i++) {
-        omega_corr[i] = omega[i] + correction[i];
+        omega_corr[i] = gyro[i] + 0.1 * error[i];  // 0.1 is correction gain
     }
     
-    // 5. Form the skew–symmetric matrix (hat operator) from omega_corr.
+    // 4. Update rotation matrix
     double omega_hat[9];
     so3hat(omega_corr, omega_hat);
-    
-    // 6. Update the estimated rotation matrix.
-    //    Since dR/dt = R_est * omega_hat, using Euler integration:
     double R_dot[9];
     multMat3f(R_est, omega_hat, R_dot);
     
-    double dR[9];
-    multScalMat3f(dt, R_dot, dR);
-    
-    // Use a temporary matrix to hold the new estimate:
-    double new_R[9];
+    // 5. Integrate and orthonormalize
     for (int i = 0; i < 9; i++) {
-        new_R[i] = R_est[i] + dR[i];
+        R_est[i] += dt * R_dot[i];
     }
-    memcpy(R_est, new_R, 9 * sizeof(double));
-    
-    // 7. Re-orthonormalize to keep R_est a proper rotation matrix.
     orthonormalize_rotation_matrix(R_est);
 }
 
@@ -143,7 +112,7 @@ int main() {
             control_quad_commands(
                 quad->linear_position_W,
                 quad->linear_velocity_W,
-                quad->R_W_B,
+                R_est,
                 quad->angular_velocity_B,
                 quad->inertia,
                 target,
