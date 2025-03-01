@@ -146,6 +146,9 @@ int main() {
     save_scene(&scene, filename);
 
     // Cleanup
+    destroy_mesh(&drone);
+    destroy_mesh(&treasure);
+    destroy_mesh(&ground);
     destroy_scene(&scene);
     return 0;
 }
