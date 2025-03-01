@@ -373,9 +373,6 @@ void save_scene(Scene* scene, const char* filename) {
 }
 
 void destroy_scene(Scene* scene) {
-    for (size_t i = 0; i < scene->mesh_count; i++) {
-        destroy_mesh(&scene->meshes[i]);
-    }
     free(scene->meshes);
     
     // Free all frame buffers
