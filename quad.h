@@ -201,14 +201,24 @@ typedef struct {
     double gyro_scale[3];
 } Quad;
 
-Quad create_quad(double x, double y, double z) {
+Quad create_quad(double x, double y, double z, double yaw) {
     Quad quad;
     
     memcpy(quad.omega, (double[]){0.0, 0.0, 0.0, 0.0}, 4 * sizeof(double));
     memcpy(quad.linear_position_W, (double[]){x, y, z}, 3 * sizeof(double));
     memcpy(quad.linear_velocity_W, (double[]){0.0, 0.0, 0.0}, 3 * sizeof(double));
     memcpy(quad.angular_velocity_B, (double[]){0.0, 0.0, 0.0}, 3 * sizeof(double));
-    memcpy(quad.R_W_B, (double[]){1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0}, 9 * sizeof(double));
+    
+    // Create rotation matrix with initial yaw
+    double cos_yaw = cos(yaw);
+    double sin_yaw = sin(yaw);
+    double R_yaw[9] = {
+        cos_yaw, 0.0, sin_yaw,
+        0.0, 1.0, 0.0,
+        -sin_yaw, 0.0, cos_yaw
+    };
+    memcpy(quad.R_W_B, R_yaw, 9 * sizeof(double));
+    
     memcpy(quad.inertia, (double[]){0.01, 0.02, 0.01}, 3 * sizeof(double));
     memcpy(quad.omega_next, (double[]){0.0, 0.0, 0.0, 0.0}, 4 * sizeof(double));
     

@@ -28,17 +28,18 @@ int main() {
            target[0], target[1], target[2], target[6]);
     
     // Initialize quadcopter
-    Quad quad = create_quad(0.0, 0.0, 0.0);
+    Quad quad = create_quad(0.0, 0.0, 0.0, 0.0);
     
     // Initialize state estimator
     StateEstimator estimator = {
-        .R = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0},
         .angular_velocity = {0.0, 0.0, 0.0},
         .gyro_bias = {0.0, 0.0, 0.0}
     };
+    // Copy the quad's rotation matrix to the estimator
+    memcpy(estimator.R, quad.R_W_B, 9 * sizeof(double));
     
     // Initialize raytracer scene
-    Scene scene = create_scene(800, 600, (int)(SIM_TIME * 1000), 24, 1.0f);
+    Scene scene = create_scene(800, 600, (int)(SIM_TIME * 1000), 24, 0.4f);
     
     // Set up camera
     set_scene_camera(&scene,
