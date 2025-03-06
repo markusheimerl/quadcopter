@@ -56,20 +56,24 @@ int main() {
     // Set a random target height
     double target_y = random_range(0.5, 2.5);
     
-    // Calculate the target yaw to point toward the drone
-    // This makes the treasure chest "face" the drone
-    double target_yaw = calculate_yaw_to_target(target_x, target_z, drone_x, drone_z);
+    // Calculate initial desired drone yaw to face the target
+    double desired_yaw = calculate_yaw_to_target(
+        drone_x,
+        drone_z,
+        target_x,
+        target_z
+    );
     
-    // Create combined target array
+    // Create combined target array with the target position and desired drone yaw
     double target[7] = {
         target_x, target_y, target_z,    // Target position
         0.0, 0.0, 0.0,                  // Zero velocity target
-        target_yaw                      // Target yaw pointing to drone
+        desired_yaw                     // Target yaw for the drone
     };
     
     printf("Initial drone position: (%.2f, %.2f, %.2f) with yaw: %.2f rad\n", 
            drone_x, drone_y, drone_z, drone_yaw);
-    printf("Target position: (%.2f, %.2f, %.2f) with yaw: %.2f rad\n", 
+    printf("Target position: (%.2f, %.2f, %.2f) with desired drone yaw: %.2f rad\n", 
            target[0], target[1], target[2], target[6]);
     printf("Target is %.2f meters away in the drone's field of view (%.2f° from center)\n", 
            distance, angle_deviation * 180.0 / M_PI);
@@ -103,18 +107,18 @@ int main() {
     );
     
     // Add meshes to scene
-    Mesh drone = create_mesh("raytracer/drone.obj", "raytracer/drone.webp");
-    add_mesh_to_scene(&scene, drone);
+    Mesh drone_mesh = create_mesh("raytracer/drone.obj", "raytracer/drone.webp");
+    add_mesh_to_scene(&scene, drone_mesh);
     
     // Add treasure chest at target location
     Mesh treasure = create_mesh("raytracer/treasure.obj", "raytracer/treasure.webp");
     add_mesh_to_scene(&scene, treasure);
     
-    // Set treasure position and rotation
+    // Set treasure position and rotation (always fixed at 0.0 yaw)
     set_mesh_position(&scene.meshes[1], 
         (Vec3){(float)target[0], (float)target[1], (float)target[2]});
     set_mesh_rotation(&scene.meshes[1], 
-        (Vec3){0.0f, (float)target[6], 0.0f});
+        (Vec3){0.0f, 0.0f, 0.0f});  // Fixed at 0.0 yaw
     
     Mesh ground = create_mesh("raytracer/ground.obj", "raytracer/ground.webp");
     add_mesh_to_scene(&scene, ground);
@@ -143,7 +147,7 @@ int main() {
                 &estimator
             );
             
-            // For the drone, calculate yaw to look at a point slightly behind the target
+            // For the drone, calculate yaw to look at target
             // This prevents the drone from constantly rotating when it's at the target
             
             // Calculate vector from drone to target
@@ -155,18 +159,14 @@ int main() {
             
             // If drone is far enough away, point directly at target
             if (xz_distance > 0.3) {
-                target_yaw = calculate_yaw_to_target(
+                target[6] = calculate_yaw_to_target(
                     quad.linear_position_W[0],
                     quad.linear_position_W[2],
                     target[0],
                     target[2]
                 );
             }
-            
-            // Use this yaw as the target yaw for the controller
-            double control_target[7];
-            memcpy(control_target, target, 7 * sizeof(double));
-            control_target[6] = target_yaw;
+            // When close to target, we keep the last target yaw value (already in target[6])
             
             double new_omega[4];
             control_quad_commands(
@@ -175,7 +175,7 @@ int main() {
                 estimator.R,
                 estimator.angular_velocity,
                 quad.inertia,
-                control_target,
+                target,
                 new_omega
             );
             memcpy(quad.omega_next, new_omega, 4 * sizeof(double));
@@ -227,7 +227,7 @@ int main() {
     printf("Animation saved to: %s\n", filename);
 
     // Cleanup
-    destroy_mesh(&drone);
+    destroy_mesh(&drone_mesh);
     destroy_mesh(&treasure);
     destroy_mesh(&ground);
     destroy_scene(&scene);
