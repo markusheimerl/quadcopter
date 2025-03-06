@@ -180,7 +180,7 @@ void orthonormalize_rotation_matrix(double* R) {
 #define OMEGA_MAX 70.0
 
 #define K_P 0.2
-#define K_V 0.5
+#define K_V 0.6
 #define K_R 0.6
 #define K_W 0.6
 
