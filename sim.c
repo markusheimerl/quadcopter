@@ -26,30 +26,21 @@ int main() {
     double drone_z = random_range(-2.0, 2.0);
     double drone_yaw = random_range(-M_PI, M_PI);
     
-    // Place target in front of drone with slight randomization
-    double distance = random_range(3.0, 4.0);
-    double angle_offset = random_range(-M_PI/6, M_PI/6); // Small random offset
-    double target_yaw = drone_yaw + angle_offset;
-    
-    // Calculate target position
-    double target_x = drone_x + sin(target_yaw) * distance;
-    double target_z = drone_z + cos(target_yaw) * distance;
+    // Place target randomly
+    double target_x = random_range(-2.0, 2.0);
     double target_y = random_range(0.5, 2.5);
-    
-    // Keep target within boundaries
-    target_x = fmax(-2.0, fmin(2.0, target_x));
-    target_z = fmax(-2.0, fmin(2.0, target_z));
+    double target_z = random_range(-2.0, 2.0);
+    double target_yaw = random_range(-M_PI, M_PI);
     
     // Create target array (position, velocity, and desired yaw)
     double target[7] = {
         target_x, target_y, target_z,    // Target position
         0.0, 0.0, 0.0,                   // Zero velocity target
-        atan2(target_x - drone_x, target_z - drone_z)  // Yaw to face target
+        target_yaw                       // Random target yaw
     };
     
-    printf("Drone starts at (%.2f, %.2f, %.2f), target at (%.2f, %.2f, %.2f)\n", 
-           drone_x, drone_y, drone_z, target_x, target_y, target_z);
-    printf("Target is %.2f meters away\n", distance);
+    printf("Drone starts at (%.2f, %.2f, %.2f), target at (%.2f, %.2f, %.2f) with yaw %.2f\n", 
+           drone_x, drone_y, drone_z, target_x, target_y, target_z, target_yaw);
     
     // Initialize quadcopter
     Quad quad = create_quad(drone_x, drone_y, drone_z, drone_yaw);
@@ -154,13 +145,9 @@ int main() {
     }
 
     // Display final results
-    double dist = sqrt(pow(quad.linear_position_W[0] - target_x, 2) + 
-                     pow(quad.linear_position_W[1] - target_y, 2) + 
-                     pow(quad.linear_position_W[2] - target_z, 2));
-    
-    printf("\nFinal position: (%.2f, %.2f, %.2f)\n", 
-           quad.linear_position_W[0], quad.linear_position_W[1], quad.linear_position_W[2]);
-    printf("Distance to target: %.2f meters\n", dist);
+    printf("\nFinal position: (%.2f, %.2f, %.2f) with yaw %.2f or ±%.2f\n", 
+           quad.linear_position_W[0], quad.linear_position_W[1], quad.linear_position_W[2],
+           asinf(-quad.R_W_B[6]), M_PI - fabs(asinf(-quad.R_W_B[6])));
 
     // Save animation
     char filename[64];
