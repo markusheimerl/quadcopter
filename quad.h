@@ -195,13 +195,10 @@ typedef struct {
     
     double accel_measurement[3];
     double gyro_measurement[3];
-    double mag_measurement[3];
     double accel_bias[3];
     double gyro_bias[3];
-    double mag_bias[3];
     double accel_scale[3];
     double gyro_scale[3];
-    double mag_scale[3];
 } Quad;
 
 Quad create_quad(double x, double y, double z, double yaw) {
@@ -227,15 +224,12 @@ Quad create_quad(double x, double y, double z, double yaw) {
     
     memset(quad.accel_measurement, 0, 3 * sizeof(double));
     memset(quad.gyro_measurement, 0, 3 * sizeof(double));
-    memset(quad.mag_measurement, 0, 3 * sizeof(double));
     memset(quad.accel_bias, 0, 3 * sizeof(double));
     memset(quad.gyro_bias, 0, 3 * sizeof(double));
-    memset(quad.mag_bias, 0, 3 * sizeof(double));
     
     for(int i = 0; i < 3; i++) {
         quad.accel_scale[i] = ((double)rand() / RAND_MAX - 0.5) * 0.02;
         quad.gyro_scale[i] = ((double)rand() / RAND_MAX - 0.5) * 0.02;
-        quad.mag_scale[i] = ((double)rand() / RAND_MAX - 0.5) * 0.02;
     }
     
     return quad;
@@ -366,22 +360,6 @@ void update_quad(Quad* q, double dt) {
         q->gyro_measurement[i] = q->gyro_measurement[i] * (1.0 + q->gyro_scale[i]) + 
                                 q->gyro_bias[i] + 
                                 ((double)rand() / RAND_MAX - 0.5) * 0.01;
-    }
-
-    // Update magnetometer measurements
-    // In the Northern hemisphere, magnetic field points roughly North and down
-    double mag_reference[3] = {1.0, 0.3, 0.0}; // Pointing mostly North with small downward component
-    double mag_field_B[3];
-    multMatVec3f(R_W_B_T, mag_reference, mag_field_B);
-    
-    // Add noise to magnetometer readings with bias and scale factors
-    for(int i = 0; i < 3; i++) {
-        // Update bias with random walk
-        q->mag_bias[i] += ((double)rand() / RAND_MAX - 0.5) * 0.0001 * dt;
-        // Apply scale factor error, add bias and white noise
-        q->mag_measurement[i] = mag_field_B[i] * (1.0 + q->mag_scale[i]) + 
-                                q->mag_bias[i] + 
-                                ((double)rand() / RAND_MAX - 0.5) * 0.02;
     }
 
     // Rotor speed update with saturation:
@@ -528,15 +506,13 @@ typedef struct {
 void update_estimator(
     const double *gyro, 
     const double *accel, 
-    const double *mag,
     double dt, 
     StateEstimator *state
 ) {
     // Correction gains
-    const double k_R = 0.1;         // Attitude correction gain
-    const double k_angular = 2.0;   // Angular velocity correction gain
-    const double k_bias = 0.01;     // Bias estimation gain
-    const double k_mag = 0.05;      // Magnetometer correction gain
+    const double k_R = 0.1;    // Attitude correction gain
+    const double k_angular = 2.0; // Angular velocity correction gain
+    const double k_bias = 0.01; // Bias estimation gain
 
     // 1. Normalize accelerometer reading
     double acc_norm = sqrt(dotVec3f(accel, accel));
@@ -554,45 +530,13 @@ void update_estimator(
     
     double error[3];
     crossVec3f(a_norm, g_body, error);
-
-    // 3. Include magnetometer for yaw correction
-    if (mag != NULL) {
-        // Normalize magnetometer reading
-        double mag_norm = sqrt(dotVec3f(mag, mag));
-        if (mag_norm > 0.01) {  // Avoid division by very small values
-            double m_norm[3] = {
-                mag[0] / mag_norm,
-                mag[1] / mag_norm,
-                mag[2] / mag_norm
-            };
-            
-            // Reference direction in world frame (assuming North+small down component)
-            double m_ref_world[3] = {1.0, 0.3, 0.0};
-            double m_ref_body[3];
-            multMatVec3f(R_T, m_ref_world, m_ref_body);
-            
-            // Calculate magnetometer error
-            double mag_error[3];
-            crossVec3f(m_norm, m_ref_body, mag_error);
-            
-            // Only use the yaw component (around gravity direction)
-            // This prevents magnetometer from affecting roll/pitch
-            double yaw_correction = dotVec3f(mag_error, g_body);
-            double yaw_error[3];
-            multScalVec3f(yaw_correction, g_body, yaw_error);
-            
-            // Add to the total error
-            multScalVec3f(k_mag, yaw_error, yaw_error);
-            addVec3f(error, yaw_error, error);
-        }
-    }
     
-    // 4. Update bias estimate
+    // 3. Update bias estimate
     for(int i = 0; i < 3; i++) {
         state->gyro_bias[i] -= k_bias * error[i] * dt;
     }
 
-    // 5. Apply corrections to angular velocity estimate
+    // 4. Apply corrections to angular velocity estimate
     for(int i = 0; i < 3; i++) {
         // Remove bias from gyro measurement
         double unbiased_gyro = gyro[i] - state->gyro_bias[i];
@@ -600,7 +544,7 @@ void update_estimator(
         state->angular_velocity[i] = unbiased_gyro + k_angular * error[i];
     }
     
-    // 6. Update rotation matrix
+    // 5. Update rotation matrix
     double angular_velocity_hat[9];
     so3hat(state->angular_velocity, angular_velocity_hat);
     double R_dot[9];

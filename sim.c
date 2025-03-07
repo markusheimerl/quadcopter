@@ -98,7 +98,6 @@ int main() {
             update_estimator(
                 quad.gyro_measurement,
                 quad.accel_measurement,
-                quad.mag_measurement,
                 DT_CONTROL,
                 &estimator
             );
