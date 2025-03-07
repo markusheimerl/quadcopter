@@ -17,68 +17,41 @@ double random_range(double min, double max) {
     return min + (double)rand() / RAND_MAX * (max - min);
 }
 
-// Helper function to calculate the angle between two points in the XZ plane
-double calculate_yaw_to_target(double x1, double z1, double x2, double z2) {
-    // Calculate direction vector from (x1,z1) to (x2,z2)
-    double dx = x2 - x1;
-    double dz = z2 - z1;
-    
-    // Compute angle (atan2 returns angle in range [-π, π])
-    return atan2(dx, dz);
-}
-
 int main() {
     srand(time(NULL));
     
-    // Initialize random drone position
+    // Initialize drone with random position and orientation
     double drone_x = random_range(-2.0, 2.0);
     double drone_y = random_range(0.5, 2.0);
     double drone_z = random_range(-2.0, 2.0);
-    
-    // Initialize random drone yaw
     double drone_yaw = random_range(-M_PI, M_PI);
-     
-    // Calculate a random distance (between 1 and 4 units) in front of the drone
-    double distance = random_range(1.0, 4.0);
     
-    // Add some random deviation to make it more natural (±30° from the center of view)
-    double angle_deviation = random_range(-M_PI/6, M_PI/6);  // ±30 degrees
-    double adjusted_yaw = drone_yaw + angle_deviation;
+    // Place target in front of drone with slight randomization
+    double distance = random_range(3.0, 4.0);
+    double angle_offset = random_range(-M_PI/6, M_PI/6); // Small random offset
+    double target_yaw = drone_yaw + angle_offset;
     
-    // Calculate the target position based on the drone's position, adjusted yaw, and distance
-    double target_x = drone_x + sin(adjusted_yaw) * distance;
-    double target_z = drone_z + cos(adjusted_yaw) * distance;
+    // Calculate target position
+    double target_x = drone_x + sin(target_yaw) * distance;
+    double target_z = drone_z + cos(target_yaw) * distance;
+    double target_y = random_range(0.5, 2.5);
     
-    // Keep the target within boundaries
+    // Keep target within boundaries
     target_x = fmax(-2.0, fmin(2.0, target_x));
     target_z = fmax(-2.0, fmin(2.0, target_z));
     
-    // Set a random target height
-    double target_y = random_range(0.5, 2.5);
-    
-    // Calculate initial desired drone yaw to face the target
-    double desired_yaw = calculate_yaw_to_target(
-        drone_x,
-        drone_z,
-        target_x,
-        target_z
-    );
-    
-    // Create combined target array with the target position and desired drone yaw
+    // Create target array (position, velocity, and desired yaw)
     double target[7] = {
         target_x, target_y, target_z,    // Target position
-        0.0, 0.0, 0.0,                  // Zero velocity target
-        desired_yaw                     // Target yaw for the drone
+        0.0, 0.0, 0.0,                   // Zero velocity target
+        atan2(target_x - drone_x, target_z - drone_z)  // Yaw to face target
     };
     
-    printf("Initial drone position: (%.2f, %.2f, %.2f) with yaw: %.2f rad\n", 
-           drone_x, drone_y, drone_z, drone_yaw);
-    printf("Target position: (%.2f, %.2f, %.2f) with desired drone yaw: %.2f rad\n", 
-           target[0], target[1], target[2], target[6]);
-    printf("Target is %.2f meters away in the drone's field of view (%.2f° from center)\n", 
-           distance, angle_deviation * 180.0 / M_PI);
+    printf("Drone starts at (%.2f, %.2f, %.2f), target at (%.2f, %.2f, %.2f)\n", 
+           drone_x, drone_y, drone_z, target_x, target_y, target_z);
+    printf("Target is %.2f meters away\n", distance);
     
-    // Initialize quadcopter with random position and yaw
+    // Initialize quadcopter
     Quad quad = create_quad(drone_x, drone_y, drone_z, drone_yaw);
     
     // Initialize state estimator
@@ -86,13 +59,12 @@ int main() {
         .angular_velocity = {0.0, 0.0, 0.0},
         .gyro_bias = {0.0, 0.0, 0.0}
     };
-    // Copy the quad's rotation matrix to the estimator
     memcpy(estimator.R, quad.R_W_B, 9 * sizeof(double));
     
     // Initialize raytracer scene
-    Scene scene = create_scene(800, 600, (int)(SIM_TIME * 1000), 24, 0.4f);
+    Scene scene = create_scene(400, 300, (int)(SIM_TIME * 1000), 24, 0.4f);
     
-    // Set up camera
+    // Set up camera and lighting
     set_scene_camera(&scene,
         (Vec3){-3.0f, 3.0f, -3.0f},
         (Vec3){0.0f, 0.0f, 0.0f},
@@ -100,25 +72,18 @@ int main() {
         60.0f
     );
     
-    // Set up light
     set_scene_light(&scene,
-        (Vec3){1.0f, 1.0f, -1.0f},     // Direction
-        (Vec3){1.4f, 1.4f, 1.4f}       // White light
+        (Vec3){1.0f, 1.0f, -1.0f},
+        (Vec3){1.4f, 1.4f, 1.4f}
     );
     
     // Add meshes to scene
     Mesh drone_mesh = create_mesh("raytracer/drone.obj", "raytracer/drone.webp");
     add_mesh_to_scene(&scene, drone_mesh);
     
-    // Add treasure chest at target location
     Mesh treasure = create_mesh("raytracer/treasure.obj", "raytracer/treasure.webp");
     add_mesh_to_scene(&scene, treasure);
-    
-    // Set treasure position and rotation (always fixed at 0.0 yaw)
-    set_mesh_position(&scene.meshes[1], 
-        (Vec3){(float)target[0], (float)target[1], (float)target[2]});
-    set_mesh_rotation(&scene.meshes[1], 
-        (Vec3){0.0f, 0.0f, 0.0f});  // Fixed at 0.0 yaw
+    set_mesh_position(&scene.meshes[1], (Vec3){(float)target_x, (float)target_y, (float)target_z});
     
     Mesh ground = create_mesh("raytracer/ground.obj", "raytracer/ground.webp");
     add_mesh_to_scene(&scene, ground);
@@ -139,34 +104,12 @@ int main() {
         
         // Control update
         if (t_control >= DT_CONTROL) {
-            // Update state estimator
             update_estimator(
                 quad.gyro_measurement,
                 quad.accel_measurement,
                 DT_CONTROL,
                 &estimator
             );
-            
-            // For the drone, calculate yaw to look at target
-            // This prevents the drone from constantly rotating when it's at the target
-            
-            // Calculate vector from drone to target
-            double drone_to_target_x = target[0] - quad.linear_position_W[0];
-            double drone_to_target_z = target[2] - quad.linear_position_W[2];
-            
-            // Calculate distance to target in xz plane
-            double xz_distance = sqrt(drone_to_target_x * drone_to_target_x + drone_to_target_z * drone_to_target_z);
-            
-            // If drone is far enough away, point directly at target
-            if (xz_distance > 0.3) {
-                target[6] = calculate_yaw_to_target(
-                    quad.linear_position_W[0],
-                    quad.linear_position_W[2],
-                    target[0],
-                    target[2]
-                );
-            }
-            // When close to target, we keep the last target yaw value (already in target[6])
             
             double new_omega[4];
             control_quad_commands(
@@ -184,7 +127,7 @@ int main() {
         
         // Render update
         if (t_render >= DT_RENDER) {
-            // Update drone position and rotation
+            // Update drone position and rotation in the scene
             set_mesh_position(&scene.meshes[0], 
                 (Vec3){(float)quad.linear_position_W[0], 
                        (float)quad.linear_position_W[1], 
@@ -210,14 +153,13 @@ int main() {
         t_render += DT_PHYSICS;
     }
 
-    printf("\nFinal position: (%.2f, %.2f, %.2f) with yaw %.2f or ±%.2f\n", 
-           quad.linear_position_W[0], quad.linear_position_W[1], quad.linear_position_W[2],
-           asinf(-quad.R_W_B[6]), M_PI - fabs(asinf(-quad.R_W_B[6])));
-           
-    // Calculate distance to target
-    double dist = sqrt(pow(quad.linear_position_W[0] - target[0], 2) + 
-                     pow(quad.linear_position_W[1] - target[1], 2) + 
-                     pow(quad.linear_position_W[2] - target[2], 2));
+    // Display final results
+    double dist = sqrt(pow(quad.linear_position_W[0] - target_x, 2) + 
+                     pow(quad.linear_position_W[1] - target_y, 2) + 
+                     pow(quad.linear_position_W[2] - target_z, 2));
+    
+    printf("\nFinal position: (%.2f, %.2f, %.2f)\n", 
+           quad.linear_position_W[0], quad.linear_position_W[1], quad.linear_position_W[2]);
     printf("Distance to target: %.2f meters\n", dist);
 
     // Save animation
