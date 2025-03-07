@@ -1,5 +1,5 @@
 CC = clang
-CFLAGS = -O3 -march=native -ffast-math -Wall -Wextra -Iraytracer
+CFLAGS = -O3 -march=native -ffast-math -Wall -Wextra
 LDFLAGS = -static -lm -lwebp -lwebpmux -lpthread -flto
 
 sim.out: sim.c

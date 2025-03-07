@@ -5,7 +5,7 @@
 #include <time.h>
 #include <math.h>
 #include "quad.h"
-#include "scene.h"
+#include "raytracer/scene.h"
 
 #define DT_PHYSICS  (1.0 / 1000.0)
 #define DT_CONTROL  (1.0 / 60.0)
@@ -44,13 +44,6 @@ int main() {
     
     // Initialize quadcopter
     Quad quad = create_quad(drone_x, drone_y, drone_z, drone_yaw);
-    
-    // Initialize state estimator
-    StateEstimator estimator = {
-        .angular_velocity = {0.0, 0.0, 0.0},
-        .gyro_bias = {0.0, 0.0, 0.0}
-    };
-    memcpy(estimator.R, quad.R_W_B, 9 * sizeof(double));
     
     // Initialize raytracer scene
     Scene scene = create_scene(400, 300, (int)(SIM_TIME * 1000), 24, 0.4f);
@@ -95,19 +88,13 @@ int main() {
         
         // Control update
         if (t_control >= DT_CONTROL) {
-            update_estimator(
-                quad.gyro_measurement,
-                quad.accel_measurement,
-                DT_CONTROL,
-                &estimator
-            );
-            
+            // Feed the controller the actual quad values directly
             double new_omega[4];
             control_quad_commands(
                 quad.linear_position_W,
                 quad.linear_velocity_W,
-                estimator.R,
-                estimator.angular_velocity,
+                quad.R_W_B,
+                quad.angular_velocity_B,
                 quad.inertia,
                 target,
                 new_omega
