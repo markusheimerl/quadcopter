@@ -369,8 +369,8 @@ void update_quad(Quad* q, double dt) {
     }
     
     // Update magnetometer measurements
-    // Earth's magnetic field vector in world frame (north, down, east)
-    double magnetic_field_W[3] = {0.4, 0.1, 0.0};  // Simplified magnetic field vector
+    // Earth's magnetic field vector in world frame
+    double magnetic_field_W[3] = {0.0, -0.1, 0.9};
     
     // Convert to body frame
     double magnetic_field_B[3];

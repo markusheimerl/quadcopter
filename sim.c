@@ -39,8 +39,10 @@ int main() {
         target_yaw                       // Random target yaw
     };
     
-    printf("Drone starts at (%.2f, %.2f, %.2f), target at (%.2f, %.2f, %.2f) with yaw %.2f\n", 
-           drone_x, drone_y, drone_z, target_x, target_y, target_z, target_yaw);
+    printf("Drone starts at (%.2f, %.2f, %.2f) with yaw %.2f\n", 
+           drone_x, drone_y, drone_z, drone_yaw);
+    printf("Target at (%.2f, %.2f, %.2f) with yaw %.2f\n", 
+           target_x, target_y, target_z, target_yaw);
     
     // Initialize quadcopter
     Quad quad = create_quad(drone_x, drone_y, drone_z, drone_yaw);
