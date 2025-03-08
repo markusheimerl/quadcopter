@@ -195,10 +195,13 @@ typedef struct {
     
     double accel_measurement[3];
     double gyro_measurement[3];
+    double mag_measurement[3];  // Magnetometer measurements
     double accel_bias[3];
     double gyro_bias[3];
+    double mag_bias[3];         // Magnetometer bias
     double accel_scale[3];
     double gyro_scale[3];
+    double mag_scale[3];        // Magnetometer scale factor
 } Quad;
 
 Quad create_quad(double x, double y, double z, double yaw) {
@@ -224,12 +227,15 @@ Quad create_quad(double x, double y, double z, double yaw) {
     
     memset(quad.accel_measurement, 0, 3 * sizeof(double));
     memset(quad.gyro_measurement, 0, 3 * sizeof(double));
+    memset(quad.mag_measurement, 0, 3 * sizeof(double));
     memset(quad.accel_bias, 0, 3 * sizeof(double));
     memset(quad.gyro_bias, 0, 3 * sizeof(double));
+    memset(quad.mag_bias, 0, 3 * sizeof(double));
     
     for(int i = 0; i < 3; i++) {
         quad.accel_scale[i] = ((double)rand() / RAND_MAX - 0.5) * 0.02;
         quad.gyro_scale[i] = ((double)rand() / RAND_MAX - 0.5) * 0.02;
+        quad.mag_scale[i] = ((double)rand() / RAND_MAX - 0.5) * 0.02;
     }
     
     return quad;
@@ -360,6 +366,25 @@ void update_quad(Quad* q, double dt) {
         q->gyro_measurement[i] = q->gyro_measurement[i] * (1.0 + q->gyro_scale[i]) + 
                                 q->gyro_bias[i] + 
                                 ((double)rand() / RAND_MAX - 0.5) * 0.01;
+    }
+    
+    // Update magnetometer measurements
+    // Earth's magnetic field vector in world frame (north, down, east)
+    double magnetic_field_W[3] = {0.4, 0.1, 0.0};  // Simplified magnetic field vector
+    
+    // Convert to body frame
+    double magnetic_field_B[3];
+    multMatVec3f(R_W_B_T, magnetic_field_W, magnetic_field_B);
+    
+    // Copy to magnetometer measurements with noise and bias
+    memcpy(q->mag_measurement, magnetic_field_B, 3 * sizeof(double));
+    for(int i = 0; i < 3; i++) {
+        // Update bias with random walk
+        q->mag_bias[i] += ((double)rand() / RAND_MAX - 0.5) * 0.00005 * dt;
+        // Apply scale factor error, add bias and white noise
+        q->mag_measurement[i] = q->mag_measurement[i] * (1.0 + q->mag_scale[i]) + 
+                                q->mag_bias[i] + 
+                                ((double)rand() / RAND_MAX - 0.5) * 0.005;
     }
 
     // Rotor speed update with saturation:
