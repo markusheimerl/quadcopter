@@ -235,7 +235,31 @@ Quad create_quad(double x, double y, double z, double yaw) {
     return quad;
 }
 
-void update_quad(Quad* q, double dt) {
+void update_quad_states(
+    // Current state
+    const double* omega,            // omega[4]
+    const double* linear_position_W,// linear_position_W[3]
+    const double* linear_velocity_W,// linear_velocity_W[3]
+    const double* angular_velocity_B,// angular_velocity_B[3]
+    const double* R_W_B,           // R_W_B[9]
+    const double* inertia,         // inertia[3]
+    const double* accel_bias,      // accel_bias[3]
+    const double* gyro_bias,       // gyro_bias[3]
+    const double* accel_scale,     // accel_scale[3]
+    const double* gyro_scale,      // gyro_scale[3]
+    const double* omega_next,      // omega_next[4]
+    double dt,                     // time step
+    // Output
+    double* new_linear_position_W, // new_linear_position_W[3]
+    double* new_linear_velocity_W, // new_linear_velocity_W[3]
+    double* new_angular_velocity_B,// new_angular_velocity_B[3]
+    double* new_R_W_B,            // new_R_W_B[9]
+    double* accel_measurement,     // accel_measurement[3]
+    double* gyro_measurement,      // gyro_measurement[3]
+    double* new_accel_bias,        // new_accel_bias[3]
+    double* new_gyro_bias,         // new_gyro_bias[3]
+    double* new_omega             // new_omega[4]
+) {
     // State variables:
     // p ∈ ℝ³     Position in world frame
     // v ∈ ℝ³     Velocity in world frame
@@ -248,7 +272,7 @@ void update_quad(Quad* q, double dt) {
     // m_i = k_m * |ω_i| * ω_i    (drag moment)
     double f[4], m[4];
     for(int i = 0; i < 4; i++) {
-        double omega_sq = q->omega[i] * fabs(q->omega[i]);
+        double omega_sq = omega[i] * fabs(omega[i]);
         f[i] = K_F * omega_sq;
         m[i] = K_M * omega_sq;
     }
@@ -278,7 +302,7 @@ void update_quad(Quad* q, double dt) {
     // where F_W = R_W_B * [0; T; 0]
     double f_B_thrust[3] = {0, thrust, 0};
     double f_thrust_W[3];
-    multMatVec3f(q->R_W_B, f_B_thrust, f_thrust_W);
+    multMatVec3f(R_W_B, f_B_thrust, f_thrust_W);
 
     double linear_acceleration_W[3];
     for(int i = 0; i < 3; i++) {
@@ -290,26 +314,26 @@ void update_quad(Quad* q, double dt) {
     // v(t+dt) = v(t) + dt * v̇(t)
     // p(t+dt) = p(t) + dt * v(t+dt)
     for(int i = 0; i < 3; i++) {
-        q->linear_velocity_W[i] += dt * linear_acceleration_W[i];
-        q->linear_position_W[i] += dt * q->linear_velocity_W[i];
+        new_linear_velocity_W[i] = linear_velocity_W[i] + dt * linear_acceleration_W[i];
+        new_linear_position_W[i] = linear_position_W[i] + dt * new_linear_velocity_W[i];
     }
 
-    if (q->linear_position_W[1] < 0.0) q->linear_position_W[1] = 0.0;
+    if (new_linear_position_W[1] < 0.0) new_linear_position_W[1] = 0.0;
 
     // Angular dynamics:
     // ω̇ = I⁻¹(τ_B - ω × (Iω))
     double I_mat[9];
-    vecToDiagMat3f(q->inertia, I_mat);
+    vecToDiagMat3f(inertia, I_mat);
     
     double h_B[3], w_cross_h[3];
-    multMatVec3f(I_mat, q->angular_velocity_B, h_B);
-    crossVec3f(q->angular_velocity_B, h_B, w_cross_h);
+    multMatVec3f(I_mat, angular_velocity_B, h_B);
+    crossVec3f(angular_velocity_B, h_B, w_cross_h);
 
     // State evolution (Euler integration):
     // ω(t+dt) = ω(t) + dt * ω̇(t)
     for(int i = 0; i < 3; i++) {
-        double angular_acc = (-w_cross_h[i] + tau_B[i]) / q->inertia[i];
-        q->angular_velocity_B[i] += dt * angular_acc;
+        double angular_acc = (-w_cross_h[i] + tau_B[i]) / inertia[i];
+        new_angular_velocity_B[i] = angular_velocity_B[i] + dt * angular_acc;
     }
 
     // Rotation dynamics:
@@ -319,53 +343,53 @@ void update_quad(Quad* q, double dt) {
     //        [ ω₃   0   -ω₁ ]
     //        [-ω₂   ω₁   0  ]
     double w_hat[9];
-    so3hat(q->angular_velocity_B, w_hat);
+    so3hat(angular_velocity_B, w_hat);
     double R_dot[9];
-    multMat3f(q->R_W_B, w_hat, R_dot);
+    multMat3f(R_W_B, w_hat, R_dot);
 
     // State evolution (Euler integration):
     // R(t+dt) = R(t) + dt * Ṙ(t)
     double R_dot_scaled[9];
     multScalMat3f(dt, R_dot, R_dot_scaled);
-    addMat3f(q->R_W_B, R_dot_scaled, q->R_W_B);
-    orthonormalize_rotation_matrix(q->R_W_B);
+    addMat3f(R_W_B, R_dot_scaled, new_R_W_B);
+    orthonormalize_rotation_matrix(new_R_W_B);
 
     // Update IMU measurements
     // Convert world frame acceleration to body frame for accelerometer
     double R_W_B_T[9];
-    transpMat3f(q->R_W_B, R_W_B_T);
-    multMatVec3f(R_W_B_T, linear_acceleration_W, q->accel_measurement);
+    transpMat3f(new_R_W_B, R_W_B_T);
+    multMatVec3f(R_W_B_T, linear_acceleration_W, accel_measurement);
 
     // Add gravity in body frame
     double gravity_B[3];
     multMatVec3f(R_W_B_T, (double[]){0, -GRAVITY, 0}, gravity_B);
-    addVec3f(q->accel_measurement, gravity_B, q->accel_measurement);
+    addVec3f(accel_measurement, gravity_B, accel_measurement);
 
     // Update bias random walk and add noise to accelerometer
     for(int i = 0; i < 3; i++) {
         // Update bias with random walk
-        q->accel_bias[i] += ((double)rand() / RAND_MAX - 0.5) * 0.0001 * dt;
+        new_accel_bias[i] = accel_bias[i] + ((double)rand() / RAND_MAX - 0.5) * 0.0001 * dt;
         // Apply scale factor error, add bias and white noise
-        q->accel_measurement[i] = q->accel_measurement[i] * (1.0 + q->accel_scale[i]) + 
-                                q->accel_bias[i] + 
+        accel_measurement[i] = accel_measurement[i] * (1.0 + accel_scale[i]) + 
+                                new_accel_bias[i] + 
                                 ((double)rand() / RAND_MAX - 0.5) * 0.01;
     }
 
     // Update gyroscope measurements
-    memcpy(q->gyro_measurement, q->angular_velocity_B, 3 * sizeof(double));
+    memcpy(gyro_measurement, new_angular_velocity_B, 3 * sizeof(double));
     for(int i = 0; i < 3; i++) {
         // Update bias with random walk
-        q->gyro_bias[i] += ((double)rand() / RAND_MAX - 0.5) * 0.0001 * dt;
+        new_gyro_bias[i] = gyro_bias[i] + ((double)rand() / RAND_MAX - 0.5) * 0.0001 * dt;
         // Apply scale factor error, add bias and white noise
-        q->gyro_measurement[i] = q->gyro_measurement[i] * (1.0 + q->gyro_scale[i]) + 
-                                q->gyro_bias[i] + 
+        gyro_measurement[i] = gyro_measurement[i] * (1.0 + gyro_scale[i]) + 
+                                new_gyro_bias[i] + 
                                 ((double)rand() / RAND_MAX - 0.5) * 0.01;
     }
 
     // Rotor speed update with saturation:
     // ω_i(t+dt) = clamp(ω_i_next, ω_min, ω_max)
     for(int i = 0; i < 4; i++) {
-        q->omega[i] = fmax(OMEGA_MIN, fmin(OMEGA_MAX, q->omega_next[i]));
+        new_omega[i] = fmax(OMEGA_MIN, fmin(OMEGA_MAX, omega_next[i]));
     }
 }
 
