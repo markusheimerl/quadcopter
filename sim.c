@@ -42,8 +42,15 @@ int main() {
     printf("Drone starts at (%.2f, %.2f, %.2f), target at (%.2f, %.2f, %.2f) with yaw %.2f\n", 
            drone_x, drone_y, drone_z, target_x, target_y, target_z, target_yaw);
     
+    // Initialize sensor scale factors
+    double accel_scale[3], gyro_scale[3];
+    for(int i = 0; i < 3; i++) {
+        accel_scale[i] = random_range(-0.01, 0.01);
+        gyro_scale[i] = random_range(-0.01, 0.01);
+    }
+    
     // Initialize quadcopter
-    Quad quad = create_quad(drone_x, drone_y, drone_z, drone_yaw);
+    Quad quad = create_quad(drone_x, drone_y, drone_z, drone_yaw, accel_scale, gyro_scale);
     
     // Initialize state estimator
     StateEstimator estimator = {
@@ -100,7 +107,16 @@ int main() {
             double new_gyro_bias[3];
             double new_omega[4];
             
-            // Call the new update function that doesn't modify the quad directly
+            // Generate noise terms
+            double accel_bias_noise[3], gyro_bias_noise[3], accel_meas_noise[3], gyro_meas_noise[3];
+            for(int i = 0; i < 3; i++) {
+                accel_bias_noise[i] = random_range(-0.0001, 0.0001);
+                gyro_bias_noise[i] = random_range(-0.0001, 0.0001);
+                accel_meas_noise[i] = random_range(-0.01, 0.01);
+                gyro_meas_noise[i] = random_range(-0.01, 0.01);
+            }
+            
+            // Call the deterministic update function with noise inputs
             update_quad_states(
                 quad.omega,                 // Current rotor speeds
                 quad.linear_position_W,     // Current position
@@ -114,6 +130,11 @@ int main() {
                 quad.gyro_scale,            // Gyro scale factors
                 quad.omega_next,            // Target rotor speeds
                 DT_PHYSICS,                 // Time step
+                // Noise inputs
+                accel_bias_noise,           // Accelerometer bias noise
+                gyro_bias_noise,            // Gyroscope bias noise
+                accel_meas_noise,           // Accelerometer measurement noise
+                gyro_meas_noise,            // Gyroscope measurement noise
                 // Outputs
                 new_linear_position_W,      // New position
                 new_linear_velocity_W,      // New velocity
