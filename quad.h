@@ -201,7 +201,7 @@ typedef struct {
     double gyro_scale[3];
 } Quad;
 
-Quad create_quad(double x, double y, double z, double yaw, double* accel_scale, double* gyro_scale) {
+Quad create_quad(double x, double y, double z, double yaw) {
     Quad quad;
     
     memcpy(quad.omega, (double[]){0.0, 0.0, 0.0, 0.0}, 4 * sizeof(double));
@@ -227,8 +227,10 @@ Quad create_quad(double x, double y, double z, double yaw, double* accel_scale, 
     memset(quad.accel_bias, 0, 3 * sizeof(double));
     memset(quad.gyro_bias, 0, 3 * sizeof(double));
     
-    memcpy(quad.accel_scale, accel_scale, 3 * sizeof(double));
-    memcpy(quad.gyro_scale, gyro_scale, 3 * sizeof(double));
+    for(int i = 0; i < 3; i++) {
+        quad.accel_scale[i] = ((double)rand() / RAND_MAX - 0.5) * 0.02;
+        quad.gyro_scale[i] = ((double)rand() / RAND_MAX - 0.5) * 0.02;
+    }
     
     return quad;
 }
@@ -247,11 +249,6 @@ void update_quad_states(
     const double* gyro_scale,      // gyro_scale[3]
     const double* omega_next,      // omega_next[4]
     double dt,                     // time step
-    // Random noise inputs
-    const double* accel_bias_noise,// accel_bias_noise[3]
-    const double* gyro_bias_noise, // gyro_bias_noise[3]
-    const double* accel_meas_noise,// accel_meas_noise[3]
-    const double* gyro_meas_noise, // gyro_meas_noise[3]
     // Output
     double* new_linear_position_W, // new_linear_position_W[3]
     double* new_linear_velocity_W, // new_linear_velocity_W[3]
@@ -368,25 +365,25 @@ void update_quad_states(
     multMatVec3f(R_W_B_T, (double[]){0, -GRAVITY, 0}, gravity_B);
     addVec3f(accel_measurement, gravity_B, accel_measurement);
 
-    // Update bias with provided random walk noise and add provided measurement noise
+    // Update bias random walk and add noise to accelerometer
     for(int i = 0; i < 3; i++) {
-        // Update bias with provided random walk noise
-        new_accel_bias[i] = accel_bias[i] + accel_bias_noise[i] * dt;
-        // Apply scale factor error, add bias and provided white noise
+        // Update bias with random walk
+        new_accel_bias[i] = accel_bias[i] + ((double)rand() / RAND_MAX - 0.5) * 0.0001 * dt;
+        // Apply scale factor error, add bias and white noise
         accel_measurement[i] = accel_measurement[i] * (1.0 + accel_scale[i]) + 
-                               new_accel_bias[i] + 
-                               accel_meas_noise[i];
+                                new_accel_bias[i] + 
+                                ((double)rand() / RAND_MAX - 0.5) * 0.01;
     }
 
     // Update gyroscope measurements
     memcpy(gyro_measurement, new_angular_velocity_B, 3 * sizeof(double));
     for(int i = 0; i < 3; i++) {
-        // Update bias with provided random walk noise
-        new_gyro_bias[i] = gyro_bias[i] + gyro_bias_noise[i] * dt;
-        // Apply scale factor error, add bias and provided white noise
+        // Update bias with random walk
+        new_gyro_bias[i] = gyro_bias[i] + ((double)rand() / RAND_MAX - 0.5) * 0.0001 * dt;
+        // Apply scale factor error, add bias and white noise
         gyro_measurement[i] = gyro_measurement[i] * (1.0 + gyro_scale[i]) + 
-                              new_gyro_bias[i] + 
-                              gyro_meas_noise[i];
+                                new_gyro_bias[i] + 
+                                ((double)rand() / RAND_MAX - 0.5) * 0.01;
     }
 
     // Rotor speed update with saturation:
