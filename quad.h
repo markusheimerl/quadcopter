@@ -249,6 +249,10 @@ void update_quad_states(
     const double* gyro_scale,      // gyro_scale[3]
     const double* omega_next,      // omega_next[4]
     double dt,                     // time step
+    double rand1,                  // First random value
+    double rand2,                  // Second random value
+    double rand3,                  // Third random value
+    double rand4,                  // Fourth random value
     // Output
     double* new_linear_position_W, // new_linear_position_W[3]
     double* new_linear_velocity_W, // new_linear_velocity_W[3]
@@ -365,25 +369,33 @@ void update_quad_states(
     multMatVec3f(R_W_B_T, (double[]){0, -GRAVITY, 0}, gravity_B);
     addVec3f(accel_measurement, gravity_B, accel_measurement);
 
+    // Use the first two random values for accel and gyro bias updates
+    double accel_walk_noise = (rand1 - 0.5) * 0.0001;
+    double gyro_walk_noise = (rand2 - 0.5) * 0.0001;
+
+    // Use the second two random values for accel and gyro measurement noise
+    double accel_meas_noise = (rand3 - 0.5) * 0.01;
+    double gyro_meas_noise = (rand4 - 0.5) * 0.01;
+
     // Update bias random walk and add noise to accelerometer
     for(int i = 0; i < 3; i++) {
         // Update bias with random walk
-        new_accel_bias[i] = accel_bias[i] + ((double)rand() / RAND_MAX - 0.5) * 0.0001 * dt;
+        new_accel_bias[i] = accel_bias[i] + accel_walk_noise * dt;
         // Apply scale factor error, add bias and white noise
         accel_measurement[i] = accel_measurement[i] * (1.0 + accel_scale[i]) + 
                                 new_accel_bias[i] + 
-                                ((double)rand() / RAND_MAX - 0.5) * 0.01;
+                                accel_meas_noise;
     }
 
     // Update gyroscope measurements
     memcpy(gyro_measurement, new_angular_velocity_B, 3 * sizeof(double));
     for(int i = 0; i < 3; i++) {
         // Update bias with random walk
-        new_gyro_bias[i] = gyro_bias[i] + ((double)rand() / RAND_MAX - 0.5) * 0.0001 * dt;
+        new_gyro_bias[i] = gyro_bias[i] + gyro_walk_noise * dt;
         // Apply scale factor error, add bias and white noise
         gyro_measurement[i] = gyro_measurement[i] * (1.0 + gyro_scale[i]) + 
                                 new_gyro_bias[i] + 
-                                ((double)rand() / RAND_MAX - 0.5) * 0.01;
+                                gyro_meas_noise;
     }
 
     // Rotor speed update with saturation:
