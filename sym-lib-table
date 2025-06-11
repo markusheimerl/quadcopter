@@ -1,4 +1,4 @@
 (sym_lib_table
   (version 0)
-  (lib (name "quad-easyedapro")(type "KiCad")(uri "${KIPRJMOD}/quad-easyedapro.kicad_sym")(options "")(descr ""))
+  (lib (name "ProPrj_202-easyedapro")(type "KiCad")(uri "${KIPRJMOD}/ProPrj_202-easyedapro.kicad_sym")(options "")(descr ""))
 )
