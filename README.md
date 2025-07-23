@@ -15,7 +15,7 @@ Import .epro file at [https://pro.easyeda.com/editor](https://pro.easyeda.com/ed
 [![BLDC PCB](img/2025_07_18_bldc_pcb.png)](img/2025_07_18_bldc_pcb.png)
 
 ### Main Quad
-[![Quad Schematic](img/2025_06_05_quad_sch.png)](img/2025_06_05_quad_sch.png)
+<!-- [![Quad Schematic](img/2025_06_05_quad_sch.png)](img/2025_06_05_quad_sch.png) -->
 [![Quad PCB](img/2025_06_05_quad_pcb.png)](img/2025_06_05_quad_pcb.png)
 
 ### Camera
