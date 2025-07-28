@@ -1,9 +1,4 @@
-#include "src/scene.h"
-#include <time.h>
-
-#ifndef M_PI
-#define M_PI 3.14159265358979323846
-#endif
+#include "scene.h"
 
 int main() {
     // Create scene with 4 seconds duration at 24 fps and a scaling factor of 0.9

@@ -1,15 +1,48 @@
 CC = clang
-CFLAGS = -O3 -march=native -Wall -Wextra
-LDFLAGS = -static -lm -lwebp -lwebpmux -lsharpyuv -lpthread -flto
+CFLAGS = -O3 -march=native -Wall -Wextra -Isrc
+LDFLAGS = -static -lwebp -lwebpmux -lsharpyuv -lm -lpthread -flto
 
 TARGET = raytracer.out
-SRC = raytracer.c
+MAIN_SRC = raytracer.c
 
-$(TARGET): $(SRC)
-	$(CC) $(CFLAGS) $(SRC) $(LDFLAGS) -o $(TARGET)
+# Source directories
+MATH_DIR = src/math
+GEOMETRY_DIR = src/geometry
+ACCEL_DIR = src/accel
+RENDER_DIR = src/render
+UTILS_DIR = src/utils
+
+# Source files
+MATH_SRCS = $(wildcard $(MATH_DIR)/*.c)
+GEOMETRY_SRCS = $(wildcard $(GEOMETRY_DIR)/*.c)
+ACCEL_SRCS = $(wildcard $(ACCEL_DIR)/*.c)
+RENDER_SRCS = $(wildcard $(RENDER_DIR)/*.c)
+UTILS_SRCS = $(wildcard $(UTILS_DIR)/*.c)
+SCENE_SRCS = src/scene.c
+
+ALL_SRCS = $(MAIN_SRC) $(MATH_SRCS) $(GEOMETRY_SRCS) $(ACCEL_SRCS) $(RENDER_SRCS) $(UTILS_SRCS) $(SCENE_SRCS)
+
+# Object files
+MATH_OBJS = $(MATH_SRCS:.c=.o)
+GEOMETRY_OBJS = $(GEOMETRY_SRCS:.c=.o)
+ACCEL_OBJS = $(ACCEL_SRCS:.c=.o)
+RENDER_OBJS = $(RENDER_SRCS:.c=.o)
+UTILS_OBJS = $(UTILS_SRCS:.c=.o)
+SCENE_OBJS = $(SCENE_SRCS:.c=.o)
+MAIN_OBJ = $(MAIN_SRC:.c=.o)
+
+ALL_OBJS = $(MAIN_OBJ) $(MATH_OBJS) $(GEOMETRY_OBJS) $(ACCEL_OBJS) $(RENDER_OBJS) $(UTILS_OBJS) $(SCENE_OBJS)
+
+$(TARGET): $(ALL_OBJS)
+	$(CC) $(ALL_OBJS) $(LDFLAGS) -o $(TARGET)
+
+%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
 
 run: $(TARGET)
 	@time ./$(TARGET)
 
 clean:
-	rm -f *.out *_rendering.webp
+	rm -f *.out $(ALL_OBJS) *_rendering.webp
+
+.PHONY: clean run
