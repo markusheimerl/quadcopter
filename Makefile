@@ -1,6 +1,10 @@
 CC = clang
 CFLAGS = -O3 -march=native -Wall -Wextra -Isrc
-LDFLAGS = -static -lwebp -lwebpmux -lsharpyuv -lm -lpthread -flto
+
+# Try to link with different library combinations for better compatibility
+# Some systems have sharpyuv integrated into libwebp, others need it separately
+LDFLAGS_BASE = -static -lwebp -lwebpmux -lm -lpthread -flto
+LDFLAGS_SHARP = -static -lwebp -lwebpmux -lsharpyuv -lm -lpthread -flto
 
 TARGET = raytracer.out
 MAIN_SRC = raytracer.c
@@ -34,9 +38,30 @@ MAIN_OBJ = $(MAIN_SRC:.c=.o)
 ALL_OBJS = $(MAIN_OBJ) $(MATH_OBJS) $(GEOMETRY_OBJS) $(ACCEL_OBJS) $(RENDER_OBJS) $(UTILS_OBJS) $(SCENE_OBJS)
 
 $(TARGET): $(ALL_OBJS)
-	$(CC) $(ALL_OBJS) $(LDFLAGS) -o $(TARGET)
+	@echo "Linking raytracer..."
+	@if $(CC) $(ALL_OBJS) $(LDFLAGS_BASE) -o $(TARGET) 2>/dev/null; then \
+		echo "Successfully linked with base WebP libraries."; \
+	elif $(CC) $(ALL_OBJS) $(LDFLAGS_SHARP) -o $(TARGET) 2>/dev/null; then \
+		echo "Successfully linked with sharpyuv library included."; \
+	else \
+		echo "Error: Failed to link. Trying without static linking..."; \
+		$(CC) $(ALL_OBJS) -lwebp -lwebpmux -lm -lpthread -flto -o $(TARGET); \
+	fi
 
-%.o: %.c
+webp-check:
+	@if ! echo '#include <webp/encode.h>' | $(CC) -E - >/dev/null 2>&1; then \
+		echo "Error: WebP development headers not found."; \
+		echo "Please install libwebp-dev (Debian/Ubuntu) or libwebp-devel (RedHat/CentOS):"; \
+		echo "  sudo apt-get install libwebp-dev"; \
+		echo "  sudo yum install libwebp-devel"; \
+		echo ""; \
+		echo "On Jetson/ARM systems, you may need:"; \
+		echo "  sudo apt-get update"; \
+		echo "  sudo apt-get install libwebp-dev"; \
+		exit 1; \
+	fi
+
+%.o: %.c webp-check
 	$(CC) $(CFLAGS) -c $< -o $@
 
 run: $(TARGET)
@@ -45,4 +70,4 @@ run: $(TARGET)
 clean:
 	rm -f *.out $(ALL_OBJS) *_rendering.webp
 
-.PHONY: clean run
+.PHONY: clean run webp-check
