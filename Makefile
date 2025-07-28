@@ -1,6 +1,6 @@
 CC = clang
-CFLAGS = -O3 -march=native -ffast-math -Wall -Wextra
-LDFLAGS = -static -lm -lwebp -lwebpmux -lpthread -flto
+CFLAGS = -O3 -march=native -Wall -Wextra
+LDFLAGS = -static -lm -lwebp -lwebpmux -lsharpyuv -lpthread -flto
 
 TARGET = raytracer.out
 SRC = raytracer.c
