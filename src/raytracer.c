@@ -1,4 +1,4 @@
-#include "src/scene.h"
+#include "scene.h"
 #include <time.h>
 
 #ifndef M_PI
