@@ -15,4 +15,4 @@ run: $(TARGET)
 	@time ./$(TARGET)
 
 clean:
-	rm -f *.out *_rendering.webp
+	rm -f *.out *.o *.webp
