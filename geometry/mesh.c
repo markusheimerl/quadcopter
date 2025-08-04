@@ -1,24 +1,7 @@
-#ifndef MESH_H
-#define MESH_H
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <math.h>
+#include "mesh.h"
 #include <webp/decode.h>
 #include <webp/encode.h>
-#include "bvh.h"
-
-// Modify the Mesh struct
-typedef struct {
-    Triangle* triangles;
-    size_t triangle_count;
-    unsigned char* texture_data;
-    int texture_width;
-    int texture_height;
-    BVH bvh;
-    Transform transform;
-} Mesh;
+#include <math.h>
 
 Mesh create_mesh(const char* obj_filename, const char* texture_filename) {
     Mesh mesh = {
@@ -37,6 +20,7 @@ Mesh create_mesh(const char* obj_filename, const char* texture_filename) {
             .rotation = {0, 0, 0}
         }
     };
+    
     // Load geometry
     Vec3* vertices = (Vec3*)malloc(1000000 * sizeof(Vec3));
     Vec2* texcoords = (Vec2*)malloc(1000000 * sizeof(Vec2));
@@ -163,5 +147,3 @@ Vec3 sample_mesh_texture(const Mesh* mesh, float u, float v) {
         mesh->texture_data[idx + 2] / 255.0f
     };
 }
-
-#endif

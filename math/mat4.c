@@ -1,32 +1,6 @@
-#ifndef VMATH_H
-#define VMATH_H
+#include "mat4.h"
 
-#include <math.h>
-
-typedef struct { float x, y, z; } Vec3;
-typedef struct { float u, v; } Vec2;
-
-Vec3 vec3_add(Vec3 a, Vec3 b) { return (Vec3){a.x + b.x, a.y + b.y, a.z + b.z}; }
-Vec3 vec3_sub(Vec3 a, Vec3 b) { return (Vec3){a.x - b.x, a.y - b.y, a.z - b.z}; }
-Vec3 vec3_mul(Vec3 a, float t) { return (Vec3){a.x * t, a.y * t, a.z * t}; }
-Vec3 vec3_div(Vec3 a, float t) { return vec3_mul(a, 1.0f/t); }
-float vec3_dot(Vec3 a, Vec3 b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
-Vec3 vec3_cross(Vec3 a, Vec3 b) {
-    return (Vec3){
-        a.y * b.z - a.z * b.y,
-        a.z * b.x - a.x * b.z,
-        a.x * b.y - a.y * b.x
-    };
-}
-float vec3_length(Vec3 v) { return sqrtf(vec3_dot(v, v)); }
-Vec3 vec3_normalize(Vec3 v) { return vec3_div(v, vec3_length(v)); }
-Vec3 vec3_mul_vec3(Vec3 a, Vec3 b) { return (Vec3){a.x * b.x, a.y * b.y, a.z * b.z}; }
-
-typedef struct {
-    float m[4][4];
-} Mat4;
-
-Mat4 mat4_identity() {
+Mat4 mat4_identity(void) {
     Mat4 m = {.m = {{0.0f, 0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f, 0.0f}}};
     m.m[0][0] = m.m[1][1] = m.m[2][2] = m.m[3][3] = 1.0f;
     return m;
@@ -248,5 +222,3 @@ Mat4 mat4_transpose(Mat4 m) {
     }
     return result;
 }
-
-#endif

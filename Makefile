@@ -1,15 +1,22 @@
 CC = clang
-CFLAGS = -O3 -march=native -ffast-math -Wall -Wextra
-LDFLAGS = -static -lm -lwebp -lwebpmux -lpthread -flto
+CFLAGS = -O3 -march=native -Wall -Wextra -I.
+LDFLAGS = -lm -lwebp -lwebpmux -lpthread -flto
 
-TARGET = raytracer.out
-SRC = raytracer.c
+OBJS = raytracer.o scene.o \
+       math/mat4.o math/ray.o math/vec3.o \
+       geometry/aabb.o geometry/mesh.o \
+       accel/bvh.o \
+       render/camera.o render/light.o \
+       utils/image.o utils/progress.o
 
-$(TARGET): $(SRC)
-	$(CC) $(CFLAGS) $(SRC) $(LDFLAGS) -o $(TARGET)
+raytracer.out: $(OBJS)
+	$(CC) $(OBJS) $(LDFLAGS) -o $@
 
-run: $(TARGET)
-	@time ./$(TARGET)
+%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+run: raytracer.out
+	@time ./raytracer.out
 
 clean:
-	rm -f *.out *_rendering.webp
+	rm -f *.out *.o */*.o *.webp

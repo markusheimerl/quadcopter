@@ -1,82 +1,5 @@
-#ifndef BVH_H
-#define BVH_H
-
-#include "ray.h"
-
-typedef struct {
-    Vec3 min;
-    Vec3 max;
-} AABB;
-
-typedef struct BVHNode {
-    AABB bounds;
-    struct BVHNode* left;
-    struct BVHNode* right;
-    int start_idx;
-    int triangle_count;
-} BVHNode;
-
-typedef struct {
-    BVHNode* root;
-    Triangle* triangles;
-    size_t triangle_count;
-} BVH;
-
-// AABB functions
-AABB create_empty_aabb() {
-    return (AABB){
-        (Vec3){INFINITY, INFINITY, INFINITY},
-        (Vec3){-INFINITY, -INFINITY, -INFINITY}
-    };
-}
-
-AABB expand_aabb(AABB box, Vec3 point) {
-    return (AABB){
-        (Vec3){
-            fminf(box.min.x, point.x),
-            fminf(box.min.y, point.y),
-            fminf(box.min.z, point.z)
-        },
-        (Vec3){
-            fmaxf(box.max.x, point.x),
-            fmaxf(box.max.y, point.y),
-            fmaxf(box.max.z, point.z)
-        }
-    };
-}
-
-AABB get_triangle_bounds(Triangle tri) {
-    AABB bounds = create_empty_aabb();
-    bounds = expand_aabb(bounds, tri.v0);
-    bounds = expand_aabb(bounds, tri.v1);
-    bounds = expand_aabb(bounds, tri.v2);
-    return bounds;
-}
-
-bool ray_aabb_intersect(Ray ray, AABB box) {
-    Vec3 inv_dir = (Vec3){
-        1.0f / ray.direction.x,
-        1.0f / ray.direction.y,
-        1.0f / ray.direction.z
-    };
-
-    float tx1 = (box.min.x - ray.origin.x) * inv_dir.x;
-    float tx2 = (box.max.x - ray.origin.x) * inv_dir.x;
-    float tmin = fminf(tx1, tx2);
-    float tmax = fmaxf(tx1, tx2);
-
-    float ty1 = (box.min.y - ray.origin.y) * inv_dir.y;
-    float ty2 = (box.max.y - ray.origin.y) * inv_dir.y;
-    tmin = fmaxf(tmin, fminf(ty1, ty2));
-    tmax = fminf(tmax, fmaxf(ty1, ty2));
-
-    float tz1 = (box.min.z - ray.origin.z) * inv_dir.z;
-    float tz2 = (box.max.z - ray.origin.z) * inv_dir.z;
-    tmin = fmaxf(tmin, fminf(tz1, tz2));
-    tmax = fminf(tmax, fmaxf(tz1, tz2));
-
-    return tmax >= tmin && tmax > 0;
-}
+#include "bvh.h"
+#include "math/ray.h"
 
 BVHNode* create_bvh_node(Triangle* triangles, int start, int count) {
     BVHNode* node = (BVHNode*)malloc(sizeof(BVHNode));
@@ -154,4 +77,53 @@ void destroy_bvh(BVH* bvh) {
     bvh->root = NULL;
 }
 
-#endif
+bool intersect_bvh(BVHNode* node, Ray ray, const Triangle* triangles,
+                   float* t_out, float* u_out, float* v_out, int* tri_idx) {
+    if (!ray_aabb_intersect(ray, node->bounds)) return false;
+
+    bool hit = false;
+    float closest_t = *t_out;
+
+    if (node->left == NULL && node->right == NULL) {
+        // Leaf node - test all triangles
+        for (int i = 0; i < node->triangle_count; i++) {
+            float t, u, v;
+            if (ray_triangle_intersect(ray,
+                triangles[node->start_idx + i].v0,
+                triangles[node->start_idx + i].v1,
+                triangles[node->start_idx + i].v2,
+                &t, &u, &v) && t < closest_t) {
+                closest_t = t;
+                *t_out = t;
+                *u_out = u;
+                *v_out = v;
+                *tri_idx = node->start_idx + i;
+                hit = true;
+            }
+        }
+    } else {
+        // Internal node - recurse
+        float t1 = 1e30f, t2 = 1e30f;
+        float u1, v1, u2, v2;
+        int idx1, idx2;
+
+        bool hit1 = node->left ? intersect_bvh(node->left, ray, triangles, &t1, &u1, &v1, &idx1) : false;
+        bool hit2 = node->right ? intersect_bvh(node->right, ray, triangles, &t2, &u2, &v2, &idx2) : false;
+
+        if (hit1 && (!hit2 || t1 < t2)) {
+            *t_out = t1;
+            *u_out = u1;
+            *v_out = v1;
+            *tri_idx = idx1;
+            hit = true;
+        } else if (hit2) {
+            *t_out = t2;
+            *u_out = u2;
+            *v_out = v2;
+            *tri_idx = idx2;
+            hit = true;
+        }
+    }
+
+    return hit;
+}

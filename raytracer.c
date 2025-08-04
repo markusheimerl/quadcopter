@@ -1,4 +1,9 @@
 #include "scene.h"
+#include <time.h>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 int main() {
     // Create scene with 4 seconds duration at 24 fps and a scaling factor of 0.9
@@ -19,13 +24,13 @@ int main() {
     );
     
     // Add meshes to scene
-    Mesh drone = create_mesh("drone.obj", "drone.webp");
+    Mesh drone = create_mesh("assets/drone.obj", "assets/drone.webp");
     add_mesh_to_scene(&scene, drone);
     
-    Mesh treasure = create_mesh("treasure.obj", "treasure.webp");
+    Mesh treasure = create_mesh("assets/treasure.obj", "assets/treasure.webp");
     add_mesh_to_scene(&scene, treasure);
     
-    Mesh ground = create_mesh("ground.obj", "ground.webp");
+    Mesh ground = create_mesh("assets/ground.obj", "assets/ground.webp");
     add_mesh_to_scene(&scene, ground);
 
     // Initialize timer for progress bar
