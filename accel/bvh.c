@@ -1,5 +1,5 @@
 #include "bvh.h"
-#include "../math/ray.h"
+#include "math/ray.h"
 
 BVHNode* create_bvh_node(Triangle* triangles, int start, int count) {
     BVHNode* node = (BVHNode*)malloc(sizeof(BVHNode));

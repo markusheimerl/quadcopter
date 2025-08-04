@@ -1,7 +1,7 @@
 #ifndef LIGHT_H
 #define LIGHT_H
 
-#include "../math/vec3.h"
+#include "math/vec3.h"
 
 typedef struct {
     Vec3 direction;

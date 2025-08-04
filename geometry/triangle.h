@@ -1,7 +1,7 @@
 #ifndef TRIANGLE_H
 #define TRIANGLE_H
 
-#include "../math/vec3.h"
+#include "math/vec3.h"
 
 typedef struct {
     Vec3 v0, v1, v2;      // Vertices

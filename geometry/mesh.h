@@ -1,9 +1,9 @@
 #ifndef MESH_H
 #define MESH_H
 
-#include "../geometry/triangle.h"
-#include "../accel/bvh.h"
-#include "../math/ray.h"
+#include "triangle.h"
+#include "accel/bvh.h"
+#include "math/ray.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

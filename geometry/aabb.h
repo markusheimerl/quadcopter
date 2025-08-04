@@ -1,8 +1,8 @@
 #ifndef AABB_H
 #define AABB_H
 
-#include "../math/vec3.h"
-#include "../math/ray.h"
+#include "math/vec3.h"
+#include "math/ray.h"
 #include "triangle.h"
 #include <stdbool.h>
 

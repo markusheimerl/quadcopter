@@ -1,8 +1,8 @@
 #ifndef BVH_H
 #define BVH_H
 
-#include "../geometry/aabb.h"
-#include "../geometry/triangle.h"
+#include "geometry/aabb.h"
+#include "geometry/triangle.h"
 #include <stdlib.h>
 
 typedef struct BVHNode {
