@@ -177,7 +177,8 @@ void render_scene(Scene* scene) {
     unsigned char* current_frame = scene->frames[scene->current_frame];
     
     // Determine number of threads - allow environment variable override
-    int num_threads = (int)sysconf(_SC_NPROCESSORS_ONLN);
+    // Default to 2 threads as this provides best performance for typical raytracing workloads
+    int num_threads = 2;
     char* thread_env = getenv("RAYTRACER_THREADS");
     if (thread_env) {
         num_threads = atoi(thread_env);
