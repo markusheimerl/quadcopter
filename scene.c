@@ -176,14 +176,8 @@ void render_scene(Scene* scene) {
     float aspect = (float)scene->width / scene->height;
     unsigned char* current_frame = scene->frames[scene->current_frame];
     
-    // Determine number of threads - allow environment variable override
-    // Default to 2 threads as this provides best performance for typical raytracing workloads
+    // Use 2 threads as this provides best performance for typical raytracing workloads
     int num_threads = 2;
-    char* thread_env = getenv("RAYTRACER_THREADS");
-    if (thread_env) {
-        num_threads = atoi(thread_env);
-    }
-    if (num_threads < 1) num_threads = 1;
     if (num_threads > scene->height) num_threads = scene->height;
     
     // Single-threaded fallback for comparison or if only 1 thread
