@@ -6,6 +6,6 @@ A minimal raytracer
 ## How to run
 ```
 sudo apt update
-sudo apt install clang libwebp-dev time
+sudo apt install clang libwebp-dev libomp-dev time
 make run
 ```
