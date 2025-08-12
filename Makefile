@@ -1,6 +1,6 @@
 CC = clang
-CFLAGS = -O3 -march=native -Wall -Wextra -I.
-LDFLAGS = -lm -lwebp -lwebpmux -lpthread -flto
+CFLAGS = -O3 -march=native -Wall -Wextra -I. -fopenmp
+LDFLAGS = -lm -lwebp -lwebpmux -lpthread -fopenmp -flto
 
 OBJS = raytracer.o scene.o \
        math/mat4.o math/ray.o math/vec3.o \

@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <omp.h>
 
 Scene create_scene(int width, int height, int duration_ms, int fps, float scale_factor) {
     int frame_count = (duration_ms * fps) / 1000;
@@ -52,6 +53,8 @@ void render_scene(Scene* scene) {
     float aspect = (float)scene->width / scene->height;
     unsigned char* current_frame = scene->frames[scene->current_frame];
 
+    // Parallelize the outer loop (rows)
+    #pragma omp parallel for schedule(dynamic, 4)
     for (int y = 0; y < scene->height; y++) {
         for (int x = 0; x < scene->width; x++) {
             Ray ray = get_camera_ray(&scene->camera, 
@@ -182,6 +185,7 @@ void save_scene(Scene* scene, const char* filename) {
     // Add each frame to the animation
     for (int frame = 0; frame < scene->frame_count; frame++) {
         // Scale up the frame using bicubic interpolation
+        #pragma omp parallel for schedule(static)
         for (int y = 0; y < scaled_height; y++) {
             for (int x = 0; x < scaled_width; x++) {
                 float src_x = x * (scene->width - 1.0f) / (scaled_width - 1.0f);
