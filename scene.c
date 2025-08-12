@@ -3,9 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#ifdef _OPENMP
 #include <omp.h>
-#endif
 
 Scene create_scene(int width, int height, int duration_ms, int fps, float scale_factor) {
     int frame_count = (duration_ms * fps) / 1000;
