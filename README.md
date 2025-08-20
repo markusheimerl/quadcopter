@@ -7,8 +7,8 @@ Import .epro file at [https://pro.easyeda.com/editor](https://pro.easyeda.com/ed
 ## Quickview
 
 ### FPGA
-[![FPGA Schematic](img/2025_07_18_fpga_sch.png)](img/2025_07_18_fpga_sch.png)
-[![FPGA PCB](img/2025_07_18_fpga_pcb.png)](img/2025_07_18_fpga_pcb.png)
+[![FPGA Schematic](img/2025_08_20_fpga_sch.png)](img/2025_08_20_fpga_sch.png)
+[![FPGA PCB](img/2025_08_20_fpga_pcb.png)](img/2025_08_20_fpga_pcb.png)
 
 ### BLDC
 [![BLDC Schematic](img/2025_07_18_bldc_sch.png)](img/2025_07_18_bldc_sch.png)
