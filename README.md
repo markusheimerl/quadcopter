@@ -32,4 +32,4 @@ Import .epro file at [https://pro.easyeda.com/editor](https://pro.easyeda.com/ed
 
 ### LEDs
 [![LEDs Schematic](img/2025_08_24_leds_sch.png)](img/2025_08_24_leds_sch.png)
-[![LEDs PCB](img/2025_08_24_leds.png)](img/2025_08_24_leds_pcb.png)
+[![LEDs PCB](img/2025_08_24_leds_pcb.png)](img/2025_08_24_leds_pcb.png)
