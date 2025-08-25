@@ -26,9 +26,9 @@ Import .epro file at [https://pro.easyeda.com/editor](https://pro.easyeda.com/ed
 [![IMU Schematic](img/2025_07_18_imu_sch.png)](img/2025_07_18_imu_sch.png)
 [![IMU PCB](img/2025_07_18_imu_pcb.png)](img/2025_07_18_imu_pcb.png)
 
-### FTDI
-[![FTDI Schematic](img/2025_07_18_ftdi_sch.png)](img/2025_07_18_ftdi_sch.png)
-[![FTDI PCB](img/2025_07_18_ftdi_pcb.png)](img/2025_07_18_ftdi_pcb.png)
+### USB2SPI
+[![FTDI Schematic](img/2025_08_25_usb2spi_sch.png)](img/2025_08_25_usb2spi_sch.png)
+[![FTDI PCB](img/2025_08_25_usb2spi_pcb.png)](img/2025_08_25_usb2spi_pcb.png)
 
 ### LEDs
 [![LEDs Schematic](img/2025_08_24_leds_sch.png)](img/2025_08_24_leds_sch.png)
