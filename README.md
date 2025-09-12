@@ -27,5 +27,5 @@ Import .epro file at [https://pro.easyeda.com/editor](https://pro.easyeda.com/ed
 [![Flash PCB](img/2025_09_11_flash_pcb.png)](img/2025_09_11_flash_pcb.png)
 
 ### LEDs
-[![LEDs Schematic](img/2025_08_24_leds_sch.png)](img/2025_08_24_leds_sch.png)
-[![LEDs PCB](img/2025_08_24_leds_pcb.png)](img/2025_08_24_leds_pcb.png)
+[![LEDs Schematic](img/2025_08_23_leds_sch.png)](img/2025_08_23_leds_sch.png)
+[![LEDs PCB](img/2025_08_23_leds_pcb.png)](img/2025_08_23_leds_pcb.png)
