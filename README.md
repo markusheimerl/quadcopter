@@ -6,6 +6,10 @@ Import .epro file at [https://pro.easyeda.com/editor](https://pro.easyeda.com/ed
 
 ## Quickview
 
+### ESP32
+[![ESP32 Schematic](img/2025_10_02_esp32_sch.png)](img/2025_10_02_esp32_sch.png)
+[![ESP32 PCB](img/2025_10_02_esp32_pcb.png)](img/2025_10_02_esp32_pcb.png)
+
 ### USB2SPI
 [![FTDI Schematic](img/2025_09_11_usb2spi_sch.png)](img/2025_09_11_usb2spi_sch.png)
 [![FTDI PCB](img/2025_09_11_usb2spi_pcb.png)](img/2025_09_11_usb2spi_pcb.png)
