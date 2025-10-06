@@ -69,14 +69,14 @@ int main() {
     );
     
     // Add meshes to scene
-    Mesh drone_mesh = create_mesh("raytracer/drone.obj", "raytracer/drone.webp");
+    Mesh drone_mesh = create_mesh("raytracer/assets/drone.obj", "raytracer/assets/drone.webp");
     add_mesh_to_scene(&scene, drone_mesh);
     
-    Mesh treasure = create_mesh("raytracer/treasure.obj", "raytracer/treasure.webp");
+    Mesh treasure = create_mesh("raytracer/assets/treasure.obj", "raytracer/assets/treasure.webp");
     add_mesh_to_scene(&scene, treasure);
     set_mesh_position(&scene.meshes[1], (Vec3){(float)target_x, (float)target_y, (float)target_z});
     
-    Mesh ground = create_mesh("raytracer/ground.obj", "raytracer/ground.webp");
+    Mesh ground = create_mesh("raytracer/assets/ground.obj", "raytracer/assets/ground.webp");
     add_mesh_to_scene(&scene, ground);
 
     // Initialize timers
@@ -205,7 +205,8 @@ int main() {
 
     // Save animation
     char filename[64];
-    strftime(filename, sizeof(filename), "%Y%m%d_%H%M%S_flight.webp", localtime(&(time_t){time(NULL)}));
+    time_t current_time = time(NULL);
+    strftime(filename, sizeof(filename), "%Y%m%d_%H%M%S_flight.webp", localtime(&current_time));
     save_scene(&scene, filename);
     printf("Animation saved to: %s\n", filename);
 
