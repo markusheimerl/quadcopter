@@ -1,2 +1,2 @@
 # sim
-A quadcoptor simulation
+A quadcoptor simulation implementation
