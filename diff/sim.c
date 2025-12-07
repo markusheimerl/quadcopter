@@ -45,13 +45,6 @@ int main() {
     // Initialize quadcopter
     Quad quad = create_quad(drone_x, drone_y, drone_z, drone_yaw);
     
-    // Initialize state estimator
-    StateEstimator estimator = {
-        .angular_velocity = {0.0, 0.0, 0.0},
-        .gyro_bias = {0.0, 0.0, 0.0}
-    };
-    memcpy(estimator.R, quad.R_W_B, 9 * sizeof(double));
-    
     // Initialize raytracer scene
     Scene scene = create_scene(400, 300, (int)(SIM_TIME * 1000), 24, 0.4f);
     
@@ -94,19 +87,9 @@ int main() {
             double new_linear_velocity_W[3];
             double new_angular_velocity_B[3];
             double new_R_W_B[9];
-            double accel_measurement[3];
-            double gyro_measurement[3];
-            double new_accel_bias[3];
-            double new_gyro_bias[3];
             double new_omega[4];
             
-            // Generate 4 random values
-            double rand1 = (double)rand() / RAND_MAX;
-            double rand2 = (double)rand() / RAND_MAX;
-            double rand3 = (double)rand() / RAND_MAX;
-            double rand4 = (double)rand() / RAND_MAX;
-            
-            // Call the update function with the random values
+            // Call the update function
             update_quad_states(
                 quad.omega,                 // Current rotor speeds
                 quad.linear_position_W,     // Current position
@@ -114,22 +97,13 @@ int main() {
                 quad.angular_velocity_B,    // Current angular velocity
                 quad.R_W_B,                 // Current rotation matrix
                 quad.inertia,               // Inertia matrix
-                quad.accel_bias,            // Current accel bias
-                quad.gyro_bias,             // Current gyro bias
-                quad.accel_scale,           // Accel scale factors
-                quad.gyro_scale,            // Gyro scale factors
                 quad.omega_next,            // Target rotor speeds
                 DT_PHYSICS,                 // Time step
-                rand1, rand2, rand3, rand4, // Random values
                 // Outputs
                 new_linear_position_W,      // New position
                 new_linear_velocity_W,      // New velocity
                 new_angular_velocity_B,     // New angular velocity
                 new_R_W_B,                  // New rotation matrix
-                accel_measurement,          // Accelerometer readings
-                gyro_measurement,           // Gyroscope readings
-                new_accel_bias,             // Updated accel bias
-                new_gyro_bias,              // Updated gyro bias
                 new_omega                   // New rotor speeds
             );
             
@@ -138,10 +112,6 @@ int main() {
             memcpy(quad.linear_velocity_W, new_linear_velocity_W, 3 * sizeof(double));
             memcpy(quad.angular_velocity_B, new_angular_velocity_B, 3 * sizeof(double));
             memcpy(quad.R_W_B, new_R_W_B, 9 * sizeof(double));
-            memcpy(quad.accel_measurement, accel_measurement, 3 * sizeof(double));
-            memcpy(quad.gyro_measurement, gyro_measurement, 3 * sizeof(double));
-            memcpy(quad.accel_bias, new_accel_bias, 3 * sizeof(double));
-            memcpy(quad.gyro_bias, new_gyro_bias, 3 * sizeof(double));
             memcpy(quad.omega, new_omega, 4 * sizeof(double));
             
             t_physics = 0.0;
@@ -149,19 +119,12 @@ int main() {
         
         // Control update
         if (t_control >= DT_CONTROL) {
-            update_estimator(
-                quad.gyro_measurement,
-                quad.accel_measurement,
-                DT_CONTROL,
-                &estimator
-            );
-            
             double new_omega[4];
             control_quad_commands(
                 quad.linear_position_W,
                 quad.linear_velocity_W,
-                estimator.R,
-                estimator.angular_velocity,
+                quad.R_W_B,
+                quad.angular_velocity_B,
                 quad.inertia,
                 target,
                 new_omega

@@ -185,20 +185,13 @@ void orthonormalize_rotation_matrix(double* R) {
 #define K_W 0.6
 
 typedef struct {
-    double omega[4];
-    double linear_position_W[3];
-    double linear_velocity_W[3];
-    double angular_velocity_B[3];
-    double R_W_B[9];
-    double inertia[3];
-    double omega_next[4];
-    
-    double accel_measurement[3];
-    double gyro_measurement[3];
-    double accel_bias[3];
-    double gyro_bias[3];
-    double accel_scale[3];
-    double gyro_scale[3];
+    double omega[4];                // Rotor speeds
+    double linear_position_W[3];    // Position (from mocap)
+    double linear_velocity_W[3];    // Velocity (from mocap)
+    double angular_velocity_B[3];   // Angular velocity (from mocap)
+    double R_W_B[9];               // Rotation matrix (from mocap)
+    double inertia[3];             // Inertia tensor
+    double omega_next[4];          // Commanded rotor speeds
 } Quad;
 
 Quad create_quad(double x, double y, double z, double yaw) {
@@ -222,16 +215,6 @@ Quad create_quad(double x, double y, double z, double yaw) {
     memcpy(quad.inertia, (double[]){0.01, 0.02, 0.01}, 3 * sizeof(double));
     memcpy(quad.omega_next, (double[]){0.0, 0.0, 0.0, 0.0}, 4 * sizeof(double));
     
-    memset(quad.accel_measurement, 0, 3 * sizeof(double));
-    memset(quad.gyro_measurement, 0, 3 * sizeof(double));
-    memset(quad.accel_bias, 0, 3 * sizeof(double));
-    memset(quad.gyro_bias, 0, 3 * sizeof(double));
-    
-    for(int i = 0; i < 3; i++) {
-        quad.accel_scale[i] = ((double)rand() / RAND_MAX - 0.5) * 0.02;
-        quad.gyro_scale[i] = ((double)rand() / RAND_MAX - 0.5) * 0.02;
-    }
-    
     return quad;
 }
 
@@ -243,25 +226,13 @@ void update_quad_states(
     const double* angular_velocity_B,// angular_velocity_B[3]
     const double* R_W_B,           // R_W_B[9]
     const double* inertia,         // inertia[3]
-    const double* accel_bias,      // accel_bias[3]
-    const double* gyro_bias,       // gyro_bias[3]
-    const double* accel_scale,     // accel_scale[3]
-    const double* gyro_scale,      // gyro_scale[3]
     const double* omega_next,      // omega_next[4]
     double dt,                     // time step
-    double rand1,                  // First random value
-    double rand2,                  // Second random value
-    double rand3,                  // Third random value
-    double rand4,                  // Fourth random value
     // Output
     double* new_linear_position_W, // new_linear_position_W[3]
     double* new_linear_velocity_W, // new_linear_velocity_W[3]
     double* new_angular_velocity_B,// new_angular_velocity_B[3]
     double* new_R_W_B,            // new_R_W_B[9]
-    double* accel_measurement,     // accel_measurement[3]
-    double* gyro_measurement,      // gyro_measurement[3]
-    double* new_accel_bias,        // new_accel_bias[3]
-    double* new_gyro_bias,         // new_gyro_bias[3]
     double* new_omega             // new_omega[4]
 ) {
     // State variables:
@@ -358,46 +329,6 @@ void update_quad_states(
     addMat3f(R_W_B, R_dot_scaled, new_R_W_B);
     orthonormalize_rotation_matrix(new_R_W_B);
 
-    // Update IMU measurements
-    // Convert world frame acceleration to body frame for accelerometer
-    double R_W_B_T[9];
-    transpMat3f(new_R_W_B, R_W_B_T);
-    multMatVec3f(R_W_B_T, linear_acceleration_W, accel_measurement);
-
-    // Add gravity in body frame
-    double gravity_B[3];
-    multMatVec3f(R_W_B_T, (double[]){0, -GRAVITY, 0}, gravity_B);
-    addVec3f(accel_measurement, gravity_B, accel_measurement);
-
-    // Use the first two random values for accel and gyro bias updates
-    double accel_walk_noise = (rand1 - 0.5) * 0.0001;
-    double gyro_walk_noise = (rand2 - 0.5) * 0.0001;
-
-    // Use the second two random values for accel and gyro measurement noise
-    double accel_meas_noise = (rand3 - 0.5) * 0.01;
-    double gyro_meas_noise = (rand4 - 0.5) * 0.01;
-
-    // Update bias random walk and add noise to accelerometer
-    for(int i = 0; i < 3; i++) {
-        // Update bias with random walk
-        new_accel_bias[i] = accel_bias[i] + accel_walk_noise * dt;
-        // Apply scale factor error, add bias and white noise
-        accel_measurement[i] = accel_measurement[i] * (1.0 + accel_scale[i]) + 
-                                new_accel_bias[i] + 
-                                accel_meas_noise;
-    }
-
-    // Update gyroscope measurements
-    memcpy(gyro_measurement, new_angular_velocity_B, 3 * sizeof(double));
-    for(int i = 0; i < 3; i++) {
-        // Update bias with random walk
-        new_gyro_bias[i] = gyro_bias[i] + gyro_walk_noise * dt;
-        // Apply scale factor error, add bias and white noise
-        gyro_measurement[i] = gyro_measurement[i] * (1.0 + gyro_scale[i]) + 
-                                new_gyro_bias[i] + 
-                                gyro_meas_noise;
-    }
-
     // Rotor speed update with saturation:
     // ω_i(t+dt) = clamp(ω_i_next, ω_min, ω_max)
     for(int i = 0; i < 4; i++) {
@@ -406,7 +337,7 @@ void update_quad_states(
 }
 
 void control_quad_commands(
-    // Current state
+    // Current state (from mocap)
     const double* position,     // linear_position_W[3]
     const double* velocity,     // linear_velocity_W[3]
     const double* R_W_B,       // R_W_B[9]
@@ -531,72 +462,6 @@ void control_quad_commands(
     for(int i = 0; i < 4; i++) {
         omega_next[i] = sqrt(fabs(omega_sign_square[i]));
     }
-}
-
-typedef struct {
-    double R[9];                    // Estimated rotation matrix
-    double angular_velocity[3];     // Estimated angular velocity
-    double gyro_bias[3];           // Estimated gyro bias
-} StateEstimator;
-
-void update_estimator(
-    const double *gyro, 
-    const double *accel, 
-    double dt, 
-    StateEstimator *state
-) {
-    // Correction gains
-    const double k_R = 0.1;    // Attitude correction gain
-    const double k_angular = 2.0; // Angular velocity correction gain
-    const double k_bias = 0.01; // Bias estimation gain
-
-    // 1. Normalize accelerometer reading
-    double acc_norm = sqrt(dotVec3f(accel, accel));
-    double a_norm[3] = {
-        accel[0] / acc_norm,
-        accel[1] / acc_norm,
-        accel[2] / acc_norm
-    };
-
-    // 2. Calculate error between measured and expected gravity direction
-    double g_body[3];
-    double R_T[9];
-    transpMat3f(state->R, R_T);
-    multMatVec3f(R_T, (double[]){0, -1, 0}, g_body);
-    
-    double error[3];
-    crossVec3f(a_norm, g_body, error);
-    
-    // 3. Update bias estimate
-    for(int i = 0; i < 3; i++) {
-        state->gyro_bias[i] -= k_bias * error[i] * dt;
-    }
-
-    // 4. Apply corrections to angular velocity estimate
-    for(int i = 0; i < 3; i++) {
-        // Remove bias from gyro measurement
-        double unbiased_gyro = gyro[i] - state->gyro_bias[i];
-        // Update angular velocity estimate with bias-corrected gyro and attitude error
-        state->angular_velocity[i] = unbiased_gyro + k_angular * error[i];
-    }
-    
-    // 5. Update rotation matrix
-    double angular_velocity_hat[9];
-    so3hat(state->angular_velocity, angular_velocity_hat);
-    double R_dot[9];
-    multMat3f(state->R, angular_velocity_hat, R_dot);
-    
-    // Add attitude correction term
-    double correction[9];
-    so3hat(error, correction);
-    multScalMat3f(k_R, correction, correction);
-    addMat3f(R_dot, correction, R_dot);
-    
-    // Integrate and orthonormalize
-    for(int i = 0; i < 9; i++) {
-        state->R[i] += dt * R_dot[i];
-    }
-    orthonormalize_rotation_matrix(state->R);
 }
 
 #endif // QUAD_H
