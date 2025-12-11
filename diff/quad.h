@@ -226,15 +226,6 @@ void quatFromBasis(const double* bx, const double* by, const double* bz, double*
 #define OMEGA_MAX 70.0      // Maximum rotor speed [rad/s]
 
 // ============================================================================
-// CONTROLLER GAINS
-// ============================================================================
-
-#define K_P 0.2             // Position proportional gain
-#define K_V 0.6             // Velocity proportional gain
-#define K_R 0.6             // Rotation proportional gain
-#define K_W 0.6             // Angular velocity proportional gain
-
-// ============================================================================
 // QUADCOPTER STATE
 // ============================================================================
 
@@ -421,6 +412,8 @@ void control_quad_commands(
     const double* inertia,          // I: Inertia tensor (diagonal) [3]
     // Desired state
     const double* target,           // [p_d(3), v_d(3), ψ_d(1)]
+    // Controller gains
+    double K_P, double K_V, double K_R, double K_W,
     // Output
     double* omega_cmd               // Commanded rotor speeds [4]
 ) {

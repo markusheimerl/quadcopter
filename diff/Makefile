@@ -1,5 +1,6 @@
 CC = clang
 CFLAGS = -O3 -march=native -Wall -Wextra -I../raytracer -fopenmp
+ENZYME_PATH = $(HOME)/Documents/Enzyme/enzyme/build/Enzyme/ClangEnzyme-18.so
 LDFLAGS = -lm -lwebp -lwebpmux -lpthread -fopenmp -flto
 
 # Raytracer object files
@@ -12,6 +13,9 @@ RAYTRACER_OBJS = ../raytracer/scene.o \
 
 sim.out: sim.o $(RAYTRACER_OBJS)
 	$(CC) sim.o $(RAYTRACER_OBJS) $(LDFLAGS) -o $@
+
+sim.o: sim.c quad.h
+	$(CC) $(CFLAGS) -fplugin=$(ENZYME_PATH) -c sim.c -o $@
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
