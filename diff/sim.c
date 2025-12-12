@@ -22,23 +22,38 @@
 
 extern void __enzyme_autodiff(void*, ...);
 
-// Fixed initial conditions for optimization
-static double IC_DRONE_X, IC_DRONE_Y, IC_DRONE_Z, IC_DRONE_YAW;
-static double IC_TARGET_X, IC_TARGET_Y, IC_TARGET_Z, IC_TARGET_YAW;
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+
+double random_range(double min, double max) {
+    return min + (double)rand() / RAND_MAX * (max - min);
+}
 
 // ============================================================================
 // LOSS FUNCTION
 // ============================================================================
 
 void simulate_for_loss(double* gains, double* out_loss) {
-    // Initialize quad with fixed initial conditions
-    Quad quad = create_quad(IC_DRONE_X, IC_DRONE_Y, IC_DRONE_Z, IC_DRONE_YAW);
+    // Generate random initial conditions for this iteration
+    double ic_drone_x = random_range(-2.0, 2.0);
+    double ic_drone_y = random_range(0.5, 2.0);
+    double ic_drone_z = random_range(-2.0, 2.0);
+    double ic_drone_yaw = random_range(-M_PI, M_PI);
     
-    // Fixed target
+    double ic_target_x = random_range(-2.0, 2.0);
+    double ic_target_y = random_range(0.5, 2.5);
+    double ic_target_z = random_range(-2.0, 2.0);
+    double ic_target_yaw = random_range(-M_PI, M_PI);
+    
+    // Initialize quad with random initial conditions
+    Quad quad = create_quad(ic_drone_x, ic_drone_y, ic_drone_z, ic_drone_yaw);
+    
+    // Random target
     double target[7] = {
-        IC_TARGET_X, IC_TARGET_Y, IC_TARGET_Z,
+        ic_target_x, ic_target_y, ic_target_z,
         0.0, 0.0, 0.0,
-        IC_TARGET_YAW
+        ic_target_yaw
     };
     
     double t_physics = 0.0;
@@ -129,37 +144,11 @@ void optimize_gains(double* gains) {
 }
 
 // ============================================================================
-// UTILITY FUNCTIONS
-// ============================================================================
-
-double random_range(double min, double max) {
-    return min + (double)rand() / RAND_MAX * (max - min);
-}
-
-// ============================================================================
 // MAIN SIMULATION LOOP
 // ============================================================================
 
 int main() {
     srand(time(NULL));
-    
-    // -------------------------------------------------------------------------
-    // Initialize initial conditions (fixed for optimization)
-    // -------------------------------------------------------------------------
-    IC_DRONE_X   = random_range(-2.0, 2.0);
-    IC_DRONE_Y   = random_range(0.5, 2.0);
-    IC_DRONE_Z   = random_range(-2.0, 2.0);
-    IC_DRONE_YAW = random_range(-M_PI, M_PI);
-    
-    IC_TARGET_X   = random_range(-2.0, 2.0);
-    IC_TARGET_Y   = random_range(0.5, 2.5);
-    IC_TARGET_Z   = random_range(-2.0, 2.0);
-    IC_TARGET_YAW = random_range(-M_PI, M_PI);
-    
-    printf("Drone starts at (%.2f, %.2f, %.2f) with yaw %.2f\n", 
-           IC_DRONE_X, IC_DRONE_Y, IC_DRONE_Z, IC_DRONE_YAW);
-    printf("Target at (%.2f, %.2f, %.2f) with yaw %.2f\n", 
-           IC_TARGET_X, IC_TARGET_Y, IC_TARGET_Z, IC_TARGET_YAW);
     
     // -------------------------------------------------------------------------
     // Optimize controller gains
@@ -172,12 +161,27 @@ int main() {
     // -------------------------------------------------------------------------
     printf("=== RUNNING VISUALIZATION WITH OPTIMIZED GAINS ===\n");
     
-    Quad quad = create_quad(IC_DRONE_X, IC_DRONE_Y, IC_DRONE_Z, IC_DRONE_YAW);
+    double ic_drone_x = random_range(-2.0, 2.0);
+    double ic_drone_y = random_range(0.5, 2.0);
+    double ic_drone_z = random_range(-2.0, 2.0);
+    double ic_drone_yaw = random_range(-M_PI, M_PI);
+    
+    double ic_target_x = random_range(-2.0, 2.0);
+    double ic_target_y = random_range(0.5, 2.5);
+    double ic_target_z = random_range(-2.0, 2.0);
+    double ic_target_yaw = random_range(-M_PI, M_PI);
+    
+    printf("Drone starts at (%.2f, %.2f, %.2f) with yaw %.2f\n", 
+           ic_drone_x, ic_drone_y, ic_drone_z, ic_drone_yaw);
+    printf("Target at (%.2f, %.2f, %.2f) with yaw %.2f\n", 
+           ic_target_x, ic_target_y, ic_target_z, ic_target_yaw);
+    
+    Quad quad = create_quad(ic_drone_x, ic_drone_y, ic_drone_z, ic_drone_yaw);
     
     double target[7] = {
-        IC_TARGET_X, IC_TARGET_Y, IC_TARGET_Z,
+        ic_target_x, ic_target_y, ic_target_z,
         0.0, 0.0, 0.0,
-        IC_TARGET_YAW
+        ic_target_yaw
     };
     
     // Initialize raytracer scene
@@ -204,7 +208,7 @@ int main() {
                                  "../raytracer/assets/treasure.webp");
     add_mesh_to_scene(&scene, treasure);
     set_mesh_position(&scene.meshes[1], 
-        (Vec3){(float)IC_TARGET_X, (float)IC_TARGET_Y, (float)IC_TARGET_Z});
+        (Vec3){(float)ic_target_x, (float)ic_target_y, (float)ic_target_z});
     
     Mesh ground = create_mesh("../raytracer/assets/ground.obj", 
                                "../raytracer/assets/ground.webp");
@@ -298,12 +302,12 @@ int main() {
            quad.linear_position_W[1], 
            quad.linear_position_W[2]);
     printf("Final yaw: %.2f rad or ±%.2f rad (target: %.2f rad)\n", 
-           final_yaw, M_PI - fabs(final_yaw), IC_TARGET_YAW);
+           final_yaw, M_PI - fabs(final_yaw), ic_target_yaw);
     
     double pos_error = sqrt(
-        pow(quad.linear_position_W[0] - IC_TARGET_X, 2) +
-        pow(quad.linear_position_W[1] - IC_TARGET_Y, 2) +
-        pow(quad.linear_position_W[2] - IC_TARGET_Z, 2)
+        pow(quad.linear_position_W[0] - ic_target_x, 2) +
+        pow(quad.linear_position_W[1] - ic_target_y, 2) +
+        pow(quad.linear_position_W[2] - ic_target_z, 2)
     );
     printf("Position error: %.3f m\n", pos_error);
 
