@@ -17,26 +17,20 @@
 #define SIM_TIME    10.0             // Total simulation time [s]
 
 // ============================================================================
-// ENZYME AUTODIFF DECLARATIONS
+// ENZYME AUTODIFF DECLARATION
 // ============================================================================
 
-extern double __enzyme_autodiff(void*, double);
+extern void __enzyme_autodiff(void*, ...);
 
 // Fixed initial conditions for optimization
 static double IC_DRONE_X, IC_DRONE_Y, IC_DRONE_Z, IC_DRONE_YAW;
 static double IC_TARGET_X, IC_TARGET_Y, IC_TARGET_Z, IC_TARGET_YAW;
 
-// Global gains for wrapper functions
-static double G_KV, G_KR, G_KW;
-static double G_KP, G_KR2, G_KW2;
-static double G_KP2, G_KV2, G_KW3;
-static double G_KP3, G_KV3, G_KR3;
-
 // ============================================================================
-// LOSS FUNCTION (physics-only simulation)
+// LOSS FUNCTION
 // ============================================================================
 
-double simulate_for_loss(double K_P, double K_V, double K_R, double K_W) {
+void simulate_for_loss(double* gains, double* out_loss) {
     // Initialize quad with fixed initial conditions
     Quad quad = create_quad(IC_DRONE_X, IC_DRONE_Y, IC_DRONE_Z, IC_DRONE_YAW);
     
@@ -81,7 +75,7 @@ double simulate_for_loss(double K_P, double K_V, double K_R, double K_W) {
             control_quad_commands(
                 quad.linear_position_W, quad.linear_velocity_W,
                 quad.q_W_B, quad.angular_velocity_B, quad.inertia,
-                target, K_P, K_V, K_R, K_W, omega_cmd
+                target, gains[0], gains[1], gains[2], gains[3], omega_cmd
             );
             
             memcpy(quad.omega_next, omega_cmd, 4 * sizeof(double));
@@ -93,33 +87,11 @@ double simulate_for_loss(double K_P, double K_V, double K_R, double K_W) {
     }
     
     // Return position error
-    double error = sqrt(
+    *out_loss = sqrt(
         pow(quad.linear_position_W[0] - target[0], 2) +
         pow(quad.linear_position_W[1] - target[1], 2) +
         pow(quad.linear_position_W[2] - target[2], 2)
     );
-    
-    return error;
-}
-
-// ============================================================================
-// WRAPPER FUNCTIONS FOR ENZYME (one parameter each)
-// ============================================================================
-
-double loss_wrt_KP(double K_P) {
-    return simulate_for_loss(K_P, G_KV, G_KR, G_KW);
-}
-
-double loss_wrt_KV(double K_V) {
-    return simulate_for_loss(G_KP, K_V, G_KR2, G_KW2);
-}
-
-double loss_wrt_KR(double K_R) {
-    return simulate_for_loss(G_KP2, G_KV2, K_R, G_KW3);
-}
-
-double loss_wrt_KW(double K_W) {
-    return simulate_for_loss(G_KP3, G_KV3, G_KR3, K_W);
 }
 
 // ============================================================================
@@ -133,37 +105,21 @@ void optimize_gains(double* gains) {
     int num_iterations = 5000;
     
     for (int iter = 0; iter < num_iterations; iter++) {
-        // Compute loss
-        double loss = simulate_for_loss(gains[0], gains[1], gains[2], gains[3]);
+        // Gradient array
+        double d_gains[4] = {0.0, 0.0, 0.0, 0.0};
         
-        // Compute gradients using forward-mode AD
-        G_KV = gains[1]; G_KR = gains[2]; G_KW = gains[3];
-        double d_KP = __enzyme_autodiff((void*)loss_wrt_KP, gains[0]);
+        // Output and its seed gradient
+        double loss = 0.0, d_loss = 1.0;
         
-        G_KP = gains[0]; G_KR2 = gains[2]; G_KW2 = gains[3];
-        double d_KV = __enzyme_autodiff((void*)loss_wrt_KV, gains[1]);
-        
-        G_KP2 = gains[0]; G_KV2 = gains[1]; G_KW3 = gains[3];
-        double d_KR = __enzyme_autodiff((void*)loss_wrt_KR, gains[2]);
-        
-        G_KP3 = gains[0]; G_KV3 = gains[1]; G_KR3 = gains[2];
-        double d_KW = __enzyme_autodiff((void*)loss_wrt_KW, gains[3]);
+        // Reverse-mode AD
+        __enzyme_autodiff((void*)simulate_for_loss, gains, d_gains, &loss, &d_loss);
         
         // Gradient descent update
-        gains[0] -= learning_rate * d_KP;
-        gains[1] -= learning_rate * d_KV;
-        gains[2] -= learning_rate * d_KR;
-        gains[3] -= learning_rate * d_KW;
-        
-        // Clamp gains to reasonable range
-        for (int i = 0; i < 4; i++) {
-            if (gains[i] < 0.01) gains[i] = 0.01;
-            if (gains[i] > 5.0) gains[i] = 5.0;
-        }
+        for (int i = 0; i < 4; i++) gains[i] -= learning_rate * d_gains[i];
         
         // Print periodically
         if (iter % 1000 == 0 || iter == num_iterations - 1) {
-            printf("Iter %2d: Loss=%.6f  K_P=%.3f K_V=%.3f K_R=%.3f K_W=%.3f\n",
+            printf("Iter %4d: Loss=%.6f  K_P=%.3f K_V=%.3f K_R=%.3f K_W=%.3f\n",
                    iter, loss, gains[0], gains[1], gains[2], gains[3]);
         }
     }
@@ -208,7 +164,7 @@ int main() {
     // -------------------------------------------------------------------------
     // Optimize controller gains
     // -------------------------------------------------------------------------
-    double gains[4] = {0.2, 0.6, 0.6, 0.6};  // Initial gains
+    double gains[4] = {0.2, 0.6, 0.6, 0.6};  // Initial: {K_P, K_V, K_R, K_W}
     optimize_gains(gains);
     
     // -------------------------------------------------------------------------
