@@ -1,3 +1,0 @@
-[submodule "raytracer"]
-	path = raytracer
-	url = https://github.com/markusheimerl/raytracer.git
