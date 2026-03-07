@@ -53,7 +53,7 @@ int main() {
     memcpy(estimator.R, quad.R_W_B, 9 * sizeof(double));
     
     // Initialize raytracer scene
-    Scene scene = create_scene(400, 300, (int)(SIM_TIME * 1000), 24, 1.0f);
+    Scene scene = create_scene(800, 600, (int)(SIM_TIME * 1000), 24, 1.0f);
     
     // Set up camera and lighting
     set_scene_camera(&scene,
