@@ -1,0 +1,11 @@
+# raytracer
+A ray tracer implementation
+
+![animation](https://raw.githubusercontent.com/markusheimerl/raytracer/4ee7c04c67b42cb8211b24771bf415078c1187b0/20250127_141008_rendering.webp)
+
+## How to run
+```
+sudo apt update
+sudo apt install clang libwebp-dev libomp-dev time
+make run -j 4
+```
