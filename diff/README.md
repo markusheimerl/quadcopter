@@ -1,0 +1,1 @@
+This subsection explores the possibility of autodifferentiation through the dynamics and potentially one day through the renderer by using Enzyme, a C native autodiff framework.
