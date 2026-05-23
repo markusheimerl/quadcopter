@@ -16,6 +16,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
+#include <stdarg.h>
 #include <math.h>
 
 #include "soc/gpio_reg.h"
@@ -28,6 +29,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
+#include "freertos/stream_buffer.h"
 
 #include "nimble/nimble_port.h"
 #include "nimble/nimble_port_freertos.h"
@@ -267,6 +269,13 @@ static const ble_uuid128_t NUS_TX_UUID  = BLE_UUID128_INIT(
 static uint8_t s_own_addr_type;
 static QueueHandle_t s_cmd_q;  /* one-byte commands from BLE -> motor task */
 
+/* BLE log streaming: any ESP_LOG* output is duplicated to the NUS TX
+ * characteristic so logs can be captured without a USB cable. */
+static uint16_t s_conn_handle    = 0xFFFF;
+static uint16_t s_tx_val_handle  = 0;
+static bool     s_notify_enabled = false;
+static StreamBufferHandle_t s_log_sb = NULL;
+
 static void ble_advertise(void);
 
 static void handle_cmd_byte(uint8_t c)
@@ -305,6 +314,7 @@ static const struct ble_gatt_svc_def gatt_svr_svcs[] = {
                 .uuid = &NUS_TX_UUID.u,
                 .access_cb = nus_rx_access, /* unused, but a cb is required */
                 .flags = BLE_GATT_CHR_F_NOTIFY,
+                .val_handle = &s_tx_val_handle,
             }, { 0 }
         },
     },
@@ -317,12 +327,23 @@ static int ble_gap_event(struct ble_gap_event *event, void *arg)
     case BLE_GAP_EVENT_CONNECT:
         ESP_LOGI(TAG, "ble: connect %s",
                  event->connect.status == 0 ? "ok" : "failed");
-        if (event->connect.status != 0) ble_advertise();
+        if (event->connect.status == 0) {
+            s_conn_handle = event->connect.conn_handle;
+        } else {
+            ble_advertise();
+        }
         break;
     case BLE_GAP_EVENT_DISCONNECT:
         ESP_LOGI(TAG, "ble: disconnect, reason=0x%x",
                  event->disconnect.reason);
+        s_conn_handle = 0xFFFF;
+        s_notify_enabled = false;
         ble_advertise();
+        break;
+    case BLE_GAP_EVENT_SUBSCRIBE:
+        if (event->subscribe.attr_handle == s_tx_val_handle) {
+            s_notify_enabled = event->subscribe.cur_notify;
+        }
         break;
     case BLE_GAP_EVENT_ADV_COMPLETE:
         ble_advertise();
@@ -376,6 +397,87 @@ static void ble_host_task(void *param)
 {
     nimble_port_run();
     nimble_port_freertos_deinit();
+}
+
+/* ---------- BLE log streaming ----------
+ *
+ * Hook into esp_log via esp_log_set_vprintf: every log line is written
+ * into a FreeRTOS stream buffer (also still printed to stdout for the
+ * USB serial monitor). A dedicated task drains the stream buffer and
+ * sends the bytes out as NUS TX notifications, chunked to fit in the
+ * default 23-byte ATT MTU (20 bytes payload). When no client is
+ * subscribed the bytes are simply consumed and dropped.
+ *
+ * Caveat: when the CPU panics, interrupts are off and the BLE host
+ * task cannot run -- so the panic message itself will not reach the
+ * client live. The log lines printed in the moments BEFORE the panic
+ * do reach the client, which is usually what matters.
+ */
+#define BLE_LOG_SB_SIZE   4096
+#define BLE_LOG_LINE_MAX  192
+#define BLE_LOG_CHUNK     20
+
+static int ble_log_vprintf(const char *fmt, va_list ap)
+{
+    char buf[BLE_LOG_LINE_MAX];
+    va_list ap2;
+    va_copy(ap2, ap);
+    int m = vsnprintf(buf, sizeof(buf), fmt, ap2);
+    va_end(ap2);
+
+    int n = vprintf(fmt, ap);   /* also keep USB monitor working */
+
+    if (s_log_sb && m > 0) {
+        size_t len = (m >= (int)sizeof(buf)) ? sizeof(buf) - 1 : (size_t)m;
+        /* Never block: if the buffer is full we'd rather drop log bytes
+         * than stall the caller (which may be a high-priority task). */
+        (void)xStreamBufferSend(s_log_sb, buf, len, 0);
+    }
+    return n;
+}
+
+static void ble_log_task(void *arg)
+{
+    uint8_t buf[BLE_LOG_CHUNK];
+    for (;;) {
+        size_t got = xStreamBufferReceive(s_log_sb, buf, sizeof(buf),
+                                          portMAX_DELAY);
+        if (got == 0) continue;
+        if (!s_notify_enabled || s_conn_handle == 0xFFFF ||
+            s_tx_val_handle == 0) {
+            continue;   /* nobody listening -- drop */
+        }
+        struct os_mbuf *om = ble_hs_mbuf_from_flat(buf, got);
+        if (!om) {
+            vTaskDelay(pdMS_TO_TICKS(5));
+            continue;
+        }
+        int rc = ble_gatts_notify_custom(s_conn_handle, s_tx_val_handle, om);
+        if (rc != 0) {
+            /* On ENOMEM / busy, back off briefly. mbuf is consumed by
+             * NimBLE regardless of return code. */
+            vTaskDelay(pdMS_TO_TICKS(10));
+        }
+    }
+}
+
+static void ble_log_bring_up(void)
+{
+    s_log_sb = xStreamBufferCreate(BLE_LOG_SB_SIZE, 1);
+    if (!s_log_sb) {
+        ESP_LOGE(TAG, "ble_log: stream buffer alloc failed");
+        return;
+    }
+    /* NimBLE prints an INFO line for every notification it sends. Once
+     * we tee logs to BLE, that creates an exponential feedback loop
+     * (send notify -> log -> send notify -> ...). Suppress its info
+     * chatter; warnings and errors still get through. */
+    esp_log_level_set("NimBLE",      ESP_LOG_WARN);
+    esp_log_level_set("nimble",      ESP_LOG_WARN);
+    esp_log_level_set("BLE_HS",      ESP_LOG_WARN);
+    esp_log_level_set("BTDM_INIT",   ESP_LOG_WARN);
+    xTaskCreate(ble_log_task, "ble_log", 3072, NULL, 4, NULL);
+    esp_log_set_vprintf(ble_log_vprintf);
 }
 
 static void ble_bring_up(void)
@@ -479,7 +581,23 @@ static void control_task(void *arg)
     bool  led_on = false;
     int   print_div = 0;
     int   blink_div = 0;
-    TickType_t next_tick = xTaskGetTickCount();
+    int   i2c_err_streak = 0;
+
+    /* Level calibration: collect the first CAL_N accel samples while the
+     * drone is sitting still on the desk and use their mean as the
+     * accelerometer's idea of "level". This compensates for the IMU
+     * being mounted with a small tilt relative to the airframe. Arming
+     * is blocked until calibration completes. */
+    const int CAL_N = 200;            /* 200 samples @ 200 Hz = 1 s */
+    int   cal_count = 0;
+    float cal_roll_sum = 0.0f, cal_pitch_sum = 0.0f;
+    float roll_bias = 0.0f, pitch_bias = 0.0f;
+    bool  calibrated = false;
+
+    /* If consecutive I2C reads fail this many times in a row we treat the
+     * bus as compromised (most likely motor EMI) and force-disarm so the
+     * controller can't keep commanding motors based on stale data. */
+    const int I2C_ERR_DISARM_THRESHOLD = 5;
 
     for (;;) {
         uint8_t acc[6], gyr[6];
@@ -487,6 +605,7 @@ static void control_task(void *arg)
         esp_err_t e2 = bmi_read(BMI323_GYR_DATA_X, gyr, sizeof(gyr));
 
         if (e1 == ESP_OK && e2 == ESP_OK) {
+            i2c_err_streak = 0;
             int16_t axi = (int16_t)(acc[0] | (acc[1] << 8));
             int16_t ayi = (int16_t)(acc[2] | (acc[3] << 8));
             int16_t azi = (int16_t)(acc[4] | (acc[5] << 8));
@@ -504,8 +623,26 @@ static void control_task(void *arg)
             float gy_dps = gyi * GYR_LSB_TO_DPS;
             float gz_dps = gzi * GYR_LSB_TO_DPS;
 
-            float roll_acc  = atan2f(ay, az);
-            float pitch_acc = atan2f(-ax, sqrtf(ay*ay + az*az));
+            float roll_acc_raw  = atan2f(ay, az);
+            float pitch_acc_raw = atan2f(-ax, sqrtf(ay*ay + az*az));
+
+            /* Accumulate the level bias during the first CAL_N samples. */
+            if (!calibrated) {
+                cal_roll_sum  += roll_acc_raw;
+                cal_pitch_sum += pitch_acc_raw;
+                if (++cal_count >= CAL_N) {
+                    roll_bias  = cal_roll_sum  / (float)CAL_N;
+                    pitch_bias = cal_pitch_sum / (float)CAL_N;
+                    calibrated = true;
+                    ESP_LOGI(TAG,
+                        "level cal done: roll_bias=%+.2f deg pitch_bias=%+.2f deg",
+                        roll_bias  * RAD_TO_DEG,
+                        pitch_bias * RAD_TO_DEG);
+                }
+            }
+
+            float roll_acc  = roll_acc_raw  - roll_bias;
+            float pitch_acc = pitch_acc_raw - pitch_bias;
 
             if (!init) {
                 roll  = roll_acc;
@@ -545,7 +682,11 @@ static void control_task(void *arg)
                 float pitch_err = 0.0f - pitch_deg;
                 float r = ROLL_KP  * roll_err  - ROLL_KD  * gx_dps;
                 float p = PITCH_KP * pitch_err - PITCH_KD * gy_dps;
-                float y = -YAW_KD  * gz_dps;
+                /* Damp yaw rate. +y in the mixer drives the airframe CW
+                 * (increases CCW motors); gz>0 is CCW rotation, so we
+                 * need y = +KD*gz to oppose it. The previous "-KD*gz"
+                 * was positive feedback and caused a runaway spin. */
+                float y = YAW_KD * gz_dps;
 
                 /* Quad-X mixer (see physical layout above).
                  *   +roll  -> right side down, lift left side
@@ -573,8 +714,9 @@ static void control_task(void *arg)
 
             if (++print_div >= 20) {  /* 10 Hz */
                 print_div = 0;
-                printf("%s T=%3u r=%+6.1f p=%+6.1f y=%+6.1f | "
-                       "%3d %3d %3d %3d\n",
+                ESP_LOGI(TAG,
+                       "%s T=%3u r=%+6.1f p=%+6.1f y=%+6.1f | "
+                       "%3d %3d %3d %3d",
                        s_armed ? "ARM" : "dis",
                        (unsigned)s_base_throttle,
                        roll_deg, pitch_deg, yaw_deg,
@@ -586,11 +728,26 @@ static void control_task(void *arg)
                 led_set(led_on);
             }
         } else {
-            ESP_LOGW(TAG, "i2c read failed: acc=%s gyr=%s",
-                     esp_err_to_name(e1), esp_err_to_name(e2));
+            /* Don't spam the log -- one line per error is enough. */
+            if (i2c_err_streak < 100) {
+                ESP_LOGW(TAG, "i2c read failed: acc=%s gyr=%s (streak=%d)",
+                         esp_err_to_name(e1), esp_err_to_name(e2),
+                         i2c_err_streak + 1);
+            }
+            ++i2c_err_streak;
+            if (s_armed && i2c_err_streak >= I2C_ERR_DISARM_THRESHOLD) {
+                s_armed = false;
+                s_base_throttle = 0;
+                for (int i = 0; i < 4; ++i) motor_set_duty(i, 0);
+                ESP_LOGE(TAG, "ctrl: I2C lost -> AUTO-DISARM");
+            }
         }
 
-        vTaskDelayUntil(&next_tick, pdMS_TO_TICKS(CTRL_PERIOD_MS));
+        /* Plain vTaskDelay (not vTaskDelayUntil): if one iteration runs
+         * long, we just slip a cycle instead of busy-spinning to catch
+         * up. That catch-up loop was starving CPU1 and tripping the
+         * interrupt watchdog at higher throttles. */
+        vTaskDelay(pdMS_TO_TICKS(CTRL_PERIOD_MS));
     }
 }
 
@@ -606,8 +763,11 @@ void app_main(void)
 
     /* Bring up BLE NUS server + motor command consumer task. */
     s_cmd_q = xQueueCreate(16, sizeof(uint8_t));
-    xTaskCreate(motor_cmd_task, "motorcmd", 2048, NULL, 5, NULL);
+    /* 4 KB: every ESP_LOGI here goes through ble_log_vprintf, which
+     * puts a 192 B buf + vsnprintf + vprintf on the stack. 2 KB overflows. */
+    xTaskCreate(motor_cmd_task, "motorcmd", 4096, NULL, 5, NULL);
     ble_bring_up();
+    ble_log_bring_up();   /* tee ESP_LOG -> BLE NUS TX */
 
     /* Let the sensor finish its power-on sequence. */
     vTaskDelay(pdMS_TO_TICKS(50));
@@ -647,7 +807,9 @@ void app_main(void)
                   "BLE keys: a=arm d=disarm w=thr+ x=thr- 1-4=test motor",
              CTRL_RATE_HZ);
 
-    xTaskCreate(control_task, "ctrl", 4096, NULL, 8, NULL);
+    /* Pin control loop to APP_CPU (core 1) so NimBLE on core 0 cannot
+     * starve it (and vice versa). */
+    xTaskCreatePinnedToCore(control_task, "ctrl", 4096, NULL, 8, NULL, 1);
 
     /* app_main returns; control_task, motor_cmd_task, and the NimBLE
      * host task all keep running. */

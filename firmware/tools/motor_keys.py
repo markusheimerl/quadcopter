@@ -26,6 +26,7 @@ from bleak import BleakClient, BleakScanner
 
 DEVICE_NAME = "QuadFW"
 NUS_RX_UUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
+NUS_TX_UUID = "6e400003-b5a3-f393-e0a9-e50e24dcca9e"
 
 
 async def find_device(address_or_name):
@@ -38,6 +39,23 @@ async def find_device(address_or_name):
         print(f"could not find BLE device named {target!r}")
         sys.exit(1)
     return dev
+
+
+def _make_log_handler():
+    """Reassemble incoming BLE chunks into newline-terminated log lines."""
+    buf = bytearray()
+
+    def handler(_sender, data: bytearray):
+        nonlocal buf
+        buf.extend(data)
+        while True:
+            nl = buf.find(b"\n")
+            if nl < 0:
+                break
+            line = bytes(buf[:nl]).decode("utf-8", errors="replace").rstrip("\r")
+            del buf[: nl + 1]
+            print(f"<< {line}")
+    return handler
 
 
 async def keyboard_loop(client):
@@ -64,7 +82,14 @@ async def main():
     arg = sys.argv[1] if len(sys.argv) > 1 else None
     target = await find_device(arg)
     async with BleakClient(target) as client:
-        await keyboard_loop(client)
+        await client.start_notify(NUS_TX_UUID, _make_log_handler())
+        try:
+            await keyboard_loop(client)
+        finally:
+            try:
+                await client.stop_notify(NUS_TX_UUID)
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":
