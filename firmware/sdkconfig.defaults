@@ -1,0 +1,12 @@
+# Target chip
+CONFIG_IDF_TARGET="esp32s3"
+
+# Use the built-in USB Serial/JTAG peripheral for stdio + flashing console.
+# The XIAO ESP32-S3 has no USB-UART bridge chip; the S3 itself enumerates
+# as /dev/ttyACM0 (VID:PID 303a:1001).
+# NOTE: ESP_CONSOLE_* is a kconfig 'choice' -- only ONE option may be set.
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+
+# Smaller binaries, no need for the default app rollback / OTA bits.
+CONFIG_COMPILER_OPTIMIZATION_SIZE=y
+CONFIG_BOOTLOADER_LOG_LEVEL_WARN=y
