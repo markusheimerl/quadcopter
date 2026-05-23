@@ -16,24 +16,92 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
+#include <math.h>
 
 #include "soc/gpio_reg.h"
 #include "soc/io_mux_reg.h"
 #include "driver/i2c_master.h"
+#include "driver/ledc.h"
 #include "esp_err.h"
 #include "esp_log.h"
+#include "nvs_flash.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/queue.h"
+
+#include "nimble/nimble_port.h"
+#include "nimble/nimble_port_freertos.h"
+#include "host/ble_hs.h"
+#include "host/util/util.h"
+#include "services/gap/ble_svc_gap.h"
+#include "services/gatt/ble_svc_gatt.h"
 
 /* ---------- LED ---------- */
 #define LED_GPIO        21u
 #define LED_BIT         (1u << LED_GPIO)
+
+/* ---------- Motors (MOSFET gates) ----------
+ * XIAO silkscreen -> SoC GPIO:
+ *   D0 -> GPIO1   (motor 0)
+ *   D1 -> GPIO2   (motor 1)
+ *   D2 -> GPIO3   (motor 2)
+ *   D3 -> GPIO4   (motor 3)
+ * All four pins live in GPIO bank 0 (bits 0..31), so the standard
+ * GPIO_OUT_W1T{S,C} / GPIO_ENABLE_W1TS registers are enough.
+ */
+#define MOTOR0_GPIO     1u
+#define MOTOR1_GPIO     2u
+#define MOTOR2_GPIO     3u
+#define MOTOR3_GPIO     4u
+static const uint32_t MOTOR_GPIOS[4] = {
+    MOTOR0_GPIO, MOTOR1_GPIO, MOTOR2_GPIO, MOTOR3_GPIO,
+};
+static const ledc_channel_t MOTOR_LEDC_CH[4] = {
+    LEDC_CHANNEL_0, LEDC_CHANNEL_1, LEDC_CHANNEL_2, LEDC_CHANNEL_3,
+};
+
+/* ---------- PWM / control ----------
+ * Brushed motors driven through MOSFETs: 20 kHz PWM, 8-bit (0..255).
+ * Quad X frame mixer assumes the following physical layout (viewed
+ * from above, the drone's nose pointing up the page):
+ *
+ *      M3 (FL, CW)   M0 (FR, CCW)
+ *            \\   //
+ *             |X|
+ *            //   \\
+ *      M2 (BL, CCW)  M1 (BR, CW)
+ *
+ * If your prop rotations / motor positions differ, fix the mapping
+ * here -- the PID will fight itself otherwise.
+ */
+#define LEDC_FREQ_HZ            20000
+#define LEDC_RES_BITS           LEDC_TIMER_8_BIT
+#define LEDC_MAX                255
+#define MOTOR_TEST_DUTY         64        /* ~25% -- visible spin, no lift  */
+#define MAX_THROTTLE            220       /* head-room above this for PID    */
+#define THROTTLE_STEP           5
+#define ARM_TILT_LIMIT_DEG      5.0f      /* refuse to arm if tilted       */
+#define KILL_TILT_LIMIT_DEG     50.0f     /* auto-disarm on big tilt       */
+
+/* PID gains (PWM units per degree / dps). These are FIRST-GUESS values
+ * for a small brushed tiny-whoop-class drone -- expect to retune. */
+#define ROLL_KP   1.5f
+#define ROLL_KD   0.25f
+#define PITCH_KP  1.5f
+#define PITCH_KD  0.25f
+#define YAW_KD    0.5f
+
+#define CTRL_RATE_HZ            200
+#define CTRL_PERIOD_MS          (1000 / CTRL_RATE_HZ)
 
 /* ---------- I2C ---------- */
 #define I2C_PORT        I2C_NUM_0
 #define I2C_SDA_GPIO    5
 #define I2C_SCL_GPIO    6
 #define I2C_FREQ_HZ     400000
+
+/* ---------- BLE control ---------- */
+#define BLE_DEVICE_NAME "QuadFW"
 
 /* ---------- BMI323 ---------- */
 #define BMI323_ADDR        0x68
@@ -61,6 +129,63 @@ static inline void led_set(bool on)
     /* Active-low: LOW = lit. */
     REG_WRITE(on ? GPIO_OUT_W1TC_REG : GPIO_OUT_W1TS_REG, LED_BIT);
 }
+
+/* -------------------- Motors (LEDC PWM) -------------------- */
+static void motors_init(void)
+{
+    ledc_timer_config_t t = {
+        .speed_mode      = LEDC_LOW_SPEED_MODE,
+        .timer_num       = LEDC_TIMER_0,
+        .duty_resolution = LEDC_RES_BITS,
+        .freq_hz         = LEDC_FREQ_HZ,
+        .clk_cfg         = LEDC_AUTO_CLK,
+    };
+    ESP_ERROR_CHECK(ledc_timer_config(&t));
+    for (int i = 0; i < 4; ++i) {
+        ledc_channel_config_t c = {
+            .speed_mode = LEDC_LOW_SPEED_MODE,
+            .channel    = MOTOR_LEDC_CH[i],
+            .timer_sel  = LEDC_TIMER_0,
+            .intr_type  = LEDC_INTR_DISABLE,
+            .gpio_num   = (int)MOTOR_GPIOS[i],
+            .duty       = 0,
+            .hpoint     = 0,
+        };
+        ESP_ERROR_CHECK(ledc_channel_config(&c));
+    }
+}
+
+static inline void motor_set_duty(int idx, int duty)
+{
+    if (duty < 0) duty = 0;
+    if (duty > LEDC_MAX) duty = LEDC_MAX;
+    ledc_set_duty(LEDC_LOW_SPEED_MODE, MOTOR_LEDC_CH[idx], (uint32_t)duty);
+    ledc_update_duty(LEDC_LOW_SPEED_MODE, MOTOR_LEDC_CH[idx]);
+}
+
+/* Spin each motor briefly in turn so we can verify wiring/order. */
+static void motors_sweep(uint32_t on_ms, uint32_t gap_ms)
+{
+    ESP_LOGI(TAG, "motor sweep: %lu ms on @ duty %d, %lu ms gap",
+             (unsigned long)on_ms, MOTOR_TEST_DUTY, (unsigned long)gap_ms);
+    for (int i = 0; i < 4; ++i) {
+        ESP_LOGI(TAG, "  motor %d (GPIO%lu) on",
+                 i, (unsigned long)MOTOR_GPIOS[i]);
+        motor_set_duty(i, MOTOR_TEST_DUTY);
+        vTaskDelay(pdMS_TO_TICKS(on_ms));
+        motor_set_duty(i, 0);
+        vTaskDelay(pdMS_TO_TICKS(gap_ms));
+    }
+    ESP_LOGI(TAG, "motor sweep done");
+}
+
+/* -------------------- shared control state -------------------- */
+static volatile uint8_t   s_base_throttle = 0;
+static volatile bool      s_armed         = false;
+static volatile int8_t    s_test_motor    = -1;
+static volatile uint32_t  s_test_end_ms   = 0;
+static volatile float     s_roll_deg      = 0.0f;
+static volatile float     s_pitch_deg     = 0.0f;
 
 /* -------------------- BMI323 over I2C -------------------- */
 static esp_err_t bmi_read(uint8_t reg, uint8_t *dst, size_t n)
@@ -114,11 +239,375 @@ static void i2c_bring_up(void)
     ESP_ERROR_CHECK(i2c_master_bus_add_device(s_bus, &dev_cfg, &s_bmi));
 }
 
+/* -------------------- BLE (NimBLE) Nordic UART Service --------------------
+ *
+ * Exposes the Nordic UART Service (NUS):
+ *   Service UUID  6E400001-B5A3-F393-E0A9-E50E24DCCA9E
+ *   RX char (W)   6E400002-B5A3-F393-E0A9-E50E24DCCA9E   <- laptop writes here
+ *   TX char (N)   6E400003-B5A3-F393-E0A9-E50E24DCCA9E   <- (unused for now)
+ *
+ * Same single-byte protocol as before:
+ *   '1'..'4' -> pulse that motor for 200 ms
+ *   's','0'  -> all motors off
+ *
+ * NimBLE UUIDs are stored little-endian (LSB-first), so the byte arrays
+ * below are the standard text UUID written backwards.
+ */
+
+static const ble_uuid128_t NUS_SVC_UUID = BLE_UUID128_INIT(
+    0x9e, 0xca, 0xdc, 0x24, 0x0e, 0xe5, 0xa9, 0xe0,
+    0x93, 0xf3, 0xa3, 0xb5, 0x01, 0x00, 0x40, 0x6e);
+static const ble_uuid128_t NUS_RX_UUID  = BLE_UUID128_INIT(
+    0x9e, 0xca, 0xdc, 0x24, 0x0e, 0xe5, 0xa9, 0xe0,
+    0x93, 0xf3, 0xa3, 0xb5, 0x02, 0x00, 0x40, 0x6e);
+static const ble_uuid128_t NUS_TX_UUID  = BLE_UUID128_INIT(
+    0x9e, 0xca, 0xdc, 0x24, 0x0e, 0xe5, 0xa9, 0xe0,
+    0x93, 0xf3, 0xa3, 0xb5, 0x03, 0x00, 0x40, 0x6e);
+
+static uint8_t s_own_addr_type;
+static QueueHandle_t s_cmd_q;  /* one-byte commands from BLE -> motor task */
+
+static void ble_advertise(void);
+
+static void handle_cmd_byte(uint8_t c)
+{
+    if (s_cmd_q) {
+        xQueueSend(s_cmd_q, &c, 0);
+    }
+}
+
+/* GATT write callback: any data written to the RX char ends up here. */
+static int nus_rx_access(uint16_t conn_handle, uint16_t attr_handle,
+                        struct ble_gatt_access_ctxt *ctxt, void *arg)
+{
+    if (ctxt->op != BLE_GATT_ACCESS_OP_WRITE_CHR) {
+        return BLE_ATT_ERR_UNLIKELY;
+    }
+    uint8_t buf[16];
+    uint16_t out_len = 0;
+    int rc = ble_hs_mbuf_to_flat(ctxt->om, buf, sizeof(buf), &out_len);
+    if (rc != 0) return BLE_ATT_ERR_UNLIKELY;
+    for (uint16_t i = 0; i < out_len; ++i) {
+        handle_cmd_byte(buf[i]);
+    }
+    return 0;
+}
+
+static const struct ble_gatt_svc_def gatt_svr_svcs[] = {
+    {
+        .type = BLE_GATT_SVC_TYPE_PRIMARY,
+        .uuid = &NUS_SVC_UUID.u,
+        .characteristics = (struct ble_gatt_chr_def[]) { {
+                .uuid = &NUS_RX_UUID.u,
+                .access_cb = nus_rx_access,
+                .flags = BLE_GATT_CHR_F_WRITE | BLE_GATT_CHR_F_WRITE_NO_RSP,
+            }, {
+                .uuid = &NUS_TX_UUID.u,
+                .access_cb = nus_rx_access, /* unused, but a cb is required */
+                .flags = BLE_GATT_CHR_F_NOTIFY,
+            }, { 0 }
+        },
+    },
+    { 0 },
+};
+
+static int ble_gap_event(struct ble_gap_event *event, void *arg)
+{
+    switch (event->type) {
+    case BLE_GAP_EVENT_CONNECT:
+        ESP_LOGI(TAG, "ble: connect %s",
+                 event->connect.status == 0 ? "ok" : "failed");
+        if (event->connect.status != 0) ble_advertise();
+        break;
+    case BLE_GAP_EVENT_DISCONNECT:
+        ESP_LOGI(TAG, "ble: disconnect, reason=0x%x",
+                 event->disconnect.reason);
+        ble_advertise();
+        break;
+    case BLE_GAP_EVENT_ADV_COMPLETE:
+        ble_advertise();
+        break;
+    default:
+        break;
+    }
+    return 0;
+}
+
+static void ble_advertise(void)
+{
+    struct ble_hs_adv_fields fields = { 0 };
+    fields.flags = BLE_HS_ADV_F_DISC_GEN | BLE_HS_ADV_F_BREDR_UNSUP;
+    fields.name = (uint8_t *)BLE_DEVICE_NAME;
+    fields.name_len = strlen(BLE_DEVICE_NAME);
+    fields.name_is_complete = 1;
+    int rc = ble_gap_adv_set_fields(&fields);
+    if (rc != 0) {
+        ESP_LOGE(TAG, "ble_gap_adv_set_fields rc=%d", rc);
+        return;
+    }
+    struct ble_gap_adv_params adv_params = { 0 };
+    adv_params.conn_mode = BLE_GAP_CONN_MODE_UND;
+    adv_params.disc_mode = BLE_GAP_DISC_MODE_GEN;
+    rc = ble_gap_adv_start(s_own_addr_type, NULL, BLE_HS_FOREVER,
+                           &adv_params, ble_gap_event, NULL);
+    if (rc != 0) {
+        ESP_LOGE(TAG, "ble_gap_adv_start rc=%d", rc);
+        return;
+    }
+    ESP_LOGI(TAG, "ble: advertising as \"%s\"", BLE_DEVICE_NAME);
+}
+
+static void ble_on_sync(void)
+{
+    int rc = ble_hs_id_infer_auto(0, &s_own_addr_type);
+    if (rc != 0) {
+        ESP_LOGE(TAG, "ble_hs_id_infer_auto rc=%d", rc);
+        return;
+    }
+    ble_advertise();
+}
+
+static void ble_on_reset(int reason)
+{
+    ESP_LOGW(TAG, "ble: host reset, reason=%d", reason);
+}
+
+static void ble_host_task(void *param)
+{
+    nimble_port_run();
+    nimble_port_freertos_deinit();
+}
+
+static void ble_bring_up(void)
+{
+    esp_err_t err = nvs_flash_init();
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES ||
+        err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        err = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(err);
+
+    ESP_ERROR_CHECK(nimble_port_init());
+    ble_hs_cfg.sync_cb  = ble_on_sync;
+    ble_hs_cfg.reset_cb = ble_on_reset;
+
+    ble_svc_gap_init();
+    ble_svc_gatt_init();
+    ESP_ERROR_CHECK(ble_gatts_count_cfg(gatt_svr_svcs));
+    ESP_ERROR_CHECK(ble_gatts_add_svcs(gatt_svr_svcs));
+    ESP_ERROR_CHECK(ble_svc_gap_device_name_set(BLE_DEVICE_NAME));
+
+    nimble_port_freertos_init(ble_host_task);
+}
+
+/* -------------------- motor command consumer -------------------- */
+static void motor_cmd_task(void *arg)
+{
+    uint8_t c;
+    for (;;) {
+        if (xQueueReceive(s_cmd_q, &c, portMAX_DELAY) != pdTRUE) continue;
+        switch (c) {
+        case 'a':
+            if (fabsf(s_roll_deg) < ARM_TILT_LIMIT_DEG &&
+                fabsf(s_pitch_deg) < ARM_TILT_LIMIT_DEG) {
+                s_armed = true;
+                ESP_LOGI(TAG, "cmd: ARMED (throttle=%u)",
+                         (unsigned)s_base_throttle);
+            } else {
+                ESP_LOGW(TAG, "cmd: arm refused, tilt r=%.1f p=%.1f deg",
+                         s_roll_deg, s_pitch_deg);
+            }
+            break;
+        case 'd': case 's': case '0':
+            s_armed = false;
+            s_base_throttle = 0;
+            ESP_LOGI(TAG, "cmd: DISARMED");
+            break;
+        case 'w': case '+': case '=':
+            if (s_base_throttle + THROTTLE_STEP > MAX_THROTTLE) {
+                s_base_throttle = MAX_THROTTLE;
+            } else {
+                s_base_throttle += THROTTLE_STEP;
+            }
+            ESP_LOGI(TAG, "cmd: throttle=%u", (unsigned)s_base_throttle);
+            break;
+        case 'x': case '-':
+            if (s_base_throttle <= THROTTLE_STEP) {
+                s_base_throttle = 0;
+            } else {
+                s_base_throttle -= THROTTLE_STEP;
+            }
+            ESP_LOGI(TAG, "cmd: throttle=%u", (unsigned)s_base_throttle);
+            break;
+        case '1': case '2': case '3': case '4':
+            if (!s_armed) {
+                s_test_motor = (int8_t)(c - '1');
+                s_test_end_ms =
+                    (uint32_t)(xTaskGetTickCount() * portTICK_PERIOD_MS) + 200;
+                ESP_LOGI(TAG, "cmd: test motor %d", (int)s_test_motor);
+            } else {
+                ESP_LOGW(TAG, "cmd: ignored '%c' while armed", c);
+            }
+            break;
+        default:
+            ESP_LOGW(TAG, "cmd: ignore 0x%02x", (unsigned)c);
+            break;
+        }
+    }
+}
+
+/* -------------------- 200 Hz control loop --------------------
+ * 1. Read accel + gyro.
+ * 2. Complementary filter -> roll/pitch (rad) and yaw (gyro-integrated).
+ * 3. Auto-disarm on extreme tilt.
+ * 4. If armed: angle PID + quad-X mixer -> 4 PWM outputs.
+ *    If disarmed: motors 0, except an optional motor-test pulse.
+ * 5. Print state at 10 Hz, blink LED at 1 Hz.
+ */
+static void control_task(void *arg)
+{
+    const float GYR_LSB_TO_RADS = (1000.0f / 32768.0f) * (float)M_PI / 180.0f;
+    const float GYR_LSB_TO_DPS  = 1000.0f / 32768.0f;
+    const float ACC_LSB_TO_G    = 4.0f / 32768.0f;
+    const float DT              = 1.0f / (float)CTRL_RATE_HZ;
+    const float ALPHA           = 0.98f;
+    const float RAD_TO_DEG      = 180.0f / (float)M_PI;
+
+    float roll = 0.0f, pitch = 0.0f, yaw = 0.0f;
+    bool  init = false;
+    bool  led_on = false;
+    int   print_div = 0;
+    int   blink_div = 0;
+    TickType_t next_tick = xTaskGetTickCount();
+
+    for (;;) {
+        uint8_t acc[6], gyr[6];
+        esp_err_t e1 = bmi_read(BMI323_ACC_DATA_X, acc, sizeof(acc));
+        esp_err_t e2 = bmi_read(BMI323_GYR_DATA_X, gyr, sizeof(gyr));
+
+        if (e1 == ESP_OK && e2 == ESP_OK) {
+            int16_t axi = (int16_t)(acc[0] | (acc[1] << 8));
+            int16_t ayi = (int16_t)(acc[2] | (acc[3] << 8));
+            int16_t azi = (int16_t)(acc[4] | (acc[5] << 8));
+            int16_t gxi = (int16_t)(gyr[0] | (gyr[1] << 8));
+            int16_t gyi = (int16_t)(gyr[2] | (gyr[3] << 8));
+            int16_t gzi = (int16_t)(gyr[4] | (gyr[5] << 8));
+
+            float ax = axi * ACC_LSB_TO_G;
+            float ay = ayi * ACC_LSB_TO_G;
+            float az = azi * ACC_LSB_TO_G;
+            float gx_rad = gxi * GYR_LSB_TO_RADS;
+            float gy_rad = gyi * GYR_LSB_TO_RADS;
+            float gz_rad = gzi * GYR_LSB_TO_RADS;
+            float gx_dps = gxi * GYR_LSB_TO_DPS;
+            float gy_dps = gyi * GYR_LSB_TO_DPS;
+            float gz_dps = gzi * GYR_LSB_TO_DPS;
+
+            float roll_acc  = atan2f(ay, az);
+            float pitch_acc = atan2f(-ax, sqrtf(ay*ay + az*az));
+
+            if (!init) {
+                roll  = roll_acc;
+                pitch = pitch_acc;
+                yaw   = 0.0f;
+                init  = true;
+            } else {
+                roll  = ALPHA * (roll  + gx_rad * DT)
+                      + (1.0f - ALPHA) * roll_acc;
+                pitch = ALPHA * (pitch + gy_rad * DT)
+                      + (1.0f - ALPHA) * pitch_acc;
+                yaw   = yaw + gz_rad * DT;
+            }
+
+            float roll_deg  = roll  * RAD_TO_DEG;
+            float pitch_deg = pitch * RAD_TO_DEG;
+            float yaw_deg   = yaw   * RAD_TO_DEG;
+            s_roll_deg  = roll_deg;
+            s_pitch_deg = pitch_deg;
+
+            /* Safety: extreme tilt -> drop everything. */
+            if (s_armed && (fabsf(roll_deg)  > KILL_TILT_LIMIT_DEG ||
+                            fabsf(pitch_deg) > KILL_TILT_LIMIT_DEG)) {
+                s_armed = false;
+                s_base_throttle = 0;
+                ESP_LOGW(TAG, "ctrl: AUTO-DISARM tilt r=%.1f p=%.1f",
+                         roll_deg, pitch_deg);
+            }
+
+            int out[4] = { 0, 0, 0, 0 };
+            uint32_t now_ms =
+                (uint32_t)(xTaskGetTickCount() * portTICK_PERIOD_MS);
+
+            if (s_armed) {
+                float T = (float)s_base_throttle;
+                float roll_err  = 0.0f - roll_deg;
+                float pitch_err = 0.0f - pitch_deg;
+                float r = ROLL_KP  * roll_err  - ROLL_KD  * gx_dps;
+                float p = PITCH_KP * pitch_err - PITCH_KD * gy_dps;
+                float y = -YAW_KD  * gz_dps;
+
+                /* Quad-X mixer (see physical layout above).
+                 *   +roll  -> right side down, lift left side
+                 *   +pitch -> nose up, lift back side
+                 *   +yaw   -> nose right, increase CCW motors */
+                float m[4] = {
+                    T - r - p + y,   /* M0 FR CCW */
+                    T - r + p - y,   /* M1 BR CW  */
+                    T + r + p + y,   /* M2 BL CCW */
+                    T + r - p - y,   /* M3 FL CW  */
+                };
+                for (int i = 0; i < 4; ++i) {
+                    if (m[i] < 0.0f) m[i] = 0.0f;
+                    if (m[i] > (float)LEDC_MAX) m[i] = (float)LEDC_MAX;
+                    out[i] = (int)m[i];
+                }
+            } else if (s_test_motor >= 0 && s_test_motor < 4 &&
+                       (int32_t)(s_test_end_ms - now_ms) > 0) {
+                out[s_test_motor] = MOTOR_TEST_DUTY;
+            } else if (s_test_motor >= 0) {
+                s_test_motor = -1;
+            }
+
+            for (int i = 0; i < 4; ++i) motor_set_duty(i, out[i]);
+
+            if (++print_div >= 20) {  /* 10 Hz */
+                print_div = 0;
+                printf("%s T=%3u r=%+6.1f p=%+6.1f y=%+6.1f | "
+                       "%3d %3d %3d %3d\n",
+                       s_armed ? "ARM" : "dis",
+                       (unsigned)s_base_throttle,
+                       roll_deg, pitch_deg, yaw_deg,
+                       out[0], out[1], out[2], out[3]);
+            }
+            if (++blink_div >= 100) {  /* 1 Hz */
+                blink_div = 0;
+                led_on = !led_on;
+                led_set(led_on);
+            }
+        } else {
+            ESP_LOGW(TAG, "i2c read failed: acc=%s gyr=%s",
+                     esp_err_to_name(e1), esp_err_to_name(e2));
+        }
+
+        vTaskDelayUntil(&next_tick, pdMS_TO_TICKS(CTRL_PERIOD_MS));
+    }
+}
+
 /* -------------------- app -------------------- */
 void app_main(void)
 {
     led_init();
+    motors_init();
     i2c_bring_up();
+
+    /* One-shot motor wiring check before anything else runs. */
+    motors_sweep(100, 250);
+
+    /* Bring up BLE NUS server + motor command consumer task. */
+    s_cmd_q = xQueueCreate(16, sizeof(uint8_t));
+    xTaskCreate(motor_cmd_task, "motorcmd", 2048, NULL, 5, NULL);
+    ble_bring_up();
 
     /* Let the sensor finish its power-on sequence. */
     vTaskDelay(pdMS_TO_TICKS(50));
@@ -145,44 +634,22 @@ void app_main(void)
         }
     }
 
-    ESP_LOGI(TAG, "BMI323 detected, configuring...");
+    ESP_LOGI(TAG, "BMI323 detected, configuring for 200 Hz...");
 
-    /* Accelerometer: normal mode, 100 Hz ODR, +/-4 g range. */
-    ESP_ERROR_CHECK(bmi_write_u16(BMI323_ACC_CONF, 0x4028));
+    /* Accelerometer: normal mode, 200 Hz ODR, +/-4 g range. */
+    ESP_ERROR_CHECK(bmi_write_u16(BMI323_ACC_CONF, 0x4029));
     vTaskDelay(pdMS_TO_TICKS(5));
-    /* Gyroscope:     normal mode, 100 Hz ODR, +/-1000 dps range. */
-    ESP_ERROR_CHECK(bmi_write_u16(BMI323_GYR_CONF, 0x4038));
+    /* Gyroscope:     normal mode, 200 Hz ODR, +/-1000 dps range. */
+    ESP_ERROR_CHECK(bmi_write_u16(BMI323_GYR_CONF, 0x4039));
     vTaskDelay(pdMS_TO_TICKS(100));
 
-    ESP_LOGI(TAG, "Streaming IMU at 10 Hz, LED toggles at 1 Hz");
+    ESP_LOGI(TAG, "Starting control loop @ %d Hz. DISARMED. "
+                  "BLE keys: a=arm d=disarm w=thr+ x=thr- 1-4=test motor",
+             CTRL_RATE_HZ);
 
-    bool led_on = false;
-    int blink_div = 0; /* toggle LED every 5 samples == 500 ms */
+    xTaskCreate(control_task, "ctrl", 4096, NULL, 8, NULL);
 
-    for (;;) {
-        uint8_t acc[6], gyr[6];
-        esp_err_t e1 = bmi_read(BMI323_ACC_DATA_X, acc, sizeof(acc));
-        esp_err_t e2 = bmi_read(BMI323_GYR_DATA_X, gyr, sizeof(gyr));
-
-        if (e1 == ESP_OK && e2 == ESP_OK) {
-            int16_t ax = (int16_t)(acc[0] | (acc[1] << 8));
-            int16_t ay = (int16_t)(acc[2] | (acc[3] << 8));
-            int16_t az = (int16_t)(acc[4] | (acc[5] << 8));
-            int16_t gx = (int16_t)(gyr[0] | (gyr[1] << 8));
-            int16_t gy = (int16_t)(gyr[2] | (gyr[3] << 8));
-            int16_t gz = (int16_t)(gyr[4] | (gyr[5] << 8));
-            printf("ACC %7d %7d %7d | GYR %7d %7d %7d\n",
-                   ax, ay, az, gx, gy, gz);
-        } else {
-            ESP_LOGW(TAG, "i2c read failed: acc=%s gyr=%s",
-                     esp_err_to_name(e1), esp_err_to_name(e2));
-        }
-
-        if (++blink_div >= 5) {
-            blink_div = 0;
-            led_on = !led_on;
-            led_set(led_on);
-        }
-        vTaskDelay(pdMS_TO_TICKS(100));
-    }
+    /* app_main returns; control_task, motor_cmd_task, and the NimBLE
+     * host task all keep running. */
+    vTaskDelete(NULL);
 }
