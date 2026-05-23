@@ -1,217 +1,144 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdbool.h>
 #include <time.h>
 #include <math.h>
+
 #include "quad.h"
 #include "scene.h"
 
-#define DT_PHYSICS  (1.0 / 1000.0)
-#define DT_CONTROL  (1.0 / 60.0)
-#define DT_RENDER   (1.0 / 24.0)
-#define SIM_TIME    10.0  // Simulation duration in seconds
 
-// Helper function to get random value in range [min, max]
-double random_range(double min, double max) {
-    return min + (double)rand() / RAND_MAX * (max - min);
+#define DT_PHYS    (1.0 /  1000.0)
+#define DT_CTRL    (1.0 /   100.0)
+#define DT_RENDER  (1.0 /    24.0)
+#define SIM_TIME   10.0
+#define FPS        24
+
+
+// Uniform random in [lo, hi].
+static double rnd(double lo, double hi)
+{
+    return lo + (hi - lo) * (double)rand() / (double)RAND_MAX;
 }
 
-int main() {
-    srand(time(NULL));
-    
-    // Initialize drone with random position and orientation
-    double drone_x = random_range(-2.0, 2.0);
-    double drone_y = random_range(0.5, 2.0);
-    double drone_z = random_range(-2.0, 2.0);
-    double drone_yaw = random_range(-M_PI, M_PI);
-    
-    // Place target randomly
-    double target_x = random_range(-2.0, 2.0);
-    double target_y = random_range(0.5, 2.5);
-    double target_z = random_range(-2.0, 2.0);
-    double target_yaw = random_range(-M_PI, M_PI);
-    
-    // Create target array (position, velocity, and desired yaw)
+// Tait-Bryan (extrinsic XYZ: Rz * Ry * Rx) from a body->world rotation matrix.
+static void euler_xyz(const double R[9], float *rx, float *ry, float *rz)
+{
+    *rx = (float)atan2(R[7], R[8]);   // roll  about X
+    *ry = (float)asin(-R[6]);         // pitch about Y
+    *rz = (float)atan2(R[3], R[0]);   // yaw   about Z
+}
+
+
+int main(void)
+{
+    srand((unsigned)time(NULL));
+
+    // Random start state and goal.
+    double sx   = rnd(-2.0, 2.0);
+    double sy   = rnd( 0.5, 2.0);
+    double sz   = rnd(-2.0, 2.0);
+    double syaw = rnd(-M_PI, M_PI);
+
     double target[7] = {
-        target_x, target_y, target_z,    // Target position
-        0.0, 0.0, 0.0,                   // Zero velocity target
-        target_yaw                       // Random target yaw
+        rnd(-2.0, 2.0),   // x
+        rnd( 0.5, 2.5),   // y
+        rnd(-2.0, 2.0),   // z
+        0.0, 0.0, 0.0,    // desired velocity
+        rnd(-M_PI, M_PI)  // yaw
     };
-    
-    printf("Drone starts at (%.2f, %.2f, %.2f), target at (%.2f, %.2f, %.2f) with yaw %.2f\n", 
-           drone_x, drone_y, drone_z, target_x, target_y, target_z, target_yaw);
-    
-    // Initialize quadcopter
-    Quad quad = create_quad(drone_x, drone_y, drone_z, drone_yaw);
-    
-    // Initialize state estimator
-    StateEstimator estimator = {
-        .angular_velocity = {0.0, 0.0, 0.0},
-        .gyro_bias = {0.0, 0.0, 0.0}
-    };
-    memcpy(estimator.R, quad.R_W_B, 9 * sizeof(double));
-    
-    // Initialize raytracer scene
-    Scene scene = create_scene(400, 300, (int)(SIM_TIME * 1000), 24, 0.4f);
-    
-    // Set up camera and lighting
+
+    printf("start  (%.2f, %.2f, %.2f) yaw %.2f\n", sx, sy, sz, syaw);
+    printf("target (%.2f, %.2f, %.2f) yaw %.2f\n",
+           target[0], target[1], target[2], target[6]);
+
+    // Initialize quadrotor.
+    Quad quad;
+    quad_init(&quad, sx, sy, sz, syaw);
+
+    // Initialize scene.
+    Scene scene = create_scene(400, 300, (int)(SIM_TIME * 1000), FPS, 0.4f);
+
     set_scene_camera(&scene,
-        (Vec3){-3.0f, 3.0f, -3.0f},
-        (Vec3){0.0f, 0.0f, 0.0f},
-        (Vec3){0.0f, 1.0f, 0.0f},
-        60.0f
-    );
-    
+        (Vec3){ -3.0f,  3.0f, -3.0f },
+        (Vec3){  0.0f,  0.0f,  0.0f },
+        (Vec3){  0.0f,  1.0f,  0.0f },
+        60.0f);
+
     set_scene_light(&scene,
-        (Vec3){1.0f, 1.0f, -1.0f},
-        (Vec3){1.4f, 1.4f, 1.4f}
-    );
-    
-    // Add meshes to scene
-    Mesh drone_mesh = create_mesh("raytracer/assets/drone.obj", "raytracer/assets/drone.webp");
-    add_mesh_to_scene(&scene, drone_mesh);
-    
-    Mesh treasure = create_mesh("raytracer/assets/treasure.obj", "raytracer/assets/treasure.webp");
+        (Vec3){  1.0f,  1.0f, -1.0f },
+        (Vec3){  1.4f,  1.4f,  1.4f });
+
+    Mesh drone    = create_mesh("raytracer/assets/drone.obj",
+                                "raytracer/assets/drone.webp");
+    Mesh treasure = create_mesh("raytracer/assets/treasure.obj",
+                                "raytracer/assets/treasure.webp");
+    Mesh ground   = create_mesh("raytracer/assets/ground.obj",
+                                "raytracer/assets/ground.webp");
+
+    add_mesh_to_scene(&scene, drone);
     add_mesh_to_scene(&scene, treasure);
-    set_mesh_position(&scene.meshes[1], (Vec3){(float)target_x, (float)target_y, (float)target_z});
-    
-    Mesh ground = create_mesh("raytracer/assets/ground.obj", "raytracer/assets/ground.webp");
     add_mesh_to_scene(&scene, ground);
 
-    // Initialize timers
-    double t_physics = 0.0;
-    double t_control = 0.0;
-    double t_render = 0.0;
-    clock_t start_time = clock();
+    set_mesh_position(&scene.meshes[1],
+        (Vec3){ (float)target[0], (float)target[1], (float)target[2] });
 
-    // Main simulation loop
-    for (int t = 0; t < (int)(SIM_TIME / DT_PHYSICS); t++) {
-        // Physics update
-        if (t_physics >= DT_PHYSICS) {
-            // Create temporary buffers for the new state
-            double new_linear_position_W[3];
-            double new_linear_velocity_W[3];
-            double new_angular_velocity_B[3];
-            double new_R_W_B[9];
-            double accel_measurement[3];
-            double gyro_measurement[3];
-            double new_accel_bias[3];
-            double new_gyro_bias[3];
-            double new_omega[4];
-            
-            // Generate 4 random values
-            double rand1 = (double)rand() / RAND_MAX;
-            double rand2 = (double)rand() / RAND_MAX;
-            double rand3 = (double)rand() / RAND_MAX;
-            double rand4 = (double)rand() / RAND_MAX;
-            
-            // Call the update function with the random values
-            update_quad_states(
-                quad.omega,                 // Current rotor speeds
-                quad.linear_position_W,     // Current position
-                quad.linear_velocity_W,     // Current velocity
-                quad.angular_velocity_B,    // Current angular velocity
-                quad.R_W_B,                 // Current rotation matrix
-                quad.inertia,               // Inertia matrix
-                quad.accel_bias,            // Current accel bias
-                quad.gyro_bias,             // Current gyro bias
-                quad.accel_scale,           // Accel scale factors
-                quad.gyro_scale,            // Gyro scale factors
-                quad.omega_next,            // Target rotor speeds
-                DT_PHYSICS,                 // Time step
-                rand1, rand2, rand3, rand4, // Random values
-                // Outputs
-                new_linear_position_W,      // New position
-                new_linear_velocity_W,      // New velocity
-                new_angular_velocity_B,     // New angular velocity
-                new_R_W_B,                  // New rotation matrix
-                accel_measurement,          // Accelerometer readings
-                gyro_measurement,           // Gyroscope readings
-                new_accel_bias,             // Updated accel bias
-                new_gyro_bias,              // Updated gyro bias
-                new_omega                   // New rotor speeds
-            );
-            
-            // Update the quad's state with the new values
-            memcpy(quad.linear_position_W, new_linear_position_W, 3 * sizeof(double));
-            memcpy(quad.linear_velocity_W, new_linear_velocity_W, 3 * sizeof(double));
-            memcpy(quad.angular_velocity_B, new_angular_velocity_B, 3 * sizeof(double));
-            memcpy(quad.R_W_B, new_R_W_B, 9 * sizeof(double));
-            memcpy(quad.accel_measurement, accel_measurement, 3 * sizeof(double));
-            memcpy(quad.gyro_measurement, gyro_measurement, 3 * sizeof(double));
-            memcpy(quad.accel_bias, new_accel_bias, 3 * sizeof(double));
-            memcpy(quad.gyro_bias, new_gyro_bias, 3 * sizeof(double));
-            memcpy(quad.omega, new_omega, 4 * sizeof(double));
-            
-            t_physics = 0.0;
-        }
-        
-        // Control update
-        if (t_control >= DT_CONTROL) {
-            update_estimator(
-                quad.gyro_measurement,
-                quad.accel_measurement,
-                DT_CONTROL,
-                &estimator
-            );
-            
-            double new_omega[4];
-            control_quad_commands(
-                quad.linear_position_W,
-                quad.linear_velocity_W,
-                estimator.R,
-                estimator.angular_velocity,
-                quad.inertia,
-                target,
-                new_omega
-            );
-            memcpy(quad.omega_next, new_omega, 4 * sizeof(double));
-            t_control = 0.0;
-        }
-        
-        // Render update
-        if (t_render >= DT_RENDER) {
-            // Update drone position and rotation in the scene
-            set_mesh_position(&scene.meshes[0], 
-                (Vec3){(float)quad.linear_position_W[0], 
-                       (float)quad.linear_position_W[1], 
-                       (float)quad.linear_position_W[2]});
-            
-            set_mesh_rotation(&scene.meshes[0], 
-                (Vec3){
-                    atan2f(quad.R_W_B[7], quad.R_W_B[8]),
-                    asinf(-quad.R_W_B[6]),
-                    atan2f(quad.R_W_B[3], quad.R_W_B[0])
-                }
-            );
-            
-            render_scene(&scene);
-            next_frame(&scene);
-            update_progress_bar((int)(t * DT_PHYSICS / DT_RENDER), (int)(SIM_TIME * 24), start_time);
-            t_render = 0.0;
-        }
-        
-        // Increment timers
-        t_physics += DT_PHYSICS;
-        t_control += DT_PHYSICS;
-        t_render += DT_PHYSICS;
+    // Main loop: physics @ 1 kHz, control @ 100 Hz, render @ 24 fps.
+    double omega_cmd[4];
+    for (int i = 0; i < 4; i++) {
+        omega_cmd[i] = quad.omega[i];
     }
 
-    // Display final results
-    printf("\nFinal position: (%.2f, %.2f, %.2f) with yaw %.2f or ±%.2f\n", 
-           quad.linear_position_W[0], quad.linear_position_W[1], quad.linear_position_W[2],
-           asinf(-quad.R_W_B[6]), M_PI - fabs(asinf(-quad.R_W_B[6])));
+    int n_steps        = (int)(SIM_TIME / DT_PHYS);
+    int steps_per_ctrl = (int)(DT_CTRL   / DT_PHYS + 0.5);
+    int steps_per_frm  = (int)(DT_RENDER / DT_PHYS + 0.5);
+    int total_frames   = (int)(SIM_TIME * FPS);
 
-    // Save animation
-    char filename[64];
-    time_t current_time = time(NULL);
-    strftime(filename, sizeof(filename), "%Y%m%d_%H%M%S_flight.webp", localtime(&current_time));
-    save_scene(&scene, filename);
-    printf("Animation saved to: %s\n", filename);
+    clock_t t_start = clock();
+    for (int k = 0; k < n_steps; k++) {
 
-    // Cleanup
-    destroy_mesh(&drone_mesh);
+        // Control update.
+        if (k % steps_per_ctrl == 0) {
+            quad_control(&quad, target, omega_cmd);
+        }
+
+        // Physics update.
+        quad_step(&quad, omega_cmd, DT_PHYS);
+
+        // Render update.
+        if (k % steps_per_frm == 0) {
+            set_mesh_position(&scene.meshes[0],
+                (Vec3){ (float)quad.p[0],
+                        (float)quad.p[1],
+                        (float)quad.p[2] });
+
+            float rx, ry, rz;
+            euler_xyz(quad.R, &rx, &ry, &rz);
+            set_mesh_rotation(&scene.meshes[0], (Vec3){ rx, ry, rz });
+
+            render_scene(&scene);
+            next_frame(&scene);
+            update_progress_bar(k / steps_per_frm, total_frames, t_start);
+        }
+    }
+
+    // Summary and save.
+    double dx = quad.p[0] - target[0];
+    double dy = quad.p[1] - target[1];
+    double dz = quad.p[2] - target[2];
+    double pos_err = sqrt(dx*dx + dy*dy + dz*dz);
+
+    printf("\nfinal  (%.2f, %.2f, %.2f)   pos err %.3f m\n",
+           quad.p[0], quad.p[1], quad.p[2], pos_err);
+
+    char fname[64];
+    time_t now = time(NULL);
+    strftime(fname, sizeof fname, "%Y%m%d_%H%M%S_flight.webp", localtime(&now));
+    save_scene(&scene, fname);
+    printf("saved %s\n", fname);
+
+    // Cleanup.
+    destroy_mesh(&drone);
     destroy_mesh(&treasure);
     destroy_mesh(&ground);
     destroy_scene(&scene);

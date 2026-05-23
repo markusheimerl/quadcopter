@@ -1,602 +1,379 @@
+// Conventions:
+//   World frame  W : right-handed, Y axis up. Gravity = (0, -g, 0).
+//   Body  frame  B : X forward, Y up (thrust along +Y), Z right.
+//   Rotation R_WB  : 3x3 row-major, columns are body axes in W,  v_W = R * v_B.
+//
+// X-configuration, viewed from above (+Y looking down at the XZ plane):
+//
+//        +X (forward)
+//           ^
+//     3 . . | . . 0          rotor   (x,   z )   spin
+//      .    |    .             0   ( +a, +a )    CCW
+//      .....|.....> +Z         1   ( -a, +a )    CW
+//      .    |    .             2   ( -a, -a )    CCW
+//     2 . . | . . 1            3   ( +a, -a )    CW
+//
+//   a = RDIST (per-axis offset; diagonal arm length = a*sqrt(2)).
+//
+// Each rotor: thrust f_i = K_F * w_i^2 along +Y_B, drag m_i = K_M * w_i^2.
+
 #ifndef QUAD_H
 #define QUAD_H
 
 #include <math.h>
+#include <string.h>
 
-// 3x3 Matrix Operations
-void multMat3f(const double* a, const double* b, double* result) {
-    for(int i = 0; i < 3; i++)
-        for(int j = 0; j < 3; j++)
-            result[i*3 + j] = a[i*3]*b[j] + a[i*3+1]*b[j+3] + a[i*3+2]*b[j+6];
+
+// ====================================================================
+//  Physical constants
+// ====================================================================
+
+#define G          9.81
+#define MASS       0.10            // kg
+#define RDIST      0.0354          // per-axis rotor offset (m); diagonal = 10 cm
+#define K_F        1.0e-7          // thrust coeff:  f = K_F * w^2 (N)
+#define K_M        1.0e-8          // drag   coeff:  m = K_M * w^2 (N m)
+#define OMEGA_MIN  50.0            // rotor rad/s
+#define OMEGA_MAX  2200.0
+#define IXX        1.2e-4          // roll  inertia
+#define IYY        2.0e-4          // yaw   inertia (about thrust axis)
+#define IZZ        1.2e-4          // pitch inertia
+
+// Geometric controller gains
+#define KP_POS     0.225
+#define KP_VEL     0.30
+#define KP_ROT     3.0e-3
+#define KP_OMG     1.2e-3
+
+// ====================================================================
+//  Vector helpers (3-vectors)
+// ====================================================================
+
+static void vec_scale(double s, const double a[3], double r[3])
+{
+    r[0] = s * a[0];
+    r[1] = s * a[1];
+    r[2] = s * a[2];
 }
 
-void multMatVec3f(const double* m, const double* v, double* result) {
-    result[0] = m[0]*v[0] + m[1]*v[1] + m[2]*v[2];
-    result[1] = m[3]*v[0] + m[4]*v[1] + m[5]*v[2];
-    result[2] = m[6]*v[0] + m[7]*v[1] + m[8]*v[2];
-}
-
-void vecToDiagMat3f(const double* v, double* result) {
-    for(int i = 0; i < 9; i++) result[i] = 0;
-    result[0] = v[0];
-    result[4] = v[1];
-    result[8] = v[2];
-}
-
-void transpMat3f(const double* m, double* result) {
-    result[0] = m[0]; result[1] = m[3]; result[2] = m[6];
-    result[3] = m[1]; result[4] = m[4]; result[5] = m[7];
-    result[6] = m[2]; result[7] = m[5]; result[8] = m[8];
-}
-
-void so3hat(const double* v, double* result) {
-    result[0]=0; result[1]=-v[2]; result[2]=v[1];
-    result[3]=v[2]; result[4]=0; result[5]=-v[0];
-    result[6]=-v[1]; result[7]=v[0]; result[8]=0;
-}
-
-void so3vee(const double* m, double* result) {
-    result[0] = m[7];
-    result[1] = m[2];
-    result[2] = m[3];
-}
-
-// Matrix arithmetic
-void addMat3f(const double* a, const double* b, double* result) {
-    for(int i = 0; i < 9; i++) result[i] = a[i] + b[i];
-}
-
-void subMat3f(const double* a, const double* b, double* result) {
-    for(int i = 0; i < 9; i++) result[i] = a[i] - b[i];
-}
-
-void multScalMat3f(double s, const double* m, double* result) {
-    for(int i = 0; i < 9; i++) result[i] = s * m[i];
-}
-
-// Vector Operations
-void crossVec3f(const double* a, const double* b, double* result) {
-    result[0] = a[1]*b[2] - a[2]*b[1];
-    result[1] = a[2]*b[0] - a[0]*b[2];
-    result[2] = a[0]*b[1] - a[1]*b[0];
-}
-
-void multScalVec3f(double s, const double* v, double* result) {
-    for(int i = 0; i < 3; i++) result[i] = s * v[i];
-}
-
-void addVec3f(const double* a, const double* b, double* result) {
-    for(int i = 0; i < 3; i++) result[i] = a[i] + b[i];
-}
-
-void subVec3f(const double* a, const double* b, double* result) {
-    for(int i = 0; i < 3; i++) result[i] = a[i] - b[i];
-}
-
-double dotVec3f(const double* a, const double* b) {
+static double vec_dot(const double a[3], const double b[3])
+{
     return a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
 }
 
-void normVec3f(const double* v, double* result) {
-    double mag = sqrtf(dotVec3f(v, v));
-    for(int i = 0; i < 3; i++) result[i] = v[i]/mag;
+static double vec_norm(const double a[3])
+{
+    return sqrt(vec_dot(a, a));
 }
 
-void inv4Mat4f(const double* m, double* result) {
-    double s0 = m[0]*m[5] - m[4]*m[1];
-    double s1 = m[0]*m[6] - m[4]*m[2];
-    double s2 = m[0]*m[7] - m[4]*m[3];
-    double s3 = m[1]*m[6] - m[5]*m[2];
-    double s4 = m[1]*m[7] - m[5]*m[3];
-    double s5 = m[2]*m[7] - m[6]*m[3];
-
-    double c5 = m[10]*m[15] - m[14]*m[11];
-    double c4 = m[9]*m[15] - m[13]*m[11];
-    double c3 = m[9]*m[14] - m[13]*m[10];
-    double c2 = m[8]*m[15] - m[12]*m[11];
-    double c1 = m[8]*m[14] - m[12]*m[10];
-    double c0 = m[8]*m[13] - m[12]*m[9];
-
-    double det = s0*c5 - s1*c4 + s2*c3 + s3*c2 - s4*c1 + s5*c0;
-    
-    if (det == 0.0) {
-        // Handle error case
-        return;
-    }
-
-    double invdet = 1.0/det;
-
-    result[0] = (m[5]*c5 - m[6]*c4 + m[7]*c3)*invdet;
-    result[1] = (-m[1]*c5 + m[2]*c4 - m[3]*c3)*invdet;
-    result[2] = (m[13]*s5 - m[14]*s4 + m[15]*s3)*invdet;
-    result[3] = (-m[9]*s5 + m[10]*s4 - m[11]*s3)*invdet;
-
-    result[4] = (-m[4]*c5 + m[6]*c2 - m[7]*c1)*invdet;
-    result[5] = (m[0]*c5 - m[2]*c2 + m[3]*c1)*invdet;
-    result[6] = (-m[12]*s5 + m[14]*s2 - m[15]*s1)*invdet;
-    result[7] = (m[8]*s5 - m[10]*s2 + m[11]*s1)*invdet;
-
-    result[8] = (m[4]*c4 - m[5]*c2 + m[7]*c0)*invdet;
-    result[9] = (-m[0]*c4 + m[1]*c2 - m[3]*c0)*invdet;
-    result[10] = (m[12]*s4 - m[13]*s2 + m[15]*s0)*invdet;
-    result[11] = (-m[8]*s4 + m[9]*s2 - m[11]*s0)*invdet;
-
-    result[12] = (-m[4]*c3 + m[5]*c1 - m[6]*c0)*invdet;
-    result[13] = (m[0]*c3 - m[1]*c1 + m[2]*c0)*invdet;
-    result[14] = (-m[12]*s3 + m[13]*s1 - m[14]*s0)*invdet;
-    result[15] = (m[8]*s3 - m[9]*s1 + m[10]*s0)*invdet;
+static void vec_cross(const double a[3], const double b[3], double r[3])
+{
+    r[0] = a[1]*b[2] - a[2]*b[1];
+    r[1] = a[2]*b[0] - a[0]*b[2];
+    r[2] = a[0]*b[1] - a[1]*b[0];
 }
 
-void multMatVec4f(const double* m, const double* v, double* result) {
-    result[0] = m[0]*v[0] + m[1]*v[1] + m[2]*v[2] + m[3]*v[3];
-    result[1] = m[4]*v[0] + m[5]*v[1] + m[6]*v[2] + m[7]*v[3];
-    result[2] = m[8]*v[0] + m[9]*v[1] + m[10]*v[2] + m[11]*v[3];
-    result[3] = m[12]*v[0] + m[13]*v[1] + m[14]*v[2] + m[15]*v[3];
+// Normalize a into r. Returns 0 if |a| is too small.
+static int vec_normalize(const double a[3], double r[3])
+{
+    double n = vec_norm(a);
+    if (n < 1e-12) return 0;
+    vec_scale(1.0 / n, a, r);
+    return 1;
 }
 
-void orthonormalize_rotation_matrix(double* R) {
-    double x[3], y[3], z[3];
-    double temp[3];
-    
-    // Extract columns
-    for(int i = 0; i < 3; i++) {
-        x[i] = R[i];      // First column
-        y[i] = R[i + 3];  // Second column
-        z[i] = R[i + 6];  // Third column
-    }
-    
-    // Normalize x
-    double norm_x = sqrt(dotVec3f(x, x));
-    multScalVec3f(1.0/norm_x, x, x);
-    
-    // Make y orthogonal to x
-    double dot_xy = dotVec3f(x, y);
-    multScalVec3f(dot_xy, x, temp);
-    subVec3f(y, temp, y);
-    // Normalize y
-    double norm_y = sqrt(dotVec3f(y, y));
-    multScalVec3f(1.0/norm_y, y, y);
-    
-    // Make z orthogonal to x and y using cross product
-    crossVec3f(x, y, z);
-    // z is automatically normalized since x and y are orthonormal
-    
-    // Put back into matrix
-    for(int i = 0; i < 3; i++) {
-        R[i] = x[i];      // First column
-        R[i + 3] = y[i];  // Second column
-        R[i + 6] = z[i];  // Third column
+
+// ====================================================================
+//  Matrix helpers (row-major 3x3)
+// ====================================================================
+
+// C = A * B
+static void mat_mul(const double A[9], const double B[9], double C[9])
+{
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            C[i*3 + j] = A[i*3 + 0] * B[0*3 + j]
+                       + A[i*3 + 1] * B[1*3 + j]
+                       + A[i*3 + 2] * B[2*3 + j];
+        }
     }
 }
 
-// Constants
-#define K_F 0.0004905
-#define K_M 0.00004905
-#define L 0.25
-#define L_SQRT2 (L / sqrtf(2.0))
-#define GRAVITY 9.81
-#define MASS 0.5
-#define OMEGA_MIN 30.0
-#define OMEGA_MAX 70.0
+// R = A^T
+static void mat_transpose(const double A[9], double R[9])
+{
+    R[0] = A[0];  R[1] = A[3];  R[2] = A[6];
+    R[3] = A[1];  R[4] = A[4];  R[5] = A[7];
+    R[6] = A[2];  R[7] = A[5];  R[8] = A[8];
+}
 
-#define K_P 0.2
-#define K_V 0.6
-#define K_R 0.6
-#define K_W 0.6
+
+// ====================================================================
+//  SO(3) helpers
+// ====================================================================
+
+// Axial vector of the skew part 0.5 (M - M^T).
+static void so3_vee(const double M[9], double w[3])
+{
+    w[0] = 0.5 * (M[7] - M[5]);
+    w[1] = 0.5 * (M[2] - M[6]);
+    w[2] = 0.5 * (M[3] - M[1]);
+}
+
+// Exact exponential map R = expm([w]_x) via Rodrigues' formula,
+// with a Taylor expansion fallback for small |w| to avoid 0/0.
+static void so3_exp(const double w[3], double R[9])
+{
+    double t2 = vec_dot(w, w);
+    double t  = sqrt(t2);
+
+    // a = sin(t)/t,  b = (1 - cos(t))/t^2
+    double a, b;
+    if (t < 1e-8) {
+        a = 1.0 - t2 / 6.0;
+        b = 0.5 - t2 / 24.0;
+    } else {
+        a = sin(t) / t;
+        b = (1.0 - cos(t)) / t2;
+    }
+
+    double K[9] = {
+         0.0 , -w[2],  w[1],
+         w[2],  0.0 , -w[0],
+        -w[1],  w[0],  0.0
+    };
+    double K2[9];
+    mat_mul(K, K, K2);
+
+    for (int i = 0; i < 9; i++) {
+        double I_ij = (i % 4 == 0) ? 1.0 : 0.0;   // identity diagonal
+        R[i] = I_ij + a * K[i] + b * K2[i];
+    }
+}
+
+
+// ====================================================================
+//  Quad state and initialization
+// ====================================================================
 
 typedef struct {
-    double omega[4];
-    double linear_position_W[3];
-    double linear_velocity_W[3];
-    double angular_velocity_B[3];
-    double R_W_B[9];
-    double inertia[3];
-    double omega_next[4];
-    
-    double accel_measurement[3];
-    double gyro_measurement[3];
-    double accel_bias[3];
-    double gyro_bias[3];
-    double accel_scale[3];
-    double gyro_scale[3];
+    double p[3];        // position in W
+    double v[3];        // linear  velocity in W
+    double R[9];        // attitude R_WB (body -> world)
+    double w[3];        // angular velocity in B
+    double omega[4];    // rotor speeds (rad/s, >= 0)
+    double I[3];        // diagonal inertia in B
 } Quad;
 
-Quad create_quad(double x, double y, double z, double yaw) {
-    Quad quad;
-    
-    memcpy(quad.omega, (double[]){0.0, 0.0, 0.0, 0.0}, 4 * sizeof(double));
-    memcpy(quad.linear_position_W, (double[]){x, y, z}, 3 * sizeof(double));
-    memcpy(quad.linear_velocity_W, (double[]){0.0, 0.0, 0.0}, 3 * sizeof(double));
-    memcpy(quad.angular_velocity_B, (double[]){0.0, 0.0, 0.0}, 3 * sizeof(double));
-    
-    // Create rotation matrix with initial yaw
-    double cos_yaw = cos(yaw);
-    double sin_yaw = sin(yaw);
-    double R_yaw[9] = {
-        cos_yaw, 0.0, sin_yaw,
-        0.0, 1.0, 0.0,
-        -sin_yaw, 0.0, cos_yaw
+static void quad_init(Quad *q, double x, double y, double z, double yaw)
+{
+    memset(q, 0, sizeof(*q));
+
+    q->p[0] = x;
+    q->p[1] = y;
+    q->p[2] = z;
+
+    // R = Ry(yaw): rotation about world +Y
+    double c = cos(yaw);
+    double s = sin(yaw);
+    double Ry[9] = {
+         c, 0, s,
+         0, 1, 0,
+        -s, 0, c
     };
-    memcpy(quad.R_W_B, R_yaw, 9 * sizeof(double));
-    
-    memcpy(quad.inertia, (double[]){0.01, 0.02, 0.01}, 3 * sizeof(double));
-    memcpy(quad.omega_next, (double[]){0.0, 0.0, 0.0, 0.0}, 4 * sizeof(double));
-    
-    memset(quad.accel_measurement, 0, 3 * sizeof(double));
-    memset(quad.gyro_measurement, 0, 3 * sizeof(double));
-    memset(quad.accel_bias, 0, 3 * sizeof(double));
-    memset(quad.gyro_bias, 0, 3 * sizeof(double));
-    
-    for(int i = 0; i < 3; i++) {
-        quad.accel_scale[i] = ((double)rand() / RAND_MAX - 0.5) * 0.02;
-        quad.gyro_scale[i] = ((double)rand() / RAND_MAX - 0.5) * 0.02;
-    }
-    
-    return quad;
-}
+    memcpy(q->R, Ry, sizeof(Ry));
 
-void update_quad_states(
-    // Current state
-    const double* omega,            // omega[4]
-    const double* linear_position_W,// linear_position_W[3]
-    const double* linear_velocity_W,// linear_velocity_W[3]
-    const double* angular_velocity_B,// angular_velocity_B[3]
-    const double* R_W_B,           // R_W_B[9]
-    const double* inertia,         // inertia[3]
-    const double* accel_bias,      // accel_bias[3]
-    const double* gyro_bias,       // gyro_bias[3]
-    const double* accel_scale,     // accel_scale[3]
-    const double* gyro_scale,      // gyro_scale[3]
-    const double* omega_next,      // omega_next[4]
-    double dt,                     // time step
-    double rand1,                  // First random value
-    double rand2,                  // Second random value
-    double rand3,                  // Third random value
-    double rand4,                  // Fourth random value
-    // Output
-    double* new_linear_position_W, // new_linear_position_W[3]
-    double* new_linear_velocity_W, // new_linear_velocity_W[3]
-    double* new_angular_velocity_B,// new_angular_velocity_B[3]
-    double* new_R_W_B,            // new_R_W_B[9]
-    double* accel_measurement,     // accel_measurement[3]
-    double* gyro_measurement,      // gyro_measurement[3]
-    double* new_accel_bias,        // new_accel_bias[3]
-    double* new_gyro_bias,         // new_gyro_bias[3]
-    double* new_omega             // new_omega[4]
-) {
-    // State variables:
-    // p ∈ ℝ³     Position in world frame
-    // v ∈ ℝ³     Velocity in world frame
-    // R ∈ SO(3)  Rotation matrix from body to world
-    // ω ∈ ℝ³     Angular velocity in body frame
-    // ω_i ∈ ℝ    Rotor speeds
+    q->I[0] = IXX;
+    q->I[1] = IYY;
+    q->I[2] = IZZ;
 
-    // Rotor forces and moments:
-    // f_i = k_f * |ω_i| * ω_i    (thrust force)
-    // m_i = k_m * |ω_i| * ω_i    (drag moment)
-    double f[4], m[4];
-    for(int i = 0; i < 4; i++) {
-        double omega_sq = omega[i] * fabs(omega[i]);
-        f[i] = K_F * omega_sq;
-        m[i] = K_M * omega_sq;
-    }
-
-    // Net thrust and torques:
-    // T = Σf_i
-    // τ = Σ(r_i × F_i) + τ_drag
-    double thrust = f[0] + f[1] + f[2] + f[3];
-    double tau_B[3] = {0, m[0] - m[1] + m[2] - m[3], 0};
-    
-    const double r[4][3] = {
-        {-L, 0,  L},  // Rotor 0
-        { L, 0,  L},  // Rotor 1
-        { L, 0, -L},  // Rotor 2
-        {-L, 0, -L}   // Rotor 3
-    };
-    
-    for(int i = 0; i < 4; i++) {
-        double f_vector[3] = {0, f[i], 0};
-        double tau_thrust[3];
-        crossVec3f(r[i], f_vector, tau_thrust);
-        addVec3f(tau_B, tau_thrust, tau_B);
-    }
-
-    // Linear dynamics:
-    // p̈ = 1/m * F_W + [0; -g; 0]
-    // where F_W = R_W_B * [0; T; 0]
-    double f_B_thrust[3] = {0, thrust, 0};
-    double f_thrust_W[3];
-    multMatVec3f(R_W_B, f_B_thrust, f_thrust_W);
-
-    double linear_acceleration_W[3];
-    for(int i = 0; i < 3; i++) {
-        linear_acceleration_W[i] = f_thrust_W[i] / MASS;
-    }
-    linear_acceleration_W[1] -= GRAVITY;
-
-    // State evolution:
-    // v(t+dt) = v(t) + dt * v̇(t)
-    // p(t+dt) = p(t) + dt * v(t+dt)
-    for(int i = 0; i < 3; i++) {
-        new_linear_velocity_W[i] = linear_velocity_W[i] + dt * linear_acceleration_W[i];
-        new_linear_position_W[i] = linear_position_W[i] + dt * new_linear_velocity_W[i];
-    }
-
-    if (new_linear_position_W[1] < 0.0) new_linear_position_W[1] = 0.0;
-
-    // Angular dynamics:
-    // ω̇ = I⁻¹(τ_B - ω × (Iω))
-    double I_mat[9];
-    vecToDiagMat3f(inertia, I_mat);
-    
-    double h_B[3], w_cross_h[3];
-    multMatVec3f(I_mat, angular_velocity_B, h_B);
-    crossVec3f(angular_velocity_B, h_B, w_cross_h);
-
-    // State evolution (Euler integration):
-    // ω(t+dt) = ω(t) + dt * ω̇(t)
-    for(int i = 0; i < 3; i++) {
-        double angular_acc = (-w_cross_h[i] + tau_B[i]) / inertia[i];
-        new_angular_velocity_B[i] = angular_velocity_B[i] + dt * angular_acc;
-    }
-
-    // Rotation dynamics:
-    // Ṙ = R[ω]ₓ
-    // where [ω]ₓ is the skew-symmetric matrix:
-    // [ω]ₓ = [ 0   -ω₃   ω₂ ]
-    //        [ ω₃   0   -ω₁ ]
-    //        [-ω₂   ω₁   0  ]
-    double w_hat[9];
-    so3hat(angular_velocity_B, w_hat);
-    double R_dot[9];
-    multMat3f(R_W_B, w_hat, R_dot);
-
-    // State evolution (Euler integration):
-    // R(t+dt) = R(t) + dt * Ṙ(t)
-    double R_dot_scaled[9];
-    multScalMat3f(dt, R_dot, R_dot_scaled);
-    addMat3f(R_W_B, R_dot_scaled, new_R_W_B);
-    orthonormalize_rotation_matrix(new_R_W_B);
-
-    // Update IMU measurements
-    // Convert world frame acceleration to body frame for accelerometer
-    double R_W_B_T[9];
-    transpMat3f(new_R_W_B, R_W_B_T);
-    multMatVec3f(R_W_B_T, linear_acceleration_W, accel_measurement);
-
-    // Add gravity in body frame
-    double gravity_B[3];
-    multMatVec3f(R_W_B_T, (double[]){0, -GRAVITY, 0}, gravity_B);
-    addVec3f(accel_measurement, gravity_B, accel_measurement);
-
-    // Use the first two random values for accel and gyro bias updates
-    double accel_walk_noise = (rand1 - 0.5) * 0.0001;
-    double gyro_walk_noise = (rand2 - 0.5) * 0.0001;
-
-    // Use the second two random values for accel and gyro measurement noise
-    double accel_meas_noise = (rand3 - 0.5) * 0.01;
-    double gyro_meas_noise = (rand4 - 0.5) * 0.01;
-
-    // Update bias random walk and add noise to accelerometer
-    for(int i = 0; i < 3; i++) {
-        // Update bias with random walk
-        new_accel_bias[i] = accel_bias[i] + accel_walk_noise * dt;
-        // Apply scale factor error, add bias and white noise
-        accel_measurement[i] = accel_measurement[i] * (1.0 + accel_scale[i]) + 
-                                new_accel_bias[i] + 
-                                accel_meas_noise;
-    }
-
-    // Update gyroscope measurements
-    memcpy(gyro_measurement, new_angular_velocity_B, 3 * sizeof(double));
-    for(int i = 0; i < 3; i++) {
-        // Update bias with random walk
-        new_gyro_bias[i] = gyro_bias[i] + gyro_walk_noise * dt;
-        // Apply scale factor error, add bias and white noise
-        gyro_measurement[i] = gyro_measurement[i] * (1.0 + gyro_scale[i]) + 
-                                new_gyro_bias[i] + 
-                                gyro_meas_noise;
-    }
-
-    // Rotor speed update with saturation:
-    // ω_i(t+dt) = clamp(ω_i_next, ω_min, ω_max)
-    for(int i = 0; i < 4; i++) {
-        new_omega[i] = fmax(OMEGA_MIN, fmin(OMEGA_MAX, omega_next[i]));
+    // Start at hover throttle.
+    double w_hover = sqrt(MASS * G / (4.0 * K_F));
+    for (int i = 0; i < 4; i++) {
+        q->omega[i] = w_hover;
     }
 }
 
-void control_quad_commands(
-    // Current state
-    const double* position,     // linear_position_W[3]
-    const double* velocity,     // linear_velocity_W[3]
-    const double* R_W_B,       // R_W_B[9]
-    const double* omega,        // angular_velocity_B[3]
-    const double* inertia,     // inertia[3]
-    // Target state
-    const double* control_input,// target state[7]
-    // Output
-    double* omega_next         // omega_next[4]
-) {
-    // 1. Calculate position and velocity errors
-    double error_p[3], error_v[3];
-    subVec3f(position, (double[]){control_input[0], control_input[1], control_input[2]}, error_p);
-    subVec3f(velocity, (double[]){control_input[3], control_input[4], control_input[5]}, error_v);
 
-    // 2. Calculate desired force vector in world frame
-    double z_W_d[3], temp[3];
-    multScalVec3f(-K_P, error_p, z_W_d);
-    multScalVec3f(-K_V, error_v, temp);
-    addVec3f(z_W_d, temp, z_W_d);
-    
-    // Add gravity compensation and desired acceleration
-    double gravity_term[3] = {0, MASS * GRAVITY, 0};
-    addVec3f(z_W_d, gravity_term, z_W_d);
-    
-    double accel_term[3];
-    multScalVec3f(MASS, (double[]){0.0, 0.0, 0.0}, accel_term);
-    addVec3f(z_W_d, accel_term, z_W_d);
+// ====================================================================
+//  Rigid-body dynamics (semi-implicit / symplectic Euler at ~1 kHz)
+// ====================================================================
 
-    // 3. Calculate thrust magnitude
-    double z_W_B[3];
-    double y_body[3] = {0, 1, 0};
-    multMatVec3f(R_W_B, y_body, z_W_B);
-    double thrust = dotVec3f(z_W_d, z_W_B);
-
-    // 4. Calculate desired rotation matrix
-    double x_tilde_d_W[3] = {sin(control_input[6]), 0.0, cos(control_input[6])};
-    double temp_cross1[3], temp_cross2[3];
-    double R_W_d_column_0[3], R_W_d_column_1[3], R_W_d_column_2[3];
-    
-    crossVec3f(z_W_d, x_tilde_d_W, temp_cross1);
-    crossVec3f(temp_cross1, z_W_d, temp_cross2);
-    normVec3f(temp_cross2, R_W_d_column_0);
-    normVec3f(temp_cross1, R_W_d_column_1);
-    normVec3f(z_W_d, R_W_d_column_2);
-
-    double R_W_d[9] = {
-        R_W_d_column_1[0], R_W_d_column_2[0], R_W_d_column_0[0],
-        R_W_d_column_1[1], R_W_d_column_2[1], R_W_d_column_0[1],
-        R_W_d_column_1[2], R_W_d_column_2[2], R_W_d_column_0[2]
-    };
-
-    // 5. Calculate rotation error
-    double R_W_d_T[9], R_W_B_T[9], temp_mat1[9], temp_mat2[9], temp_mat3[9];
-    transpMat3f(R_W_d, R_W_d_T);
-    transpMat3f(R_W_B, R_W_B_T);
-
-    multMat3f(R_W_d_T, R_W_B, temp_mat1);
-    multMat3f(R_W_B_T, R_W_d, temp_mat2);
-    subMat3f(temp_mat1, temp_mat2, temp_mat3);
-
-    double error_r[3];
-    so3vee(temp_mat3, error_r);
-    multScalVec3f(0.5, error_r, error_r);
-
-    // 6. Calculate angular velocity error
-    double temp_vec[3], error_w[3];
-    multMat3f(R_W_d_T, R_W_B, temp_mat1);
-    multMatVec3f(temp_mat1, (double[]){0.0, 0.0, 0.0}, temp_vec);
-    subVec3f(omega, temp_vec, error_w);
-
-    // 7. Calculate control torque
-    double tau_B_control[3], temp_vec2[3];
-    multScalVec3f(-K_R, error_r, tau_B_control);
-    multScalVec3f(-K_W, error_w, temp_vec2);
-    addVec3f(tau_B_control, temp_vec2, tau_B_control);
-
-    // Add angular momentum terms
-    double I_mat[9], temp_vec3[3], temp_vec4[3];
-    vecToDiagMat3f(inertia, I_mat);
-    multMatVec3f(I_mat, omega, temp_vec3);
-    crossVec3f(omega, temp_vec3, temp_vec4);
-    addVec3f(tau_B_control, temp_vec4, tau_B_control);
-
-    // Add feedforward terms
-    double term_0[3], term_1[3], temp_vec5[3];
-    multMatVec3f(R_W_d, (double[]){0.0, 0.0, 0.0}, temp_vec);
-    multMatVec3f(R_W_B_T, temp_vec, term_0);
-
-    multMatVec3f(R_W_d, (double[]){0.0, 0.0, 0.0}, temp_vec);
-    multMatVec3f(R_W_B_T, temp_vec, temp_vec2);
-    crossVec3f((double[]){0.0, 0.0, 0.0}, temp_vec2, term_1);
-
-    subVec3f(term_1, term_0, temp_vec5);
-    multMatVec3f(I_mat, temp_vec5, temp_vec);
-    subVec3f(tau_B_control, temp_vec, tau_B_control);
-
-    // 8. Calculate rotor speeds
-    double F_bar[16] = {
-        K_F, K_F, K_F, K_F,   // Thrust coefficients
-        0, 0, 0, 0,           // Roll moments
-        K_M, -K_M, K_M, -K_M, // Yaw moments
-        0, 0, 0, 0            // Pitch moments
-    };
-
-    // Calculate roll and pitch moments
-    for(int i = 0; i < 4; i++) {
-        double moment[3];
-        double pos_scaled[3];
-        multScalVec3f(K_F, (double [4][3]){{-L, 0,  L}, { L, 0,  L}, { L, 0, -L}, {-L, 0, -L}}[i], pos_scaled);
-        crossVec3f(pos_scaled, (double[3]){0, 1, 0}, moment);
-        F_bar[4 + i]  = moment[0];  // Roll
-        F_bar[12 + i] = moment[2];  // Pitch
+static void quad_step(Quad *q, const double omega_cmd[4], double dt)
+{
+    // 0. Saturate and apply the commanded rotor speeds (no rotor dynamics).
+    for (int i = 0; i < 4; i++) {
+        double w = omega_cmd[i];
+        if (w < OMEGA_MIN) w = OMEGA_MIN;
+        if (w > OMEGA_MAX) w = OMEGA_MAX;
+        q->omega[i] = w;
     }
 
-    // 9. Calculate and update rotor speeds
-    double F_bar_inv[16];
-    inv4Mat4f(F_bar, F_bar_inv);
-    double omega_sign_square[4];
-    multMatVec4f(F_bar_inv, (double[]){thrust, tau_B_control[0], tau_B_control[1], tau_B_control[2]}, omega_sign_square);
+    // 1. Body-frame thrust (along +Y_B) and torque from rotor speeds.
+    //    tau_x = sum -z_i f_i, tau_y = sum s_i m_i, tau_z = sum x_i f_i.
+    const double a    = RDIST;
+    const double X[4] = { +a, -a, -a, +a };
+    const double Z[4] = { +a, +a, -a, -a };
+    const double S[4] = { +1, -1, +1, -1 };   // + for CCW spin
 
-    for(int i = 0; i < 4; i++) {
-        omega_next[i] = sqrt(fabs(omega_sign_square[i]));
+    double thrust = 0.0;
+    double tau[3] = { 0.0, 0.0, 0.0 };
+    for (int i = 0; i < 4; i++) {
+        double w2 = q->omega[i] * q->omega[i];
+        double f  = K_F * w2;
+        double m  = K_M * w2;
+        thrust += f;
+        tau[0] += -Z[i] * f;
+        tau[1] +=  S[i] * m;
+        tau[2] +=  X[i] * f;
+    }
+
+    // 2a. Translational acceleration in W:  a_W = (1/m) R [0,T,0]^T + [0,-g,0].
+    double dv[3];
+    dv[0] =  q->R[1] * thrust / MASS;
+    dv[1] =  q->R[4] * thrust / MASS - G;
+    dv[2] =  q->R[7] * thrust / MASS;
+
+    // 2b. Angular acceleration in B (Euler's equation):  w_dot = I^-1 (tau - w x I w).
+    double w_old[3];
+    memcpy(w_old, q->w, sizeof(w_old));
+
+    double Iw[3]  = { q->I[0]*w_old[0], q->I[1]*w_old[1], q->I[2]*w_old[2] };
+    double wIw[3];
+    vec_cross(w_old, Iw, wIw);
+
+    double dw[3];
+    dw[0] = (tau[0] - wIw[0]) / q->I[0];
+    dw[1] = (tau[1] - wIw[1]) / q->I[1];
+    dw[2] = (tau[2] - wIw[2]) / q->I[2];
+
+    // 3. Velocity update (linear and angular).
+    for (int i = 0; i < 3; i++) {
+        q->v[i] += dv[i] * dt;
+        q->w[i] += dw[i] * dt;
+    }
+
+    // 4. Position update using the new velocity (symplectic).
+    for (int i = 0; i < 3; i++) {
+        q->p[i] += q->v[i] * dt;
+    }
+
+    // 5. Attitude update:  R <- R * expm([0.5 (w_old + w_new) dt]_x).
+    double phi[3];
+    for (int i = 0; i < 3; i++) {
+        phi[i] = 0.5 * dt * (w_old[i] + q->w[i]);
+    }
+    double dR[9];
+    double Rn[9];
+    so3_exp(phi, dR);
+    mat_mul(q->R, dR, Rn);
+    memcpy(q->R, Rn, sizeof(Rn));
+
+    // 6. Rigid floor at y = 0.
+    if (q->p[1] < 0.0) {
+        q->p[1] = 0.0;
+        if (q->v[1] < 0.0) q->v[1] = 0.0;
     }
 }
 
-typedef struct {
-    double R[9];                    // Estimated rotation matrix
-    double angular_velocity[3];     // Estimated angular velocity
-    double gyro_bias[3];           // Estimated gyro bias
-} StateEstimator;
 
-void update_estimator(
-    const double *gyro, 
-    const double *accel, 
-    double dt, 
-    StateEstimator *state
-) {
-    // Correction gains
-    const double k_R = 0.1;    // Attitude correction gain
-    const double k_angular = 2.0; // Angular velocity correction gain
-    const double k_bias = 0.01; // Bias estimation gain
+// ====================================================================
+//  Geometric controller (adapted to Y-up body frame)
+// ====================================================================
 
-    // 1. Normalize accelerometer reading
-    double acc_norm = sqrt(dotVec3f(accel, accel));
-    double a_norm[3] = {
-        accel[0] / acc_norm,
-        accel[1] / acc_norm,
-        accel[2] / acc_norm
+// target = [ px, py, pz, vx, vy, vz, yaw ]
+static void quad_control(const Quad *q, const double target[7], double omega_cmd[4])
+{
+    // 1. Position and velocity errors (current - desired).
+    double ep[3], ev[3];
+    for (int i = 0; i < 3; i++) {
+        ep[i] = q->p[i] - target[i];
+        ev[i] = q->v[i] - target[3 + i];
+    }
+
+    // 2. Desired force in world frame:  F = -Kp ep - Kv ev + m g e_y.
+    double F[3];
+    F[0] = -KP_POS * ep[0] - KP_VEL * ev[0];
+    F[1] = -KP_POS * ep[1] - KP_VEL * ev[1] + MASS * G;
+    F[2] = -KP_POS * ep[2] - KP_VEL * ev[2];
+
+    // 3. Desired body-Y axis = thrust direction.
+    double b2d[3];
+    if (!vec_normalize(F, b2d)) {
+        b2d[0] = 0.0;
+        b2d[1] = 1.0;
+        b2d[2] = 0.0;
+    }
+
+    // Thrust magnitude projected onto current body-Y (decouples tilt lag from thrust).
+    double b2[3] = { q->R[1], q->R[4], q->R[7] };
+    double thrust = vec_dot(F, b2);
+    if (thrust < 0.0) thrust = 0.0;
+
+    // 4. Build desired attitude R_d. Columns are body axes (b1d, b2d, b3d) in W.
+    //    Heading vector c = body-X for given yaw, with R = Ry(psi).
+    double psi  = target[6];
+    double c[3] = { cos(psi), 0.0, -sin(psi) };
+
+    double tmp[3], b3d[3], b1d[3];
+    vec_cross(c, b2d, tmp);
+    if (!vec_normalize(tmp, b3d)) {
+        // Degenerate: c parallel to b2d. Pick a different reference.
+        double c2[3] = { 0.0, 0.0, 1.0 };
+        vec_cross(c2, b2d, tmp);
+        vec_normalize(tmp, b3d);
+    }
+    vec_cross(b2d, b3d, b1d);   // unit by construction
+
+    double Rd[9] = {
+        b1d[0], b2d[0], b3d[0],
+        b1d[1], b2d[1], b3d[1],
+        b1d[2], b2d[2], b3d[2]
     };
 
-    // 2. Calculate error between measured and expected gravity direction
-    double g_body[3];
-    double R_T[9];
-    transpMat3f(state->R, R_T);
-    multMatVec3f(R_T, (double[]){0, -1, 0}, g_body);
-    
-    double error[3];
-    crossVec3f(a_norm, g_body, error);
-    
-    // 3. Update bias estimate
-    for(int i = 0; i < 3; i++) {
-        state->gyro_bias[i] -= k_bias * error[i] * dt;
+    // 5. Attitude error in body frame:  e_R = 0.5 * vee(Rd^T R - R^T Rd).
+    double RdT[9], RT[9], A[9], B[9], E[9];
+    mat_transpose(Rd,   RdT);
+    mat_transpose(q->R, RT);
+    mat_mul(RdT, q->R, A);
+    mat_mul(RT,  Rd,   B);
+    for (int i = 0; i < 9; i++) {
+        E[i] = A[i] - B[i];
+    }
+    double eR[3];
+    so3_vee(E, eR);
+    vec_scale(0.5, eR, eR);
+
+    // 6. Angular velocity error (desired body rate = 0).
+    double eW[3] = { q->w[0], q->w[1], q->w[2] };
+
+    // 7. Control torque:  tau = -KR eR - Kw eW + w x (I w).
+    double Iw[3] = { q->I[0]*q->w[0], q->I[1]*q->w[1], q->I[2]*q->w[2] };
+    double wIw[3];
+    vec_cross(q->w, Iw, wIw);
+
+    double tau[3];
+    for (int i = 0; i < 3; i++) {
+        tau[i] = -KP_ROT * eR[i] - KP_OMG * eW[i] + wIw[i];
     }
 
-    // 4. Apply corrections to angular velocity estimate
-    for(int i = 0; i < 3; i++) {
-        // Remove bias from gyro measurement
-        double unbiased_gyro = gyro[i] - state->gyro_bias[i];
-        // Update angular velocity estimate with bias-corrected gyro and attitude error
-        state->angular_velocity[i] = unbiased_gyro + k_angular * error[i];
+    // 8. Invert the X-config mixer for rotor speed^2.
+    //    Rows of M are [T; tx; ty; tz] = M * [w0^2; w1^2; w2^2; w3^2].
+    const double a    = RDIST;
+    const double iKf  = 1.0 / (4.0 * K_F);
+    const double iKm  = 1.0 / (4.0 * K_M);
+    const double iaKf = 1.0 / (4.0 * a * K_F);
+
+    double w_sq[4];
+    w_sq[0] = thrust*iKf  - tau[0]*iaKf  + tau[1]*iKm  + tau[2]*iaKf;
+    w_sq[1] = thrust*iKf  - tau[0]*iaKf  - tau[1]*iKm  - tau[2]*iaKf;
+    w_sq[2] = thrust*iKf  + tau[0]*iaKf  + tau[1]*iKm  - tau[2]*iaKf;
+    w_sq[3] = thrust*iKf  + tau[0]*iaKf  - tau[1]*iKm  + tau[2]*iaKf;
+
+    for (int i = 0; i < 4; i++) {
+        if (w_sq[i] < 0.0) w_sq[i] = 0.0;
+        omega_cmd[i] = sqrt(w_sq[i]);
     }
-    
-    // 5. Update rotation matrix
-    double angular_velocity_hat[9];
-    so3hat(state->angular_velocity, angular_velocity_hat);
-    double R_dot[9];
-    multMat3f(state->R, angular_velocity_hat, R_dot);
-    
-    // Add attitude correction term
-    double correction[9];
-    so3hat(error, correction);
-    multScalMat3f(k_R, correction, correction);
-    addMat3f(R_dot, correction, R_dot);
-    
-    // Integrate and orthonormalize
-    for(int i = 0; i < 9; i++) {
-        state->R[i] += dt * R_dot[i];
-    }
-    orthonormalize_rotation_matrix(state->R);
 }
 
 #endif // QUAD_H
