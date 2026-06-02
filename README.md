@@ -49,7 +49,17 @@ T &= \max\!\left(0,\; \mathbf{F} \cdot \mathbf{b}_2 \right)
 \end{align*}
 $$
 
-A heading reference $\mathbf{c} = (\cos\psi_d,\, 0,\, -\sin\psi_d)$ defines the desired yaw, and the remaining body axes are obtained by orthogonalization $\mathbf{b}_{3,d} = (\mathbf{c} \times \mathbf{b}_{2,d}) / \|\mathbf{c} \times \mathbf{b}_{2,d}\|$ and $\mathbf{b}_{1,d} = \mathbf{b}_{2,d} \times \mathbf{b}_{3,d}$. The desired attitude is $R_d = [\mathbf{b}_{1,d} \; \mathbf{b}_{2,d} \; \mathbf{b}_{3,d}]$. The attitude and angular-velocity errors in the body frame, together with the feedback-linearized control torque, follow:
+A heading reference $\mathbf{c} = (\cos\psi_d,\, 0,\, -\sin\psi_d)$ defines the desired yaw, and the remaining body axes are obtained by orthogonalization:
+
+$$
+\begin{align*}
+\mathbf{b}_{3,d} &= \frac{\mathbf{c} \times \mathbf{b}_{2,d}}{\|\mathbf{c} \times \mathbf{b}_{2,d}\|} \\
+\mathbf{b}_{1,d} &= \mathbf{b}_{2,d} \times \mathbf{b}_{3,d} \\
+R_d &= [\mathbf{b}_{1,d} \;\; \mathbf{b}_{2,d} \;\; \mathbf{b}_{3,d}]
+\end{align*}
+$$
+
+The attitude and angular-velocity errors in the body frame, together with the feedback-linearized control torque, follow:
 
 $$
 \begin{align*}
