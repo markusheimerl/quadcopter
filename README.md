@@ -23,10 +23,11 @@ I \dot{\boldsymbol{\omega}} &= \boldsymbol{\tau} - \boldsymbol{\omega} \times I 
 \end{align*}
 $$
 
-Here $[\boldsymbol{\omega}]_\times$ is the skew-symmetric matrix associated with $\boldsymbol{\omega}$. The simulator integrates these equations at $1\,\mathrm{kHz}$ using a semi-implicit (symplectic) Euler scheme: velocities are advanced first, then positions and attitude are updated with the new velocities. The attitude update uses the exact exponential map on $SO(3)$ with the midpoint angular velocity $\boldsymbol{\phi} = \tfrac{1}{2} \Delta t (\boldsymbol{\omega}_k + \boldsymbol{\omega}_{k+1})$, evaluated via Rodrigues' formula:
+Here $[\boldsymbol{\omega}]_\times$ is the skew-symmetric matrix associated with $\boldsymbol{\omega}$. The simulator integrates these equations at $1\,\mathrm{kHz}$ using a semi-implicit (symplectic) Euler scheme: velocities are advanced first, then positions and attitude are updated with the new velocities. The attitude update uses the exact exponential map on $SO(3)$ with the midpoint angular velocity, evaluated via Rodrigues' formula:
 
 $$
 \begin{align*}
+\boldsymbol{\phi} &= \tfrac{1}{2} \Delta t (\boldsymbol{\omega}_k + \boldsymbol{\omega}_{k+1}) \\
 \mathbf{v}_{k+1} &= \mathbf{v}_k + \Delta t \left( \tfrac{T}{m} R_k \mathbf{e}_y - g \mathbf{e}_y \right) \\
 \boldsymbol{\omega}_{k+1} &= \boldsymbol{\omega}_k + \Delta t \, I^{-1} \left( \boldsymbol{\tau} - \boldsymbol{\omega}_k \times I \boldsymbol{\omega}_k \right) \\
 \mathbf{p}_{k+1} &= \mathbf{p}_k + \Delta t \, \mathbf{v}_{k+1} \\
@@ -37,7 +38,7 @@ $$
 
 For small $\|\boldsymbol{\phi}\|$ the coefficients are replaced by their Taylor expansions $\sin(t)/t \approx 1 - t^2/6$ and $(1-\cos t)/t^2 \approx 1/2 - t^2/24$ to avoid the $0/0$ singularity. A rigid floor constraint clamps $p_y \ge 0$ and zeros downward velocity on contact.
 
-The flight controller is a geometric tracking controller on $SO(3)$ running at $100\,\mathrm{Hz}$, given a target state $\mathbf{x}_d = (\mathbf{p}_d, \mathbf{v}_d, \psi_d)$. Position and velocity errors drive a desired world-frame force, from which a desired thrust direction $\mathbf{b}_{2,d}$ is extracted. The thrust magnitude is projected onto the current body-Y axis $\mathbf{b}_2 = R \mathbf{e}_y$ to decouple thrust from tilt error:
+The flight controller is a geometric tracking controller on $SO(3)$ running at $100\,\mathrm{Hz}$, given a target state $\mathbf{x}\_d = (\mathbf{p}\_d, \mathbf{v}\_d, \psi\_d)$. Position and velocity errors drive a desired world-frame force, from which a desired thrust direction $\mathbf{b}\_{2,d}$ is extracted. The thrust magnitude is projected onto the current body-Y axis $\mathbf{b}\_2 = R \mathbf{e}\_y$ to decouple thrust from tilt error:
 
 $$
 \begin{align*}
