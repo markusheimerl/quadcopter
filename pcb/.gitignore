@@ -2,3 +2,4 @@ node_modules/
 dist/
 .tscircuit/
 img/place.png
+kicad/*.kicad_prl

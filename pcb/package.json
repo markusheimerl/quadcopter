@@ -6,11 +6,11 @@
   "scripts": {
     "postinstall": "node scripts/patch-tscircuit.mjs",
     "place": "bun ./build.tsx --place; tsci export dist/place.circuit.json -f pcb-png -o \"$PWD/img/place.png\"",
-    "sch": "bun ./build.tsx --sch; tsci export dist/sch.circuit.json -f schematic-svg -o \"$PWD/img/schematic.svg\"",
+    "sch": "bun ./build.tsx --sch; tsci export dist/sch.circuit.json -f schematic-svg -o \"$PWD/img/schematic.svg\" && bun scripts/svg.ts",
     "build": "bun ./build.tsx",
-    "fab": "mkdir -p fab && tsci export dist/circuit.json -f gerbers -o \"$PWD/fab/gerbers.zip\" && zip -q -d fab/gerbers.zip bom.csv pick_and_place.csv F_Fab.gbr && bun scripts/jlc.ts",
+    "fab": "mkdir -p fab && tsci export dist/circuit.json -f gerbers -o \"$PWD/fab/gerbers.zip\" && zip -q -d fab/gerbers.zip bom.csv pick_and_place.csv F_Fab.gbr && cd fab && unzip -q -o gerbers.zip drill-L1-L2.drl && awk '/^G85/{p=p $0; next} NR>1{print p} {p=$0} END{print p}' drill-L1-L2.drl > slots.tmp && mv slots.tmp drill-L1-L2.drl && zip -q gerbers.zip drill-L1-L2.drl && rm drill-L1-L2.drl && cd .. && bun scripts/jlc.ts",
     "kicad": "mkdir -p kicad && tsci export dist/circuit.json -f kicad_pcb -o \"$PWD/kicad/quad.kicad_pcb\" && tsci export dist/sch.circuit.json -f kicad_sch -o \"$PWD/kicad/quad.kicad_sch\" && bun scripts/kicad.ts",
-    "img": "tsci export dist/circuit.json -f pcb-png -o \"$PWD/img/pcb.png\" && tsci export dist/sch.circuit.json -f schematic-svg -o \"$PWD/img/schematic.svg\"",
+    "img": "tsci export dist/circuit.json -f pcb-png -o \"$PWD/img/pcb.png\" && tsci export dist/sch.circuit.json -f schematic-svg -o \"$PWD/img/schematic.svg\" && bun scripts/svg.ts",
     "dev": "tsci dev index.tsx"
   },
   "devDependencies": {

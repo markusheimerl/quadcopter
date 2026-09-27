@@ -130,6 +130,17 @@ if (!schOnly) {
   const epadPorts = new Set(cj.filter((e) => e.type === "source_port" && e.source_component_id === u1 && /^pin41(_internal_\d+)?$/.test(e.name)).map((e) => e.source_port_id))
   const epad = new Set(cj.filter((e) => e.type === "pcb_port" && epadPorts.has(e.source_port_id)).map((e) => e.pcb_port_id))
   for (const paste of cj.filter((e) => e.type === "pcb_solder_paste" && epad.has(padById.get(e.pcb_smtpad_id)?.pcb_port_id))) paste.width = paste.height = 0.7
+  // ...and under the TPS63001's exposed pad (1.65 x 2.4 mm): TI's stencil,
+  // two 1.5 x 1.06 mm openings at +-0.63 mm (80 % cover, DRC0010J drawing)
+  const u3 = cj.find((e) => e.type === "source_component" && e.name === "U3").source_component_id
+  const u3ep = cj.find((e) => e.type === "source_port" && e.source_component_id === u3 && e.pin_number === 11).source_port_id
+  for (const paste of cj.filter((e) => e.type === "pcb_solder_paste" && cj.some((p) => p.type === "pcb_port" && p.source_port_id === u3ep && p.pcb_port_id === padById.get(e.pcb_smtpad_id)?.pcb_port_id))) {
+    const along = paste.height > paste.width ? "y" : "x" // split along the long side
+    const [w, h] = along === "y" ? [1.5, 1.06] : [1.06, 1.5]
+    const half = { ...paste, pcb_solder_paste_id: `${paste.pcb_solder_paste_id}_b`, width: w, height: h, [along]: paste[along] - 0.63 }
+    Object.assign(paste, { width: w, height: h, [along]: paste[along] + 0.63 })
+    cj.push(half)
+  }
   // USB1's outline hangs off the board edge. The motor connectors' pin-1 dot
   // would sit on + for two of them and on - for the others; index.tsx marks +.
   if (!placeOnly) cj = cleanSilkscreen(cj, (ref, e) => ref === "USB1" || (/^CN[1-4]$/.test(ref) && e.type === "pcb_silkscreen_circle"))

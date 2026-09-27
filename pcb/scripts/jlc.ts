@@ -11,6 +11,7 @@ const ORIGIN: Record<string, [number, number]> = {
   C2765186: [0, -0.25], // USB-C
   C122410: [0, 0.35], // battery connector
   C2845379: [0, 0.075], // motor connectors
+  C28060: [0.0125, 0], // TPS63001 (pads at -1.487 / +1.512)
 }
 
 const cj: any[] = JSON.parse(readFileSync("dist/circuit.json", "utf8"))

@@ -21,14 +21,18 @@ The ready‑made files are in [fab/](fab/). On jlcpcb.com:
    it if the budget allows. *Remove order number*: choose *Specify a
    location* – the back has a `JLCJLCJLCJLC` spot for it.
 2. Tick *PCB Assembly*, top side. Upload `fab/bom.csv` and `fab/cpl.csv`.
-   Every row has its JLCPCB part number; all parts are in stock, the
-   passives are *basic* parts.
+   Every row has its JLCPCB part number; all parts are in stock. The
+   resistors and capacitors are *basic* parts; the ICs, connectors, diodes,
+   LEDs, buttons and the inductor L1 are *extended* parts (a small fee each).
 3. The ESP32 module overhangs the nose edge (its antenna) and the USB‑C
-   socket the tail edge. If JLCPCB asks for edge rails, let them add them on
-   the left/right (arm) sides, not across the nose or tail.
+   socket the tail edge, on purpose. Say so in the order remark. If JLCPCB
+   asks for edge rails, let them add them on the left/right (arm) sides, not
+   across the nose or tail.
 4. In the placement preview check each part once: antenna toward the nose,
-   USB‑C opening at the tail edge, diode bands toward the VBAT rails (outer
-   side of D1–D4), LEDs, the IMU's pin‑1 dot (top‑left corner), U3/U4 pin 1.
+   USB‑C opening at the tail edge, the diode bands (cathode) on the inner end
+   of D1–D4 where each diode meets its VBAT rail, LED anodes toward their 1 k
+   resistor (LED1 → R11, LED2 → R17), the IMU's pin‑1 dot (top‑left corner),
+   U3's pin 1 at the silkscreen dot (top‑left, toward the inductor), U4 pin 1.
    `cpl.csv` already places every part at JLCPCB's own footprint origin.
 
 ## What is on it
@@ -40,7 +44,7 @@ The ready‑made files are in [fab/](fab/). On jlcpcb.com:
 | Motor drive ×4 | AO3400A low‑side, 47 Ω gate, 10 k pull‑down, B5819W flyback | C20917, C8598 |
 | Motor connectors ×4 | HC‑1.25‑2PWT (1.25 mm, 2 pin), "+" marked on the silkscreen | C2845379 |
 | Battery | Molex PicoBlade 53398‑0271, "+"/"−" marked, 100 µF bulk | C122410, C15008 |
-| 3.3 V | TLV75733 LDO (1 A) from the battery, always on | C485517 |
+| 3.3 V | TPS63001 buck‑boost: 3.3 V from 1.8–5.5 V in (1.2 A buck, 0.8 A boost), always on, power‑save mode at light load, 2.2 µH | C28060, C5832372 |
 | Charger | TP4054, 260 mA (R16 = 3.3 k, datasheet formula 1), CHG LED | C32574 |
 | USB | USB‑C, native S3 USB (flashing + console), 5.1 k CC pull‑downs | C2765186 |
 | Buttons | RST (EN, left edge) and BOOT (IO0, right edge), top‑actuated | C720477 |
@@ -67,7 +71,15 @@ way, swap its two wires.
 
 Copper: bottom layer is a ground pour; VBAT runs 1 mm wide on top plus a
 1.5 mm bus on the bottom from the battery connector; motor nets 0.6–0.8 mm;
-vias 0.3/0.6 mm.
+vias 0.3/0.6 mm. The buck‑boost follows its datasheet layout: input and
+output caps right at VIN/VOUT with their grounds straight into the exposed
+pad, the inductor beside the VBAT rail, unbroken ground pour underneath
+(the USB data pair runs past it, between converter and IMU).
+
+The motor connectors' "+" pins match the May 2026 boards. The November 2025
+board had front‑left and back‑right the other way round: leads made for that
+board spin FL/BR backwards here. Check each motor's direction with the props
+off (BLE keys `1`–`4`).
 
 ## Change the design
 
@@ -93,13 +105,19 @@ npm run dev     # live PCB / schematic / 3D view at http://localhost:3020
   lines 0.15 mm off pads, holes and the board edge (what JLCPCB would clip).
 * `scripts/jlc.ts` writes the BOM and a CPL at JLCPCB's footprint origins
   (tscircuit's own pick‑and‑place uses pad centres, which is off for the
-  module, USB‑C and connectors).
+  module, USB‑C and connectors). `npm run fab` also puts each USB‑C slot's
+  `G85` on one line in the drill file, as Excellon wants it.
+* The exposed pad of U3 gets TI's stencil (two 1.5 × 1.06 mm openings at
+  ±0.63 mm, 80 %)
+  instead of a full opening, so the part doesn't float (`build.tsx`).
 * `scripts/kicad.ts` touches up the KiCad export so KiCad reads it right:
   real power symbols, correct diode/connector pin numbers, net ties at
   junctions, no‑connect flags, JLCPCB design rules, text sizes as printed.
   The ground pour comes without fill: press **B** in KiCad to fill it.
 * `footprints/` caches the JLCPCB footprints (some edited: USB‑C slots,
-  LDO pad toes, a connector courtyard), so builds work offline.
+  a connector courtyard, TPS63001 exposed pad as TI's 1.65 × 2.4 mm land,
+  inductor pads as its maker recommends),
+  so builds work offline.
 * `drc.py` is an independent check (`pip install shapely`): 0.2 mm copper
   clearance, 0.3 mm to the edge, via sizes, and that every net is one piece
   of copper: `python3 drc.py`.
@@ -119,8 +137,19 @@ npm run dev     # live PCB / schematic / 3D view at http://localhost:3020
 
 ## Limits worth knowing
 
-* **Low battery:** the LDO has no headroom on 1S, so 3.3 V follows VBAT
-  below about 3.4 V. Land (firmware cut‑off on IO10) at about 3.3 V loaded.
+* **Brown‑outs:** the buck‑boost holds 3.3 V while the battery sags as low
+  as 1.8 V, so motor current can no longer reset the ESP32 (the old boards
+  fed it from an LDO, or from the motor rail itself). The firmware logs the
+  reset reason at boot; `BROWN-OUT` there would mean something else is wrong.
+* **Low battery:** because the ESP32 keeps running on a nearly empty pack,
+  only the firmware protects it: it logs VBAT (IO10) with every status line,
+  warns below 3.3 V while armed and won't arm below 3.5 V. Disarmed below
+  3.3 V for 10 s (or below 3.0 V for 1 s) it goes to deep sleep (about 0.1 mA
+  for the whole board, the converter in power‑save mode) and checks again
+  every 5 minutes; above 3.5 V (e.g. after charging over USB) it starts
+  normally (press RST to skip the wait). To flash a board that is asleep,
+  hold BOOT and tap RST. Running and idle it draws about 50 mA, so a pack
+  left plugged in is down to 3.3 V within hours – unplug it after flying.
 * **Battery connector (the one real compromise):** PicoBlade contacts are
   rated 1 A, but CN5 carries all four motors – 2–6 A in flight, more at
   spin‑up. It was kept so your existing packs and the May 2026 board's leads
@@ -129,14 +158,19 @@ npm run dev     # live PCB / schematic / 3D view at http://localhost:3020
   connectors (also 1 A) are within rating up to about 1 A per motor.
 * No reverse‑polarity protection on the battery and no ESD protection on
   USB: check the "+" before plugging a battery in.
-* Keep a battery plugged in while working over USB: the charger alone is not
-  a stable supply. While the ESP32 runs, the charger never terminates (it
-  holds the pack at 4.2 V) and the CHG LED stays on.
-* Firmware to‑dos the review turned up: a low‑battery cut‑off from IO10
-  (ADC1 channel 9, 12 dB, VBAT = 2 × reading), arming only at zero throttle
-  plus a stall/crash cut‑off, staggered PWM phases (LEDC `hpoint` 0/64/128/192)
-  to cut the peak battery current, and a 16 MB flash size in `sdkconfig`
-  (it builds for 2 MB today, which also works). Note that `app_main` spins
-  every motor briefly at boot: take the props off or remove `motors_sweep`.
+* The board may not start from USB alone (the charger only trickles into an
+  empty VBAT): plug a charged battery in first, then USB, to flash. While the ESP32 runs, the charger never terminates (it holds the
+  pack at 4.2 V) and the CHG LED stays on.
+* Firmware (`firmware/main/main.c`): the motors are driven in two phases
+  (M0/M2 at the start of each PWM period, M1/M3 at its end), which halves the
+  peak battery current below half throttle; arming needs a BLE link and a
+  finished level calibration and a measured battery of at least 3.5 V, and
+  always starts at zero throttle, where the motors stay off; a lost BLE link
+  disarms. Still to do: a heartbeat from the phone while armed (a lost link
+  is only noticed after the BLE supervision timeout, seconds) and a 16 MB
+  flash size in `sdkconfig` (it builds for 2 MB today, which also works).
+  Note that `app_main` spins every motor briefly after power‑up as a wiring
+  check (not after a reset or a battery‑sleep wake): take the props off or
+  remove `motors_sweep`.
 * The buttons are pressed from the top. The antenna sits at the nose: keep
   metal and the battery away from it and test BLE range on the first board.

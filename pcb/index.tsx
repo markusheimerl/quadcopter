@@ -100,13 +100,15 @@ const outline = [0, 1, 2, 3]
 type Place = [number, number, number?]
 const AT: Record<string, Place> = {
   U1: [0, 10], // module; antenna hangs over the nose edge
-  C1: [-10.85, 18.6], R9: [-10.22, 17.14, 270], // at module pins 3V3 / EN
+  C1: [-10.85, 18.6], C13: [-11.3, 19.82], R9: [-10.22, 17.14, 270], // at module pins 3V3 / EN
   C3: [-10.85, 0.2, 270], SW1: [-16.6, 0], // RESET on the left edge
   SW2: [16.6, 0], R10: [8.5, -1.2], // BOOT on the right edge
   LED1: [3.9, -1.2], R11: [6.6, -1.2],
   U2: [-1.405, -4.2], C4: [-2.6, -6.7, 270], C5: [1.5, -5.3, 90], R12: [-3.3, -2.1], R13: [0.4, -2.0, 180], // IMU
-  U3: [-9.0, -6.0, 270], C6: [-10.3, -8.5, 180], C7: [-6.4, -5.9, 270], C2: [-4.9, -5.9, 270], // 3.3 V LDO
-  R19: [-7.9, -1.8], R20: [-6.3, -1.8, 270], C10: [-5.3, -1.8, 270], // battery sense
+  // 3.3 V buck-boost: inductor beside the rail, input cap below, output cap
+  // above, VINA filter on the control side
+  U3: [-7.0, -6.3], L1: [-10.55, -6.3, 90], C6: [-7.8125, -8.81], C7: [-7.8125, -3.79], C2: [-4.1, -6.72, 90], R21: [-4.78, -9.0, 90],
+  R19: [-7.9, -1.8], R20: [-6.48, -1.29, 90], C10: [-5.5, -1.29, 90], // battery sense
   USB1: [-4.0, -15.6], R14: [-6.1, -10.9, 90], R15: [-2.25, -10.7, 90],
   CN5: [5.4, -14.9], C8: [5.4, -10.9], // battery
   U4: [7.8, -7.6], R16: [6.85, -4.6, 90], R18: [8.75, -4.1, 90], C9: [10.0, -3.7, 270], LED2: [3.75, -8.7, 180], R17: [3.0, -6.8, 90], // charger
@@ -140,10 +142,10 @@ const SCH: Record<string, Place> = {
   R18: [-3.0, 9.6, 270], C9: [-3.0, 8.7, 270],
   U4: [-0.8, 10.0], R16: [-0.5, 8.5, 270], LED2: [1.7, 10.0, 180], R17: [2.8, 10.3, 90],
   // battery + 3.3 V
-  CN5: [5.6, 8.5], C8: [7.1, 8.9, 270], C11: [8.2, 8.6, 270], C12: [9.2, 8.6, 270],
-  C6: [10.2, 8.6, 270], U3: [12.4, 8.8], C7: [14.4, 8.6, 270],
+  CN5: [5.4, 8.5], C8: [7.0, 8.9, 270], C11: [7.9, 8.6, 270], C12: [8.8, 8.6, 270],
+  C6: [9.7, 8.6, 270], R21: [10.75, 8.5], C2: [11.3, 7.8, 270], U3: [12.7, 8.8], L1: [12.7, 10.5], C7: [15.1, 7.55, 270],
   // MCU: ESP32 with its supply caps, reset/boot, LED, VBAT/2 divider, UART pads
-  U1: [-1.4, 0], C2: [-7.4, 3.9, 270], C1: [-6.3, 3.9, 270],
+  U1: [-1.4, 0], C13: [-7.4, 3.9, 270], C1: [-6.3, 3.9, 270],
   C3: [-4.1, 2.0, 270], R9: [-4.8, 3.2, 270], SW1: [-5.6, 1.8, 90],
   R10: [-3.6, 0.3, 270], SW2: [-4.5, -1.1, 270],
   TP1: [0.9, 1.0], TP2: [0.9, 0.6], TP3: [-0.3, -4.1, 90],
@@ -162,7 +164,7 @@ const LABELS: LabelAt[] = [
   ["SDA", "U1.IO11", 0.6, 2.2, "left"], ["SCL", "U1.IO12", 0.6, 2.0, "left"],
   ["SDA", "U2.SDX", 8.0, 1.9, "right"], ["SCL", "U2.SCX", 6.8, 1.7, "right"],
   ["USB_DN", "U1.IO19", 0.6, 1.6, "left"], ["USB_DP", "U1.IO20", 0.6, 1.4, "left"],
-  ["V3V3", "R11.pin2", 3.1, 0.9, "bottom"],
+  ["V3V3", "R11.pin2", 3.1, 0.9, "bottom"], 
   ...[0, 1, 2, 3].map((i): LabelAt => [`PWM${i}`, `R${i + 1}.pin1`, MOTOR_SCH(i)[0] - 2.2, MOTOR_SCH(i)[1], "right"]),
 ]
 
@@ -219,7 +221,9 @@ for (const [r, c] of [[0, 0], [0, 1], [1, 0], [1, 1]]) {
   for (const [dr, dc] of [[0, 0], [0, 1], [1, 0], [1, 1]]) track(`U1.${EP[r + dr][c + dc]}`, `GE${r}${c}.top`, 0.3)
 }
 via("GU2", "GND", 10.0, 19.5); track("U1.GND2", "GU2.top", 0.4)
-track("C1.pin2", "U1.GND1", 0.3, [-9.8, 18.6]); via("GU1", "GND", -10.3, 19.55); track("C1.pin2", "GU1.top", 0.3)
+track("C1.pin2", "U1.GND1", 0.3, [-9.8, 18.6]); via("GU1", "GND", -9.6, 19.9)
+// 22 uF bulk at the module's 3V3 pin (Espressif's reference circuit), beside C1
+track("C13.pin1", "C1.pin1", 0.3, [-12.125, 18.6]); track("C1.pin2", "C13.pin2", 0.3); track("C13.pin2", "GU1.top", 0.3)
 // 3V3 into module pin 2 (decoupled by C1 right there); R9 pulls EN up
 track("U1.3V3", "C1.pin1", 0.3, [-11.2, 17.775], [-11.2, 18.6])
 track("R9.pin1", "U1.3V3", 0.3); track("R9.pin2", "U1.EN", 0.25)
@@ -238,10 +242,11 @@ via("ENT", "EN", -10.9, 1.5); via("ENB", "EN", -13.5, 1.5)
 track("ENT.top", "C3.pin1", 0.25); track("ENT.bottom", "ENB.bottom", 0.25); track("ENB.top", "SW1.pin2", 0.25)
 via("GC3", "GND", -10.85, -1.0); track("C3.pin2", "GC3.top", 0.3)
 via("GSW1", "GND", -18.8, 1.5); track("SW1.pin1", "GSW1.top", 0.4)
-// 3V3 down to the LDO
-track("U1.3V3", "U3.OUT", 0.3, [-11.2, 17.775], [-11.2, 13.11], [L3, 12.76], [L3, -3.4], [-7.8, -3.4])
-// USB data leave the module pins inward and run on the bottom layer
-via("DNT", "USB_DN", -7.3, 3.805); via("DPT", "USB_DP", -7.3, 2.535)
+// 3V3 down to the converter's output cap
+track("U1.3V3", "C7.pin1", 0.3, [-11.2, 17.775], [-11.2, 13.11], [L3, 12.76], [L3, -3.79])
+// USB data: D- dives to the bottom beside its pin, D+ first runs under the
+// module on top; both go down the bottom layer between the converter and the IMU
+via("DNT", "USB_DN", -7.3, 3.805); via("DPT", "USB_DP", -4.05, 2.535)
 track("U1.IO19", "DNT.top", 0.25); track("U1.IO20", "DPT.top", 0.25)
 
 // right of the module: PWM0, PWM1 down to their channels, IO0 to BOOT; the
@@ -274,32 +279,47 @@ via("GSDO", "GND", -3.4, -3.45); track("U2.SDO", "GSDO.top", 0.25)
 via("GIMU", "GND", -1.155, -6.3); track("U2.GNDIO", "GIMU.top", 0.25, [-1.405, -5.8]); track("U2.GND", "GIMU.top", 0.25, [-0.905, -5.8])
 via("GC4", "GND", -1.7, -7.2); track("C4.pin2", "GC4.top", 0.3)
 via("GC5", "GND", 2.0, -3.9); track("C5.pin2", "GC5.top", 0.3)
-// 3V3 from the LDO: east past its output caps, up the IMU's west side to
-// R12, under the IMU and up its east side to VDD, CSB, R13 and on to R11/R10
-track("U3.OUT", "C7.pin1", 0.4); track("C7.pin1", "C2.pin1", 0.4)
-track("C2.pin1", "R12.pin1", 0.3, [-4.0, -5.05], [-4.0, -4.2], [-4.2, -4.0], [-4.2, -2.49])
-track("C2.pin1", "U2.VDDIO", 0.3, [-4.0, -5.05], [-4.0, -6.19], [-2.6, -6.19], [-1.905, -5.7])
+// 3V3 from the converter's output cap C7: north over it and east (FB joins on
+// the way) to R12, down the IMU's west side to VDDIO, under the IMU and up its
+// east side to VDD, CSB, R13 and on to R11/R10
+track("C7.pin1", "R12.pin1", 0.3, [-8.6375, -2.7], [-4.2, -2.7], [-4.2, -2.49])
+track("R12.pin1", "U2.VDDIO", 0.3, [-4.2, -2.49], [-4.2, -4.0], [-3.4, -4.8], [-3.4, -6.19], [-2.6, -6.19], [-1.905, -5.7])
 track("U2.VDDIO", "C4.pin1", 0.25, [-1.905, -5.7])
-track("U2.VDDIO", "R13.pin1", 0.3, [-1.905, -5.7], [-2.6, -6.19], [-4.0, -6.19], [-4.0, -7.9], [0.7, -7.9], [0.7, -2.0])
+track("U2.VDDIO", "R13.pin1", 0.3, [-1.905, -5.7], [-2.6, -6.19], [-3.4, -6.19], [-3.4, -7.9], [0.7, -7.9], [0.7, -2.0])
 track("U2.VDD", "C5.pin1", 0.25, [0.7, -4.95], [0.7, -5.81])
 track("U2.CSB", "R13.pin1", 0.2, [-0.905, -2.75], [0.7, -2.75])
 track("R13.pin1", "R11.pin2", 0.3, [1.2, -2.0], [7.11, -2.0])
-via("GC7", "GND", -6.4, -7.6); track("C7.pin2", "GC7.top", 0.4)
-via("GC2", "GND", -4.9, -7.6); track("C2.pin2", "GC2.top", 0.4)
-// LDO: VBAT in from the left rail, EN tied to IN under the body
-track("U3.IN", "U3.EN", 0.4, [-9.15, -5.05], [-9.15, -6.95])
-track("C12.pin1", "D3.cathode", 0.5, [-RAIL, -11.725]); track("U3.IN", "D4.cathode", 0.5, [-RAIL, -5.05])
-track("U3.EN", "C6.pin1", 0.4)
-via("GU3", "GND", -11.35, -6.0); track("U3.GND", "GU3.top", 0.4)
-via("GC6", "GND", -11.125, -9.4); track("C6.pin2", "GC6.top", 0.4)
+// 3.3 V buck-boost as in the TPS63001 layout guide: input cap (below) and
+// output cap (above) right at VIN / VOUT, their grounds straight into the
+// exposed pad (= PGND), short inductor legs. EN sits on VINA (always on);
+// PS/SYNC to ground = power-save mode, so a sleeping board draws ~0.1 mA, not mA.
+// R21 + C2 filter VINA.
+track("C6.pin1", "D3.cathode", 0.5, [-RAIL, -8.81]) // VBAT from the left rail
+track("U3.VIN", "C6.pin1", 0.3, [-8.64, -7.3])
+track("U3.VOUT", "C7.pin1", 0.3, [-8.64, -5.3])
+track("U3.L1", "L1.pin1", 0.25, [-9.2, -6.8])
+track("U3.L2", "L1.pin2", 0.25, [-9.2, -5.8])
+track("U3.PGND", "U3.EP", 0.25)
+track("U3.EP", "C7.pin2", 0.6); track("U3.EP", "C6.pin2", 0.6)
+track("U3.GND", "U3.EP", 0.23, [-6.5, -5.8]); track("U3.GND", "C2.pin2", 0.23, [-4.6, -5.8])
+track("U3.FB", "R12.pin1", 0.2, [-5.4, -5.3], [-5.4, -2.7], [-4.2, -2.7], [-4.2, -2.49]) // FB senses VOUT past C7
+track("U3.PS", "U3.EP", 0.23, [-6.5, -6.8])
+track("U3.VINA", "U3.EN", 0.2, [-4.78, -6.3], [-4.78, -7.3]) // east of the PS pad
+track("C2.pin1", "U3.EN", 0.2, [-4.78, -7.23], [-4.78, -7.3])
+track("U3.EN", "R21.pin2", 0.2, [-4.78, -7.3])
+track("R21.pin1", "C6.pin1", 0.2, [-4.78, -9.69], [-8.6375, -9.69]) // VINA's supply, around the input cap
+via("GC7", "GND", -6.05, -3.79); via("GC7B", "GND", -6.2, -4.55)
+track("C7.pin2", "GC7.top", 0.6); track("GC7B.top", "C7.pin2", 0.4)
+via("GC6", "GND", -6.05, -8.81); via("GC6B", "GND", -6.2, -8.05)
+track("C6.pin2", "GC6.top", 0.6); track("GC6B.top", "C6.pin2", 0.4)
+track("C12.pin1", "D3.cathode", 0.5, [-RAIL, -11.725])
 via("GC12", "GND", -9.6, -10.1); track("C12.pin2", "GC12.top", 0.4)
 // battery sense: VBAT / 2 on IO10; VBAT comes under the left corridor
-track("U1.IO10", "R19.pin2", 0.25, [-3.175, -1.29], [-6.3, -1.29])
-track("C10.pin1", "R20.pin1", 0.25)
 via("VST", "VBAT", RAIL * -1, -1.8); via("VSB", "VBAT", -9.2, -1.8)
 track("VST.bottom", "VSB.bottom", 0.3); track("VSB.top", "R19.pin1", 0.3)
-via("GR20", "GND", -6.3, -3.2); track("R20.pin2", "GR20.top", 0.3)
-via("GC10", "GND", -5.3, -3.2); track("C10.pin2", "GC10.top", 0.3)
+track("R19.pin2", "R20.pin1", 0.25); track("R20.pin1", "C10.pin1", 0.25)
+track("U1.IO10", "C10.pin1", 0.25, [-3.175, -1.45], [-5.15, -1.45])
+via("GBS", "GND", -5.99, -0.05); track("R20.pin2", "GBS.top", 0.3); track("C10.pin2", "GBS.top", 0.3)
 
 // charger: VBUS arrives on the bottom layer (from the USB-C connector) at two
 // vias; BAT goes straight to the right rail, GND straight into the bulk cap
@@ -351,37 +371,38 @@ via("VBU1", "VBUS", ux(-2.4), -12.5); track("USB1.VBUS1", "VBU1.top", 0.3)
 track("VBU1.bottom", "VBU.bottom", 0.4, [ux(-2.4), -13.4], [ux(2.4), -13.4])
 track("VBU.bottom", "VBR.bottom", 0.4, [-1.0, -11.8], [-1.0, -8.6], [3.0, -8.6]); track("VBR.bottom", "VBV.bottom", 0.4, [9.7, -5.4])
 // USB data on the bottom layer, from under the module down to the connector
-track("DNT.bottom", "DN2.bottom", 0.25, [-8.1, 3.455], [-8.1, -8.2], [ux(-1.25), -10.95])
-track("DPT.bottom", "DPU.bottom", 0.25, [-7.3, -8.0], [-4.9, -10.4], [ux(0.05), -10.4])
+track("DNT.bottom", "DN2.bottom", 0.25, [-4.75, 3.805], [-4.75, -11.1])
+track("DPT.bottom", "DPU.bottom", 0.25, [-4.05, -10.3])
 
 // ---- silkscreen (scripts/silk.ts drops the unprintable footprint texts):
 // motor number + spin on each arm, + on the motor and battery connectors,
 // the buttons, the charge LED; title, FRONT and the UART pads on the back
-const Text = ({ t, x, y, size = 1.2, r = 0, back = false }: { t: string; x: number; y: number; size?: number; r?: number; back?: boolean }) => (
+const Text = ({ t, x, y, size = 1.5, r = 0, back = false }: { t: string; x: number; y: number; size?: number; r?: number; back?: boolean }) => (
   <silkscreentext text={t} pcbX={x} pcbY={y} fontSize={size} pcbRotation={r} layer={back ? "bottom" : "top"} anchorAlignment="center" />
 )
 const Silkscreen = () => (
   <>
     {MOTORS.map(({ i, sx, sy, spin }) => (
       <Fragment key={i}>
-        <Text t={`M${i} ${spin}`} x={28.5 * sx} y={28.5 * sy} size={1.4} r={45 * sx * sy} />
-        <Text t="+" x={13.14 * sx} y={15.64 * sy} />
+        <Text t={`M${i} ${spin}`} x={28.5 * sx} y={28.5 * sy} size={1.7} r={45 * sx * sy} />
+        <Text t="+" x={13.14 * sx} y={15.64 * sy} size={1.6} />
       </Fragment>
     ))}
-    <Text t="+" x={4.77} y={-18.35} />
-    <Text t="-" x={6.03} y={-18.35} />
+    <Text t="+" x={4.77} y={-18.35} size={1.8} />
+    <Text t="-" x={6.03} y={-18.35} size={1.8} />
     <Text t="RST" x={-17.9} y={-2.55} />
-    <Text t="BOOT" x={17.85} y={2.6} />
-    <Text t="CHG" x={0.7} y={-8.7} />
+    <Text t="BOOT" x={17.85} y={2.6} size={1.2} /> {/* between a via and the edge: no room for more */}
+    <Text t="CHG" x={0.4} y={-8.7} />
     <silkscreencircle pcbX={-3.35} pcbY={-2.8} radius={0.1} strokeWidth={0.15} /> {/* IMU pin 1 (its own dot is under a via) */}
+    <silkscreencircle pcbX={-9.05} pcbY={-4.85} radius={0.1} strokeWidth={0.15} /> {/* U3 pin 1 */}
     <silkscreenpath layer="bottom" strokeWidth={0.25} route={[{ x: -1.6, y: 16.0 }, { x: 0, y: 17.6 }, { x: 1.6, y: 16.0 }]} />
     <Text t="FRONT" x={0} y={14.6} back />
     <Text t="QUAD" x={0} y={6.4} size={3} back />
     <Text t="rev A  2026-09" x={0} y={3.4} back />
     <Text t="JLCJLCJLCJLC" x={0} y={1.2} back /> {/* JLCPCB prints its order number here ("Specify a location") */}
-    <Text t="TX" x={8.3} y={16.9} back />
-    <Text t="RX" x={8.3} y={12.3} back />
-    <Text t="GND" x={7.8} y={10.4} back />
+    <Text t="TX" x={7.95} y={16.9} back />
+    <Text t="RX" x={7.95} y={12.3} back />
+    <Text t="GND" x={7.45} y={10.4} back />
   </>
 )
 
@@ -420,22 +441,23 @@ export default ({ copper = true }: { copper?: boolean }) => (
     <net name="V3V3" isPowerNet />
     <net name="VBUS" isPowerNet />
     <schematictext text="QUAD · micro quadcopter flight controller · rev A" schX={-8.3} schY={12.6} fontSize={0.32} anchor="left" />
-    <schematictext text="USB-C 5 V → TP4054 charges the 1S LiPo at 260 mA (R16 = 3.3 k, datasheet formula 1) · TLV757 makes 3.3 V from VBAT · ESP32-S3 drives four brushed motors through AO3400A low-side switches" schX={-8.3} schY={12.2} fontSize={0.16} anchor="left" color="#555" />
+    <schematictext text="USB-C 5 V → TP4054 charges the 1S LiPo at 260 mA (R16 = 3.3 k, datasheet formula 1) · TPS63001 buck-boost makes 3.3 V from VBAT · ESP32-S3 drives four brushed motors through AO3400A low-side switches" schX={-8.3} schY={12.2} fontSize={0.16} anchor="left" color="#555" />
     {/* sections decide wire vs. label (links between blocks become labels);
         the frames are drawn explicitly below */}
     {["power", "battery", "mcu", "imu", "motors"].map((name) => <Fragment key={name}><schematicsection name={name} /></Fragment>)}
     <Frame x1={-8.3} x2={4.35} y1={5.1} y2={11.9} title="USB-C + charger" />
-    <Frame x1={4.35} x2={15.2} y1={5.1} y2={11.9} title="Battery + 3.3 V" />
+    <Frame x1={4.35} x2={15.7} y1={5.1} y2={11.9} title="Battery + 3.3 V" />
     <Frame x1={-8.3} x2={4.35} y1={-4.6} y2={5.1} title="MCU" />
-    <Frame x1={4.35} x2={15.2} y1={0.1} y2={5.1} title="IMU" />
-    <Frame x1={4.35} x2={15.2} y1={-4.6} y2={0.1} title="Notes" />
+    <Frame x1={4.35} x2={15.7} y1={0.1} y2={5.1} title="IMU" />
+    <Frame x1={4.35} x2={15.7} y1={-4.6} y2={0.1} title="Notes" />
     <Notes x={4.6} y={-0.55} />
     <schematictext text="1S LiPo" schX={4.65} schY={7.65} fontSize={0.16} anchor="left" color="#555" />
-    <schematictext text="bulk at the connector · C11, C12 at the motor rails · C6 at the LDO" schX={5.1} schY={6.8} fontSize={0.14} anchor="left" color="#555" />
-    <schematictext text="EN tied to IN: on whenever a battery is in" schX={11.2} schY={7.2} fontSize={0.14} anchor="left" color="#555" />
+    <schematictext text="bulk at the connector · C11, C12 at the motor rails · C6 at the converter" schX={5.1} schY={6.8} fontSize={0.14} anchor="left" color="#555" />
+    <schematictext text="3.3 V from 1.8-5.5 V in" schX={11.9} schY={6.55} fontSize={0.14} anchor="left" color="#555" />
+    <schematictext text="EN on VINA: always on · PS/SYNC low: power-save mode" schX={11.9} schY={6.3} fontSize={0.14} anchor="left" color="#555" />
     <schematictext text="R18 + C9: damped VBUS bypass against hot-plug spikes · CHRG low (LED2 on) while charging" schX={-5.9} schY={5.4} fontSize={0.14} anchor="left" color="#555" />
     <schematictext text="low-side switch per motor: R1-R4 limit the gate current, R5-R8 hold the gates low while the ESP32 boots, D1-D4 clamp the motor's flyback" schX={-7.9} schY={-9.45} fontSize={0.14} anchor="left" color="#555" />
-    <Frame x1={-8.3} x2={15.2} y1={-9.7} y2={-4.6} title="Motor drivers" />
+    <Frame x1={-8.3} x2={15.7} y1={-9.7} y2={-4.6} title="Motor drivers" />
     <copperpour layer="bottom" connectsTo="net.GND" clearance="0.25mm" boardEdgeMargin="0.3mm" />
 
     {/* ---- MCU module */}
@@ -450,11 +472,11 @@ export default ({ copper = true }: { copper?: boolean }) => (
       }} />
     <capacitor name="C1" maxDecouplingTraceLength={4} schSectionName="mcu" capacitance="100nF" footprint="0402" supplierPartNumbers={JLC("C1525")} {...sch("C1")}
       {...pcb("C1")} connections={{ pin1: "net.V3V3", pin2: "net.GND" }} />
-    <capacitor name="C2" maxDecouplingTraceLength={6} schSectionName="mcu" capacitance="22uF" footprint="0603" supplierPartNumbers={JLC("C59461")} {...sch("C2")}
-      {...pcb("C2")} connections={{ pin1: "net.V3V3", pin2: "net.GND" }} />
     {/* EN: 10k / 1uF power-on delay, RESET button */}
     <resistor name="R9" schSectionName="mcu" resistance="10k" footprint="0402" supplierPartNumbers={JLC("C25744")} {...sch("R9")}
       {...pcb("R9")} connections={{ pin1: "net.V3V3", pin2: "net.EN" }} />
+    <capacitor name="C13" maxDecouplingTraceLength={3} schSectionName="mcu" capacitance="22uF" footprint="0603" supplierPartNumbers={JLC("C59461")} {...sch("C13")}
+      {...pcb("C13")} connections={{ pin1: "net.V3V3", pin2: "net.GND" }} />
     <capacitor name="C3" schSectionName="mcu" capacitance="1uF" footprint="0402" supplierPartNumbers={JLC("C52923")} {...sch("C3")}
       {...pcb("C3")} connections={{ pin1: "net.EN", pin2: "net.GND" }} />
     <pushbutton name="SW1" schSectionName="mcu" manufacturerPartNumber="TS-1088-AR02016" footprint="jlcpcb:C720477" supplierPartNumbers={JLC("C720477")} {...sch("SW1")}
@@ -493,7 +515,7 @@ export default ({ copper = true }: { copper?: boolean }) => (
     <resistor name="R13" schSectionName="imu" resistance="4.7k" footprint="0402" supplierPartNumbers={JLC("C25900")} {...sch("R13")}
       {...pcb("R13")} connections={{ pin1: "net.V3V3", pin2: "net.SCL" }} />
 
-    {/* ---- power: 1S LiPo -> 3.3 V LDO; USB-C -> TP4054 charger -> battery */}
+    {/* ---- power: 1S LiPo -> 3.3 V buck-boost; USB-C -> TP4054 charger -> battery */}
     <connector name="CN5" schSectionName="battery" manufacturerPartNumber="53398-0271" footprint="jlcpcb:C122410" supplierPartNumbers={JLC("C122410")}
       schPinArrangement={{ topSide: { direction: "left-to-right", pins: ["pin1"] }, bottomSide: { direction: "left-to-right", pins: ["pin2"] }, leftSide: { direction: "top-to-bottom", pins: ["pin3", "pin4"] } }}
       noConnect={["pin3", "pin4"]} {...sch("CN5")} {...pcb("CN5")} connections={{ pin1: "net.VBAT", pin2: "net.GND" }} />
@@ -503,15 +525,24 @@ export default ({ copper = true }: { copper?: boolean }) => (
       {...pcb("C11")} connections={{ pin1: "net.VBAT", pin2: "net.GND" }} />
     <capacitor name="C12" maxDecouplingTraceLength={5} schSectionName="battery" capacitance="10uF" footprint="0603" supplierPartNumbers={JLC("C19702")} {...sch("C12")}
       {...pcb("C12")} connections={{ pin1: "net.VBAT", pin2: "net.GND" }} />
-    <chip name="U3" schSectionName="battery" manufacturerPartNumber="TLV75733PDBVR" footprint="jlcpcb:C485517" supplierPartNumbers={JLC("C485517")}
-      pinLabels={pinNames(["IN", "GND", "EN", "NC", "OUT"])}
-      schPinArrangement={{ leftSide: { direction: "top-to-bottom", pins: ["IN"] }, topSide: { direction: "left-to-right", pins: ["EN"] }, rightSide: { direction: "top-to-bottom", pins: ["OUT", "NC"] }, bottomSide: { direction: "left-to-right", pins: ["GND"] } }}
-      schWidth={1.4} noConnect={["NC"]} {...sch("U3")} {...pcb("U3")}
-      connections={{ IN: "net.VBAT", EN: "net.VBAT", GND: "net.GND", OUT: "net.V3V3" }} />
-    <capacitor name="C6" maxDecouplingTraceLength={5} schSectionName="battery" capacitance="10uF" footprint="0603" supplierPartNumbers={JLC("C19702")} {...sch("C6")}
+    {/* 3.3 V buck-boost: holds 3.3 V from 1.8 V to 5.5 V in, so motor current
+        sagging the battery can't brown out the ESP32 (TPS63001 datasheet, fig. 2) */}
+    <chip name="U3" schSectionName="battery" manufacturerPartNumber="TPS63001DRCR" footprint="jlcpcb:C28060" supplierPartNumbers={JLC("C28060")}
+      pinLabels={pinNames(["VOUT", "L2", "PGND", "L1", "VIN", "EN", "PS", "VINA", "GND", "FB", "EP"])}
+      schPinArrangement={{ leftSide: { direction: "top-to-bottom", pins: ["VIN", "VINA", "EN"] }, topSide: { direction: "left-to-right", pins: ["L1", "L2"] },
+        rightSide: { direction: "top-to-bottom", pins: ["VOUT", "FB"] }, bottomSide: { direction: "left-to-right", pins: ["PS", "GND", "PGND", "EP"] } }}
+      schPinStyle={{ VINA: { topMargin: 0.4 } }} schWidth={1.6} {...sch("U3")} {...pcb("U3")}
+      connections={{ VIN: "net.VBAT", VINA: "net.VINA", EN: "net.VINA", PS: "net.GND", L1: "net.LX1", L2: "net.LX2", VOUT: "net.V3V3", FB: "net.V3V3", GND: "net.GND", PGND: "net.GND", EP: "net.GND" }} />
+    <inductor name="L1" schSectionName="battery" inductance="2.2uH" manufacturerPartNumber="FTC252012S2R2MBCA" footprint="jlcpcb:C5832372" supplierPartNumbers={JLC("C5832372")} {...sch("L1")}
+      {...pcb("L1")} connections={{ pin1: "net.LX1", pin2: "net.LX2" }} />
+    <capacitor name="C6" maxDecouplingTraceLength={9} schSectionName="battery" capacitance="10uF" footprint="0603" supplierPartNumbers={JLC("C19702")} {...sch("C6")}
       {...pcb("C6")} connections={{ pin1: "net.VBAT", pin2: "net.GND" }} />
-    <capacitor name="C7" maxDecouplingTraceLength={5} schSectionName="battery" capacitance="10uF" footprint="0603" supplierPartNumbers={JLC("C19702")} {...sch("C7")}
+    <capacitor name="C7" maxDecouplingTraceLength={28} schSectionName="battery" capacitance="22uF" footprint="0603" supplierPartNumbers={JLC("C59461")} {...sch("C7")}
       {...pcb("C7")} connections={{ pin1: "net.V3V3", pin2: "net.GND" }} />
+    <resistor name="R21" schSectionName="battery" resistance="100" footprint="0402" supplierPartNumbers={JLC("C25076")} {...sch("R21")}
+      {...pcb("R21")} connections={{ pin1: "net.VBAT", pin2: "net.VINA" }} />
+    <capacitor name="C2" schSectionName="battery" capacitance="100nF" footprint="0402" supplierPartNumbers={JLC("C1525")} {...sch("C2")}
+      {...pcb("C2")} connections={{ pin1: "net.VINA", pin2: "net.GND" }} />
     {/* battery voltage / 2 -> IO10 (ADC1_CH9) */}
     <resistor name="R19" schSectionName="mcu" resistance="100k" footprint="0402" supplierPartNumbers={JLC("C25741")} {...sch("R19")}
       {...pcb("R19")} connections={{ pin1: "net.VBAT", pin2: "net.VSENSE" }} />
@@ -558,6 +589,10 @@ export default ({ copper = true }: { copper?: boolean }) => (
     <schematictext text="RESET" schX={-5.95} schY={1.8} fontSize={0.16} anchor="right" color="#555" />
     <schematictext text="BOOT" schX={-4.85} schY={-1.1} fontSize={0.16} anchor="right" color="#555" />
     {copper && <Copper />}
+    {/* schematic only: the converter output as one node (FB senses VOUT at C7) */}
+    {!copper && <><trace from="U3.VOUT" to="C7.pin1" /><trace from="U3.FB" to="U3.VOUT" /></>}
+    <netlabel net="V3V3" connectsTo={["U3.VOUT", "U3.FB", "C7.pin1"]} schX={15.1} schY={9.1} anchorSide="bottom" />
+    {[8.8, 8.6].map((y) => <schematiccircle key={y} center={{ x: 15.1, y }} radius={0.03} strokeWidth={0.001} isFilled color="rgb(0, 150, 0)" />)} {/* the solver draws these wires to the label separately: mark the tees */}
     <Silkscreen />
   </board>
 )

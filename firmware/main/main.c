@@ -7,6 +7,10 @@
  *   IMU  : BMI323 on I2C0, SDA=GPIO11, SCL=GPIO12, 400 kHz, address 0x68.
  *          Uses ESP-IDF's i2c_master driver (writing a register-level
  *          I2C driver is a separate project).
+ *   VBAT : battery / 2 on GPIO10 (ADC1 channel 9), logged with the state;
+ *          arming is refused below 3.5 V; a flat pack puts the board to
+ *          deep sleep instead of draining it (see VBAT_SLEEP_MV).
+ *   Safety: disarm on BLE disconnect, arm always at zero throttle.
  *
  * BMI323 quirk: every register read returns 2 dummy bytes followed by
  * the 16-bit register value, LSB first. Every register write is 1
@@ -24,6 +28,11 @@
 #include "soc/io_mux_reg.h"
 #include "driver/i2c_master.h"
 #include "driver/ledc.h"
+#include "esp_adc/adc_oneshot.h"
+#include "esp_adc/adc_cali.h"
+#include "esp_adc/adc_cali_scheme.h"
+#include "esp_system.h"
+#include "esp_sleep.h"
 #include "esp_err.h"
 #include "esp_log.h"
 #include "nvs_flash.h"
@@ -103,6 +112,22 @@ static const ledc_channel_t MOTOR_LEDC_CH[4] = {
 #define I2C_SCL_GPIO    12
 #define I2C_FREQ_HZ     400000
 
+/* ---------- Battery sense ----------
+ * VBAT / 2 (100k / 100k, 100 nF) on GPIO10 = ADC1 channel 9. */
+#define VBAT_ADC_CH        ADC_CHANNEL_9
+#define VBAT_MIN_ARM_MV    3500      /* refuse to arm below this at rest   */
+#define VBAT_LOW_MV        3300      /* warn while flying: land now        */
+/* The 3.3 V buck-boost keeps the ESP32 running down to VBAT = 1.8 V, so a
+ * pack left plugged in would be drained far below a safe voltage. Disarmed
+ * and below VBAT_SLEEP_MV for 10 s (or below VBAT_EMPTY_MV for 1 s): deep sleep
+ * (~0.1 mA for the whole board), waking every 5 min; back to normal above
+ * VBAT_WAKE_MV. This
+ * also lets USB charging recover a flat pack (the charger trickles 26 mA). */
+#define VBAT_SLEEP_MV      3300
+#define VBAT_EMPTY_MV      3000
+#define VBAT_WAKE_MV       3500
+#define VBAT_SLEEP_S       300
+
 /* ---------- BLE control ---------- */
 #define BLE_DEVICE_NAME "QuadFW"
 
@@ -158,11 +183,18 @@ static void motors_init(void)
     }
 }
 
+/* M0/M2 switch on at the start of each PWM period, M1/M3 end at its end,
+ * so below 50 % duty the two pairs never draw battery current at the same
+ * time: half the peak current (less battery sag and noise) for free.
+ * LEDC sets the pin at count hpoint and clears it at hpoint + duty; the
+ * 8-bit counter runs 0..255, so that sum must stay <= 255 (256 is never
+ * reached and the pin would stay on): end-aligned = hpoint 255 - duty. */
 static inline void motor_set_duty(int idx, int duty)
 {
     if (duty < 0) duty = 0;
     if (duty > LEDC_MAX) duty = LEDC_MAX;
-    ledc_set_duty(LEDC_LOW_SPEED_MODE, MOTOR_LEDC_CH[idx], (uint32_t)duty);
+    uint32_t hpoint = (idx & 1) && duty > 0 ? (uint32_t)(LEDC_MAX - duty) : 0;
+    ledc_set_duty_with_hpoint(LEDC_LOW_SPEED_MODE, MOTOR_LEDC_CH[idx], (uint32_t)duty, hpoint);
     ledc_update_duty(LEDC_LOW_SPEED_MODE, MOTOR_LEDC_CH[idx]);
 }
 
@@ -182,6 +214,42 @@ static void motors_sweep(uint32_t on_ms, uint32_t gap_ms)
     ESP_LOGI(TAG, "motor sweep done");
 }
 
+/* -------------------- battery voltage (IO10) -------------------- */
+static adc_oneshot_unit_handle_t s_adc;
+static adc_cali_handle_t         s_adc_cali;
+
+static void vbat_init(void)
+{
+    adc_oneshot_unit_init_cfg_t u = { .unit_id = ADC_UNIT_1 };
+    ESP_ERROR_CHECK(adc_oneshot_new_unit(&u, &s_adc));
+    adc_oneshot_chan_cfg_t c = { .atten = ADC_ATTEN_DB_12, .bitwidth = ADC_BITWIDTH_DEFAULT };
+    ESP_ERROR_CHECK(adc_oneshot_config_channel(s_adc, VBAT_ADC_CH, &c));
+    adc_cali_curve_fitting_config_t k = {
+        .unit_id = ADC_UNIT_1, .chan = VBAT_ADC_CH,
+        .atten = ADC_ATTEN_DB_12, .bitwidth = ADC_BITWIDTH_DEFAULT,
+    };
+    if (adc_cali_create_scheme_curve_fitting(&k, &s_adc_cali) != ESP_OK) {
+        s_adc_cali = NULL;
+        ESP_LOGW(TAG, "vbat: no ADC calibration, battery checks off");
+    }
+}
+
+/* Battery voltage in mV, mean of 8 samples (the divider's 5 ms RC already
+ * averages the motor PWM), 0 if it can't be measured. */
+static int vbat_read_mv(void)
+{
+    int sum = 0;
+    for (int i = 0; i < 8; ++i) {
+        int raw, mv;
+        if (!s_adc_cali || adc_oneshot_read(s_adc, VBAT_ADC_CH, &raw) != ESP_OK ||
+            adc_cali_raw_to_voltage(s_adc_cali, raw, &mv) != ESP_OK) {
+            return 0;
+        }
+        sum += mv;
+    }
+    return 2 * sum / 8;
+}
+
 /* -------------------- shared control state -------------------- */
 static volatile uint8_t   s_base_throttle = 0;
 static volatile bool      s_armed         = false;
@@ -189,6 +257,9 @@ static volatile int8_t    s_test_motor    = -1;
 static volatile uint32_t  s_test_end_ms   = 0;
 static volatile float     s_roll_deg      = 0.0f;
 static volatile float     s_pitch_deg     = 0.0f;
+static volatile int       s_vbat_mv       = 0;     /* 0 = not measured */
+static volatile bool      s_ready         = false; /* level cal + VBAT done */
+static bool               s_ble_up        = false;
 
 /* -------------------- BMI323 over I2C -------------------- */
 static esp_err_t bmi_read(uint8_t reg, uint8_t *dst, size_t n)
@@ -199,7 +270,7 @@ static esp_err_t bmi_read(uint8_t reg, uint8_t *dst, size_t n)
         return ESP_ERR_INVALID_SIZE;
     }
     esp_err_t err = i2c_master_transmit_receive(s_bmi, &reg, 1,
-                                                rx, 2 + n, 100);
+                                                rx, 2 + n, 10);
     if (err == ESP_OK) {
         memcpy(dst, rx + 2, n);
     }
@@ -219,7 +290,7 @@ static esp_err_t bmi_read_u16(uint8_t reg, uint16_t *out)
 static esp_err_t bmi_write_u16(uint8_t reg, uint16_t val)
 {
     uint8_t tx[3] = { reg, (uint8_t)(val & 0xff), (uint8_t)(val >> 8) };
-    return i2c_master_transmit(s_bmi, tx, sizeof(tx), 100);
+    return i2c_master_transmit(s_bmi, tx, sizeof(tx), 10);
 }
 
 static void i2c_bring_up(void)
@@ -272,7 +343,9 @@ static QueueHandle_t s_cmd_q;  /* one-byte commands from BLE -> motor task */
 
 /* BLE log streaming: any ESP_LOG* output is duplicated to the NUS TX
  * characteristic so logs can be captured without a USB cable. */
-static uint16_t s_conn_handle    = 0xFFFF;
+static volatile uint16_t s_conn_handle = 0xFFFF;
+/* arm (cmd task) and link loss (NimBLE host, other core) change s_armed together */
+static portMUX_TYPE s_arm_mux = portMUX_INITIALIZER_UNLOCKED;
 static uint16_t s_tx_val_handle  = 0;
 static bool     s_notify_enabled = false;
 static StreamBufferHandle_t s_log_sb = NULL;
@@ -337,7 +410,14 @@ static int ble_gap_event(struct ble_gap_event *event, void *arg)
     case BLE_GAP_EVENT_DISCONNECT:
         ESP_LOGI(TAG, "ble: disconnect, reason=0x%x",
                  event->disconnect.reason);
+        /* Link lost: nobody is in control any more -> motors off. */
+        if (s_armed) ESP_LOGW(TAG, "ble: link lost -> DISARM");
+        taskENTER_CRITICAL(&s_arm_mux);
+        s_armed = false;
+        s_base_throttle = 0;
         s_conn_handle = 0xFFFF;
+        taskEXIT_CRITICAL(&s_arm_mux);
+        if (s_cmd_q) xQueueReset(s_cmd_q);   /* no stale 'a' after the link */
         s_notify_enabled = false;
         ble_advertise();
         break;
@@ -502,6 +582,24 @@ static void ble_bring_up(void)
     ESP_ERROR_CHECK(ble_svc_gap_device_name_set(BLE_DEVICE_NAME));
 
     nimble_port_freertos_init(ble_host_task);
+    s_ble_up = true;
+}
+
+/* Flat battery: motors off, BLE off, IMU suspended, then deep sleep with a
+ * timer wake (see VBAT_SLEEP_MV). */
+static void deep_sleep(int mv)
+{
+    for (int i = 0; i < 4; ++i) motor_set_duty(i, 0);
+    ESP_LOGW(TAG, "battery %d mV: deep sleep, next check in %d s", mv, VBAT_SLEEP_S);
+    vTaskDelay(pdMS_TO_TICKS(200));   /* let the log line out */
+    if (s_ble_up) {
+        s_notify_enabled = false;   /* the log tee stops sending */
+        if (nimble_port_stop() == 0) nimble_port_deinit();
+    }
+    bmi_write_u16(BMI323_ACC_CONF, 0x0000);   /* accel + gyro off */
+    bmi_write_u16(BMI323_GYR_CONF, 0x0000);
+    esp_sleep_enable_timer_wakeup((uint64_t)VBAT_SLEEP_S * 1000000u);
+    esp_deep_sleep_start();
 }
 
 /* -------------------- motor command consumer -------------------- */
@@ -512,11 +610,21 @@ static void motor_cmd_task(void *arg)
         if (xQueueReceive(s_cmd_q, &c, portMAX_DELAY) != pdTRUE) continue;
         switch (c) {
         case 'a':
-            if (fabsf(s_roll_deg) < ARM_TILT_LIMIT_DEG &&
+            if (!s_ready || s_conn_handle == 0xFFFF) {
+                ESP_LOGW(TAG, "cmd: arm refused, not ready");
+            } else if (s_vbat_mv < VBAT_MIN_ARM_MV) {   /* 0 = can't measure it */
+                ESP_LOGW(TAG, "cmd: arm refused, battery %d mV", s_vbat_mv);
+            } else if (fabsf(s_roll_deg) < ARM_TILT_LIMIT_DEG &&
                 fabsf(s_pitch_deg) < ARM_TILT_LIMIT_DEG) {
-                s_armed = true;
-                ESP_LOGI(TAG, "cmd: ARMED (throttle=%u)",
-                         (unsigned)s_base_throttle);
+                bool ok = false;
+                taskENTER_CRITICAL(&s_arm_mux);
+                if (s_conn_handle != 0xFFFF) {   /* link still up */
+                    s_base_throttle = 0;         /* always start from idle */
+                    s_armed = ok = true;
+                }
+                taskEXIT_CRITICAL(&s_arm_mux);
+                if (ok) ESP_LOGI(TAG, "cmd: ARMED (throttle=0)");
+                else    ESP_LOGW(TAG, "cmd: arm refused, link lost");
             } else {
                 ESP_LOGW(TAG, "cmd: arm refused, tilt r=%.1f p=%.1f deg",
                          s_roll_deg, s_pitch_deg);
@@ -583,6 +691,8 @@ static void control_task(void *arg)
     int   print_div = 0;
     int   blink_div = 0;
     int   i2c_err_streak = 0;
+    int   vbat_div = 0, vbat_low_n = 0, vbat_empty_n = 0;
+    bool  vbat_seen = false;
 
     /* Level calibration: collect the first CAL_N accel samples while the
      * drone is sitting still on the desk and use their mean as the
@@ -677,7 +787,9 @@ static void control_task(void *arg)
             uint32_t now_ms =
                 (uint32_t)(xTaskGetTickCount() * portTICK_PERIOD_MS);
 
-            if (s_armed) {
+            if (s_armed && s_base_throttle == 0) {
+                /* armed at idle: motors stay off until throttle comes up */
+            } else if (s_armed) {
                 float T = (float)s_base_throttle;
                 float roll_err  = 0.0f - roll_deg;
                 float pitch_err = 0.0f - pitch_deg;
@@ -717,14 +829,17 @@ static void control_task(void *arg)
                 print_div = 0;
                 ESP_LOGI(TAG,
                        "%s T=%3u r=%+6.1f p=%+6.1f y=%+6.1f | "
-                       "%3d %3d %3d %3d",
+                       "%3d %3d %3d %3d | %4d mV",
                        s_armed ? "ARM" : "dis",
                        (unsigned)s_base_throttle,
                        roll_deg, pitch_deg, yaw_deg,
-                       out[0], out[1], out[2], out[3]);
+                       out[0], out[1], out[2], out[3], s_vbat_mv);
             }
             if (++blink_div >= 100) {  /* 1 Hz */
                 blink_div = 0;
+                if (s_armed && s_vbat_mv > 0 && s_vbat_mv < VBAT_LOW_MV) {
+                    ESP_LOGW(TAG, "battery low (%d mV): land", s_vbat_mv);
+                }
                 led_on = !led_on;
                 led_set(led_on);
             }
@@ -739,10 +854,27 @@ static void control_task(void *arg)
             if (s_armed && i2c_err_streak >= I2C_ERR_DISARM_THRESHOLD) {
                 s_armed = false;
                 s_base_throttle = 0;
-                for (int i = 0; i < 4; ++i) motor_set_duty(i, 0);
                 ESP_LOGE(TAG, "ctrl: I2C lost -> AUTO-DISARM");
             }
+            if (!s_armed) {
+                s_test_motor = -1;
+                for (int i = 0; i < 4; ++i) motor_set_duty(i, 0);
+            }
         }
+
+        /* Battery, 10 Hz, also while the IMU is failing. Only counted with
+         * no motor current, and only consecutive low samples put it to sleep. */
+        if (++vbat_div >= 20) {
+            vbat_div = 0;
+            int mv = vbat_read_mv();
+            s_vbat_mv = mv;
+            bool quiet = !s_armed && s_test_motor < 0;
+            vbat_low_n   = quiet && mv > 0 && mv < VBAT_SLEEP_MV ? vbat_low_n + 1 : 0;
+            vbat_empty_n = quiet && mv > 0 && mv < VBAT_EMPTY_MV ? vbat_empty_n + 1 : 0;
+            if (vbat_low_n >= 100 || vbat_empty_n >= 10) deep_sleep(mv);
+            vbat_seen = true;
+        }
+        if (calibrated && vbat_seen) s_ready = true;
 
         /* Plain vTaskDelay (not vTaskDelayUntil): if one iteration runs
          * long, we just slip a cycle instead of busy-spinning to catch
@@ -757,10 +889,26 @@ void app_main(void)
 {
     led_init();
     motors_init();
-    i2c_bring_up();
+    vbat_init();
 
-    /* One-shot motor wiring check before anything else runs. */
-    motors_sweep(100, 250);
+    /* Battery first, before the motor check, BLE and anything else draws
+     * current: an empty pack, or a sleep wake that USB hasn't charged back
+     * above VBAT_WAKE_MV, goes straight back to sleep. */
+    esp_reset_reason_t why = esp_reset_reason();
+    int boot_mv = vbat_read_mv();
+    bool woke = why == ESP_RST_DEEPSLEEP, low = boot_mv > 0 && boot_mv < VBAT_WAKE_MV;
+    i2c_bring_up();
+    if (boot_mv > 0 && (boot_mv < VBAT_EMPTY_MV || (woke && low))) {
+        bmi_write_u16(BMI323_ACC_CONF, 0x0000);   /* IMU off, if it was on */
+        bmi_write_u16(BMI323_GYR_CONF, 0x0000);
+        esp_sleep_enable_timer_wakeup((uint64_t)VBAT_SLEEP_S * 1000000u);
+        esp_deep_sleep_start();
+    }
+
+    /* One-shot motor wiring check, only on a real power-up (not after a
+     * battery-sleep wake, a crash or a watchdog reset, nobody may be
+     * watching then) and not on a nearly flat pack. */
+    if (why == ESP_RST_POWERON && !low) motors_sweep(100, 250);
 
     /* Bring up BLE NUS server + motor command consumer task. */
     s_cmd_q = xQueueCreate(16, sizeof(uint8_t));
@@ -769,6 +917,13 @@ void app_main(void)
     xTaskCreate(motor_cmd_task, "motorcmd", 4096, NULL, 5, NULL);
     ble_bring_up();
     ble_log_bring_up();   /* tee ESP_LOG -> BLE NUS TX */
+
+    /* A brown-out shows up here after the fact (USB console). */
+    if (why == ESP_RST_BROWNOUT) {
+        ESP_LOGW(TAG, "reset reason: BROWN-OUT");
+    } else {
+        ESP_LOGI(TAG, "reset reason: %d", (int)why);
+    }
 
     /* Let the sensor finish its power-on sequence. */
     vTaskDelay(pdMS_TO_TICKS(50));
@@ -791,6 +946,8 @@ void app_main(void)
         /* Keep blinking so we know the chip is still alive. */
         for (bool on = false;; on = !on) {
             led_set(on);
+            int mv = vbat_read_mv();
+            if (mv > 0 && mv < VBAT_SLEEP_MV) deep_sleep(mv);
             vTaskDelay(pdMS_TO_TICKS(500));
         }
     }
@@ -810,7 +967,7 @@ void app_main(void)
 
     /* Pin control loop to APP_CPU (core 1) so NimBLE on core 0 cannot
      * starve it (and vice versa). */
-    xTaskCreatePinnedToCore(control_task, "ctrl", 4096, NULL, 8, NULL, 1);
+    xTaskCreatePinnedToCore(control_task, "ctrl", 6144, NULL, 8, NULL, 1);
 
     /* app_main returns; control_task, motor_cmd_task, and the NimBLE
      * host task all keep running. */
