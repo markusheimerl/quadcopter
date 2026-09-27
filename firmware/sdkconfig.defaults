@@ -2,7 +2,7 @@
 CONFIG_IDF_TARGET="esp32s3"
 
 # Use the built-in USB Serial/JTAG peripheral for stdio + flashing console.
-# The XIAO ESP32-S3 has no USB-UART bridge chip; the S3 itself enumerates
+# The board (pcb/) has no USB-UART bridge chip; the S3 itself enumerates
 # as /dev/ttyACM0 (VID:PID 303a:1001).
 # NOTE: ESP_CONSOLE_* is a kconfig 'choice' -- only ONE option may be set.
 CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
@@ -10,6 +10,13 @@ CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
 # Smaller binaries, no need for the default app rollback / OTA bits.
 CONFIG_COMPILER_OPTIMIZATION_SIZE=y
 CONFIG_BOOTLOADER_LOG_LEVEL_WARN=y
+
+# ESP32-S3-WROOM-1-N16R8: 16 MB flash.
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+
+# The battery guard wakes from deep sleep every few minutes to check the
+# pack: skip the full image check on those wakes (faster, less current).
+CONFIG_BOOTLOADER_SKIP_VALIDATE_IN_DEEP_SLEEP=y
 
 # Bluetooth Low Energy via NimBLE host stack (no Classic BT on ESP32-S3).
 CONFIG_BT_ENABLED=y

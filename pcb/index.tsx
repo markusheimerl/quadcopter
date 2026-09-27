@@ -379,20 +379,28 @@ track("DPT.bottom", "DPU.bottom", 0.25, [-4.05, -10.3])
 // ---- silkscreen (scripts/silk.ts drops the unprintable footprint texts):
 // motor number + spin on each arm, + on the motor and battery connectors,
 // the buttons, the charge LED; title, FRONT and the UART pads on the back
-const Text = ({ t, x, y, size = 1.5, r = 0, back = false }: { t: string; x: number; y: number; size?: number; r?: number; back?: boolean }) => (
+// "+" / "-" drawn as lines: a text glyph that size prints under 0.8 mm
+const Mark = ({ x, y, plus = true, len = 1.0 }: { x: number; y: number; plus?: boolean; len?: number }) => (
+  <>
+    <silkscreenpath strokeWidth={0.2} route={[{ x: x - len / 2, y }, { x: x + len / 2, y }]} />
+    {plus && <silkscreenpath strokeWidth={0.2} route={[{ x, y: y - len / 2 }, { x, y: y + len / 2 }]} />}
+  </>
+)
+const Text = ({ t, x, y, size = 1.75, r = 0, back = false }: { t: string; x: number; y: number; size?: number; r?: number; back?: boolean }) => (
   <silkscreentext text={t} pcbX={x} pcbY={y} fontSize={size} pcbRotation={r} layer={back ? "bottom" : "top"} anchorAlignment="center" />
 )
 const Silkscreen = () => (
   <>
     {MOTORS.map(({ i, sx, sy, spin }) => (
       <Fragment key={i}>
-        <Text t={`M${i} ${spin}`} x={28.5 * sx} y={28.5 * sy} size={1.7} r={45 * sx * sy} />
-        <Text t="+" x={14.24 * sx} y={16.74 * sy} size={1.6} />
+        <Text t={`M${i} ${spin}`} x={28.5 * sx} y={28.5 * sy} size={1.75} r={45 * sx * sy} />
+        <Mark x={14.24 * sx} y={16.74 * sy} />
       </Fragment>
     ))}
-    <Text t="+" x={4.77} y={-18.35} size={1.8} />
-    <Text t="-" x={6.03} y={-18.35} size={1.8} />
-    <Text t="RST" x={-17.9} y={-2.55} />
+    <Mark x={4.77} y={-18.35} len={0.8} />
+    <Mark x={6.03} y={-18.35} len={0.8} plus={false} />
+    <Text t="BAT" x={9.35} y={-18.35} /> {/* a battery plug also fits the motor sockets: it belongs here */}
+    <Text t="RST" x={-17.65} y={-2.55} />
     <Text t="BOOT" x={17.85} y={2.6} size={1.2} /> {/* between a via and the edge: no room for more */}
     <Text t="CHG" x={0.4} y={-8.7} />
     <silkscreencircle pcbX={-3.35} pcbY={-2.8} radius={0.1} strokeWidth={0.15} /> {/* IMU pin 1 (its own dot is under a via) */}
@@ -400,7 +408,7 @@ const Silkscreen = () => (
     <silkscreenpath layer="bottom" strokeWidth={0.25} route={[{ x: -1.6, y: 16.0 }, { x: 0, y: 17.6 }, { x: 1.6, y: 16.0 }]} />
     <Text t="FRONT" x={0} y={14.6} back />
     <Text t="QUAD" x={0} y={6.4} size={3} back />
-    <Text t="rev A  2026-09" x={0} y={3.4} back />
+    <Text t="REV A 2026-09" x={0} y={4.3} size={1.6} back />
     <Text t="JLCJLCJLCJLC" x={0} y={1.2} back /> {/* JLCPCB prints its order number here ("Specify a location") */}
     <Text t="TX" x={7.95} y={16.9} back />
     <Text t="RX" x={7.95} y={12.3} back />

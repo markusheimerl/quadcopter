@@ -15,20 +15,27 @@ around, measure, run DRC/ERC): [kicad/](kicad/).
 
 The ready‑made files are in [fab/](fab/). On jlcpcb.com:
 
-1. *Order now* → upload `fab/gerbers.zip`. 2 layers, 1.6 mm, FR‑4, any
-   colour. Via covering: *tented* (the default). Surface finish: lead‑free
-   HASL works; ENIG gives flatter pads for the IMU's 0.5 mm LGA and is worth
-   it if the budget allows. *Remove order number*: choose *Specify a
+1. *Order now* → upload `fab/gerbers.zip`. The viewer should show a
+   75.12 × 75.12 mm, 2‑layer board with the USB‑C slots drawn. 1.6 mm, FR‑4,
+   any colour. Via covering: *tented* (the default). Surface finish: the
+   form defaults to leaded HASL – pick lead‑free HASL, or ENIG (flatter pads
+   for the IMU's 0.5 mm LGA). *Remove order number*: choose *Specify a
    location* – the back has a `JLCJLCJLCJLC` spot for it.
-2. Tick *PCB Assembly*, top side. Upload `fab/bom.csv` and `fab/cpl.csv`.
-   Every row has its JLCPCB part number; all parts are in stock. The
-   resistors and capacitors are *basic* parts; the ICs, connectors, diodes,
-   LEDs, buttons and the inductor L1 are *extended* parts (a small fee each).
-3. The ESP32 module overhangs the nose edge (its antenna) and the USB‑C
-   socket the tail edge, on purpose. Say so in the order remark. If JLCPCB
-   asks for edge rails, let them add them on the left/right (arm) sides, not
-   across the nose or tail, and no break‑off tabs on the curved edges next
-   to the motor connectors (their pads are 0.33 mm from the edge).
+2. Tick *PCB Assembly*, top side, **Standard** (the ESP32 module and the IMU
+   are Standard‑only; about $170 for assembly and parts of 5 boards, Sep
+   2026). Upload `fab/bom.csv` and `fab/cpl.csv`. Every row has its JLCPCB
+   part number and all are in stock. Seven are *extended* parts (module,
+   IMU, TPS63001, inductor, the three connector types), the rest *basic* or
+   *preferred* – which only matters for Economic PCBA: Standard charges the
+   same feeder fee (about $1.53) for each of the 27 BOM lines. Tick *Confirm
+   production file* and look at the panel drawing before it goes into
+   production.
+3. Order remark: "The ESP32 module and the USB‑C socket overhang the nose
+   and tail edges on purpose. Break‑off tabs only on the end faces of the
+   arms – none on the curved core outline (the motor connectors, C13 and
+   both buttons are within 0.45 mm of it). Please cut the stencil from our
+   F_Paste layer." Standard PCBA always adds rails and fiducials; file the
+   tab nubs at the arm tips flush before fitting the motor clips.
 4. In the placement preview check each part once: antenna toward the nose,
    USB‑C opening at the tail edge, the diode bands (cathode) on the inner end
    of D1–D4 where each diode meets its VBAT rail, LED anodes toward their 1 k
@@ -134,10 +141,38 @@ npm run dev     # live PCB / schematic / 3D view at http://localhost:3020
 * The netlist KiCad computes from the drawn schematic, and the connectivity
   extracted from the gerber copper + drill files, both equal the design
   netlist pin for pin (no opens, no shorts).
-* Silkscreen in the gerbers: ≥ 0.15 mm from every pad and hole, text ≥ 0.8 mm
-  high with ≥ 0.16 mm strokes.
+* Silkscreen in the gerbers: ≥ 0.15 mm from every pad and hole. Labels print
+  about 1.0 mm tall with ≥ 0.16 mm strokes (BOOT 0.75 mm: it sits between a
+  via and the edge); the "+"/"−" polarity marks are 1.0–1.2 mm lines.
 * Every part checked against its datasheet (pinout vs footprint vs netlist,
   application circuit, ratings), each finding re‑checked independently.
+
+## First power‑up
+
+1. Meter every battery lead before its first plug‑in. Under the battery
+   socket the silkscreen reads "+ − BAT": the pin above the "+" (the one
+   farther from `BAT`) must get the pack's +. A reversed pack destroys the
+   board. Motors go into the four arm sockets, the battery only into the
+   `BAT` socket: a battery plug fits a motor socket too, and in two of them
+   it shorts the pack through a diode.
+2. Props off. Plug the battery in: LED1 blinks at 1 Hz within about 2 s
+   (5 Hz: IMU not found; dark: the pack is below 3.0 V and the board sleeps
+   – charge it – or look for a short or a dead 3.3 V). Nothing spins at
+   power‑up.
+3. Connect with `firmware/tools/motor_keys.py` (`pip install bleak`). It
+   prints the status (reset reason, IMU id `0x..43`, level calibration,
+   battery mV); `i` repeats it. The level calibration runs as soon as the
+   board lies still and within 5° of level for 1 s; if it was moved or on a
+   slope then, set it on a level surface and press `c`.
+4. Tilt by hand and watch the log: `r` goes positive with the right side
+   down, `p` positive with the nose down.
+5. Keys `1`–`4` spin M0 (front right), M1 (back right), M2 (back left) and
+   M3 (front left) for 1 s. Viewed from above, M0 and M2 must turn CCW and M1
+   and M3 CW; swap a motor's two wires if not.
+6. Still without props: `a` (arm), a few `w`, then tilt the board – the
+   motors on the lower side speed up. `d` disarms. Keep a hand on it.
+7. First flight low over a soft floor. If the quad isn't getting light by
+   throttle ≈ 185, stop: motors or props too small for its weight.
 
 ## Limits worth knowing
 
@@ -150,7 +185,8 @@ npm run dev     # live PCB / schematic / 3D view at http://localhost:3020
   warns below 3.3 V while armed and won't arm below 3.5 V. Disarmed below
   3.3 V for 10 s (or below 3.0 V for 1 s) it goes to deep sleep (about 0.1 mA
   for the whole board, the converter in power‑save mode) and checks again
-  every 5 minutes; above 3.5 V (e.g. after charging over USB) it starts
+  every 5 minutes (every 30 below 3.0 V); above 3.5 V (e.g. after charging
+  over USB) it starts
   normally (press RST to skip the wait). To flash a board that is asleep,
   hold BOOT and tap RST. Running and idle it draws about 50 mA, so a pack
   left plugged in is down to 3.3 V within hours – unplug it after flying.
@@ -161,20 +197,27 @@ npm run dev     # live PCB / schematic / 3D view at http://localhost:3020
   22–24 AWG pigtail with a BT2.0/XT30 plug instead. The 1.25 mm motor
   connectors (also 1 A) are within rating up to about 1 A per motor.
 * No reverse‑polarity protection on the battery and no ESD protection on
-  USB: check the "+" before plugging a battery in.
+  USB: see *First power‑up*.
+* **Charging:** 260 mA is 1 C for a 260 mAh pack. For smaller packs change
+  R16 to 5.1 k (C25905, about 190 mA; already used for R14/R15). There is no
+  temperature sensing: charge attended. While the ESP32 runs, the charger
+  doesn't terminate (the board draws more than its 26 mA end‑of‑charge
+  current), so the CHG LED stays on even when the pack is full and the pack
+  is held at 4.2 V: unplug USB once the pack has had time to fill (about
+  1–1.5 h per 260 mAh). Never store a pack plugged in – even asleep the
+  board takes it below 3.0 V within days – and don't recharge a pack found
+  below about 2.5 V.
 * The board may not start from USB alone (the charger only trickles into an
-  empty VBAT): plug a charged battery in first, then USB, to flash. While the ESP32 runs, the charger never terminates (it holds the
-  pack at 4.2 V) and the CHG LED stays on.
+  empty VBAT): plug a charged battery in first, then USB, to flash.
 * Firmware (`firmware/main/main.c`): the motors are driven in two phases
   (M0/M2 at the start of each PWM period, M1/M3 at its end), which halves the
-  peak battery current below half throttle; arming needs a BLE link and a
-  finished level calibration and a measured battery of at least 3.5 V, and
-  always starts at zero throttle, where the motors stay off; a lost BLE link
-  disarms. Still to do: a heartbeat from the phone while armed (a lost link
-  is only noticed after the BLE supervision timeout, seconds) and a 16 MB
-  flash size in `sdkconfig` (it builds for 2 MB today, which also works).
-  Note that `app_main` spins every motor briefly after power‑up as a wiring
-  check (not after a reset or a battery‑sleep wake): take the props off or
-  remove `motors_sweep`.
+  peak battery current below half throttle. Arming needs a BLE link with a
+  live heartbeat (`motor_keys.py` sends `h` every 200 ms; any other client
+  must too), a finished level calibration, at least 3.5 V and a board within
+  5° of level, and starts at zero throttle, where the motors stay off. It
+  disarms when the link drops, when the heartbeat stops for 1 s, after 20 s
+  armed at zero throttle, after 2 s tilted over 30° with throttle up (stuck
+  in grass or against a wall), and beyond 50° of tilt. The attitude loop (angle PD, no integral or trim
+  yet) is untested on this frame: expect to tune the gains.
 * The buttons are pressed from the top. The antenna sits at the nose: keep
   metal and the battery away from it and test BLE range on the first board.

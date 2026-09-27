@@ -10,7 +10,10 @@
  *   VBAT : battery / 2 on GPIO10 (ADC1 channel 9), logged with the state;
  *          arming is refused below 3.5 V; a flat pack puts the board to
  *          deep sleep instead of draining it (see VBAT_SLEEP_MV).
- *   Safety: disarm on BLE disconnect, arm always at zero throttle.
+ *   Safety: arming needs a level calibration, >= 3.5 V and a live client
+ *          heartbeat ('h' every 200 ms, tools/motor_keys.py); disarm on
+ *          link loss, heartbeat loss, 20 s idle, 50 deg tilt, or 2 s stuck
+ *          beyond 30 deg with throttle up. Nothing spins at power-up.
  *
  * BMI323 quirk: every register read returns 2 dummy bytes followed by
  * the 16-bit register value, LSB first. Every register write is 1
@@ -28,6 +31,8 @@
 #include "soc/io_mux_reg.h"
 #include "driver/i2c_master.h"
 #include "driver/ledc.h"
+#include "driver/gpio.h"
+#include "esp_rom_sys.h"
 #include "esp_adc/adc_oneshot.h"
 #include "esp_adc/adc_cali.h"
 #include "esp_adc/adc_cali_scheme.h"
@@ -40,6 +45,7 @@
 #include "freertos/task.h"
 #include "freertos/queue.h"
 #include "freertos/stream_buffer.h"
+#include "freertos/semphr.h"
 
 #include "nimble/nimble_port.h"
 #include "nimble/nimble_port_freertos.h"
@@ -90,6 +96,14 @@ static const ledc_channel_t MOTOR_LEDC_CH[4] = {
 #define LEDC_RES_BITS           LEDC_TIMER_8_BIT
 #define LEDC_MAX                255
 #define MOTOR_TEST_DUTY         64        /* ~25% -- visible spin, no lift  */
+#define MOTOR_TEST_MS           1000      /* keys 1-4: long enough to see the spin direction */
+#define LINK_TIMEOUT_MS         1000      /* armed: disarm if no heartbeat 'h' arrives */
+#define ARM_HB_MAX_AGE_MS       500       /* arming needs a heartbeat this fresh */
+#define ARMED_IDLE_MS           20000     /* armed at throttle 0 this long: disarm */
+#define STUCK_TILT_DEG          30.0f     /* armed with throttle up, tilted beyond this ... */
+#define STUCK_MS                2000      /* ... this long: disarm (no setpoints: never in normal flight) */
+#define CAL_LEVEL_DEG           5.0f      /* level calibration only on a surface this level */
+#define LINK_IDLE_DROP_MS       5000      /* connected, no heartbeat this long: drop the link */
 #define MAX_THROTTLE            220       /* head-room above this for PID    */
 #define THROTTLE_STEP           5
 #define ARM_TILT_LIMIT_DEG      5.0f      /* refuse to arm if tilted       */
@@ -120,13 +134,14 @@ static const ledc_channel_t MOTOR_LEDC_CH[4] = {
 /* The 3.3 V buck-boost keeps the ESP32 running down to VBAT = 1.8 V, so a
  * pack left plugged in would be drained far below a safe voltage. Disarmed
  * and below VBAT_SLEEP_MV for 10 s (or below VBAT_EMPTY_MV for 1 s): deep sleep
- * (~0.1 mA for the whole board), waking every 5 min; back to normal above
- * VBAT_WAKE_MV. This
+ * (~0.1 mA for the whole board), waking every 5 min (every 30 min below
+ * VBAT_EMPTY_MV); back to normal above VBAT_WAKE_MV. This
  * also lets USB charging recover a flat pack (the charger trickles 26 mA). */
 #define VBAT_SLEEP_MV      3300
 #define VBAT_EMPTY_MV      3000
 #define VBAT_WAKE_MV       3500
 #define VBAT_SLEEP_S       300
+#define VBAT_SLEEP_EMPTY_S 1800      /* below VBAT_EMPTY_MV: check less often */
 
 /* ---------- BLE control ---------- */
 #define BLE_DEVICE_NAME "QuadFW"
@@ -134,6 +149,8 @@ static const ledc_channel_t MOTOR_LEDC_CH[4] = {
 /* ---------- BMI323 ---------- */
 #define BMI323_ADDR        0x68
 #define BMI323_CHIP_ID     0x00
+#define BMI323_ERR_REG     0x01
+#define BMI323_IO_I2C_IF   0x52
 #define BMI323_ACC_DATA_X  0x03
 #define BMI323_GYR_DATA_X  0x06
 #define BMI323_ACC_CONF    0x20
@@ -198,22 +215,6 @@ static inline void motor_set_duty(int idx, int duty)
     ledc_update_duty(LEDC_LOW_SPEED_MODE, MOTOR_LEDC_CH[idx]);
 }
 
-/* Spin each motor briefly in turn so we can verify wiring/order. */
-static void motors_sweep(uint32_t on_ms, uint32_t gap_ms)
-{
-    ESP_LOGI(TAG, "motor sweep: %lu ms on @ duty %d, %lu ms gap",
-             (unsigned long)on_ms, MOTOR_TEST_DUTY, (unsigned long)gap_ms);
-    for (int i = 0; i < 4; ++i) {
-        ESP_LOGI(TAG, "  motor %d (GPIO%lu) on",
-                 i, (unsigned long)MOTOR_GPIOS[i]);
-        motor_set_duty(i, MOTOR_TEST_DUTY);
-        vTaskDelay(pdMS_TO_TICKS(on_ms));
-        motor_set_duty(i, 0);
-        vTaskDelay(pdMS_TO_TICKS(gap_ms));
-    }
-    ESP_LOGI(TAG, "motor sweep done");
-}
-
 /* -------------------- battery voltage (IO10) -------------------- */
 static adc_oneshot_unit_handle_t s_adc;
 static adc_cali_handle_t         s_adc_cali;
@@ -259,6 +260,12 @@ static volatile float     s_roll_deg      = 0.0f;
 static volatile float     s_pitch_deg     = 0.0f;
 static volatile int       s_vbat_mv       = 0;     /* 0 = not measured */
 static volatile bool      s_ready         = false; /* level cal + VBAT done */
+static volatile bool      s_recal         = false; /* 'c': redo the level calibration */
+static volatile uint32_t  s_last_hb_ms    = 0;     /* last heartbeat 'h' from the client */
+static volatile uint32_t  s_conn_ms       = 0;     /* when the current client connected */
+static uint16_t           s_imu_err       = 0;     /* ERR_REG after configuring the IMU */
+static int                s_reset_reason  = 0;
+static uint16_t           s_chip_id       = 0;
 static bool               s_ble_up        = false;
 
 /* -------------------- BMI323 over I2C -------------------- */
@@ -293,8 +300,31 @@ static esp_err_t bmi_write_u16(uint8_t reg, uint16_t val)
     return i2c_master_transmit(s_bmi, tx, sizeof(tx), 10);
 }
 
+/* An IMU left mid-transfer by an ESP reset can hold SDA low: clock it out
+ * (up to 9 SCL pulses) and send a STOP before the driver takes the pins. */
+static void i2c_unstick(void)
+{
+    gpio_config_t io = {
+        .pin_bit_mask = (1ULL << I2C_SCL_GPIO) | (1ULL << I2C_SDA_GPIO),
+        .mode = GPIO_MODE_INPUT_OUTPUT_OD, .pull_up_en = GPIO_PULLUP_ENABLE,
+    };
+    gpio_set_level(I2C_SDA_GPIO, 1);   /* released before the outputs turn on */
+    gpio_set_level(I2C_SCL_GPIO, 1);
+    gpio_config(&io);
+    esp_rom_delay_us(5);
+    for (int i = 0; i < 9 && !gpio_get_level(I2C_SDA_GPIO); ++i) {
+        gpio_set_level(I2C_SCL_GPIO, 0); esp_rom_delay_us(5);
+        gpio_set_level(I2C_SCL_GPIO, 1); esp_rom_delay_us(5);
+    }
+    gpio_set_level(I2C_SCL_GPIO, 0); esp_rom_delay_us(5);   /* STOP: SDA rises while SCL is high */
+    gpio_set_level(I2C_SDA_GPIO, 0); esp_rom_delay_us(5);
+    gpio_set_level(I2C_SCL_GPIO, 1); esp_rom_delay_us(5);
+    gpio_set_level(I2C_SDA_GPIO, 1); esp_rom_delay_us(5);
+}
+
 static void i2c_bring_up(void)
 {
+    i2c_unstick();
     i2c_master_bus_config_t bus_cfg = {
         .clk_source = I2C_CLK_SRC_DEFAULT,
         .i2c_port = I2C_PORT,
@@ -318,10 +348,10 @@ static void i2c_bring_up(void)
  * Exposes the Nordic UART Service (NUS):
  *   Service UUID  6E400001-B5A3-F393-E0A9-E50E24DCCA9E
  *   RX char (W)   6E400002-B5A3-F393-E0A9-E50E24DCCA9E   <- laptop writes here
- *   TX char (N)   6E400003-B5A3-F393-E0A9-E50E24DCCA9E   <- (unused for now)
+ *   TX char (N)   6E400003-B5A3-F393-E0A9-E50E24DCCA9E   <- log lines
  *
  * Same single-byte protocol as before:
- *   '1'..'4' -> pulse that motor for 200 ms
+ *   '1'..'4' -> pulse that motor for 1 s
  *   's','0'  -> all motors off
  *
  * NimBLE UUIDs are stored little-endian (LSB-first), so the byte arrays
@@ -349,11 +379,17 @@ static portMUX_TYPE s_arm_mux = portMUX_INITIALIZER_UNLOCKED;
 static uint16_t s_tx_val_handle  = 0;
 static bool     s_notify_enabled = false;
 static StreamBufferHandle_t s_log_sb = NULL;
+static SemaphoreHandle_t    s_log_mux = NULL;   /* several tasks log; the buffer takes one writer */
 
 static void ble_advertise(void);
+static void log_status(void);
 
 static void handle_cmd_byte(uint8_t c)
 {
+    if (c == 'h') {   /* heartbeat from the client (tools/motor_keys.py) */
+        s_last_hb_ms = (uint32_t)(xTaskGetTickCount() * portTICK_PERIOD_MS);
+        return;
+    }
     if (s_cmd_q) {
         xQueueSend(s_cmd_q, &c, 0);
     }
@@ -402,6 +438,9 @@ static int ble_gap_event(struct ble_gap_event *event, void *arg)
         ESP_LOGI(TAG, "ble: connect %s",
                  event->connect.status == 0 ? "ok" : "failed");
         if (event->connect.status == 0) {
+            uint32_t now = (uint32_t)(xTaskGetTickCount() * portTICK_PERIOD_MS);
+            s_conn_ms = now;
+            s_last_hb_ms = now - 10 * LINK_TIMEOUT_MS;   /* this client must send its own */
             s_conn_handle = event->connect.conn_handle;
         } else {
             ble_advertise();
@@ -424,6 +463,7 @@ static int ble_gap_event(struct ble_gap_event *event, void *arg)
     case BLE_GAP_EVENT_SUBSCRIBE:
         if (event->subscribe.attr_handle == s_tx_val_handle) {
             s_notify_enabled = event->subscribe.cur_notify;
+            if (s_notify_enabled) log_status();   /* boot logs went nowhere */
         }
         break;
     case BLE_GAP_EVENT_ADV_COMPLETE:
@@ -512,7 +552,10 @@ static int ble_log_vprintf(const char *fmt, va_list ap)
         size_t len = (m >= (int)sizeof(buf)) ? sizeof(buf) - 1 : (size_t)m;
         /* Never block: if the buffer is full we'd rather drop log bytes
          * than stall the caller (which may be a high-priority task). */
-        (void)xStreamBufferSend(s_log_sb, buf, len, 0);
+        if (s_log_mux && xSemaphoreTake(s_log_mux, 2) == pdTRUE) {
+            (void)xStreamBufferSend(s_log_sb, buf, len, 0);
+            xSemaphoreGive(s_log_mux);
+        }
     }
     return n;
 }
@@ -544,6 +587,7 @@ static void ble_log_task(void *arg)
 
 static void ble_log_bring_up(void)
 {
+    s_log_mux = xSemaphoreCreateMutex();
     s_log_sb = xStreamBufferCreate(BLE_LOG_SB_SIZE, 1);
     if (!s_log_sb) {
         ESP_LOGE(TAG, "ble_log: stream buffer alloc failed");
@@ -590,7 +634,8 @@ static void ble_bring_up(void)
 static void deep_sleep(int mv)
 {
     for (int i = 0; i < 4; ++i) motor_set_duty(i, 0);
-    ESP_LOGW(TAG, "battery %d mV: deep sleep, next check in %d s", mv, VBAT_SLEEP_S);
+    int secs = mv < VBAT_EMPTY_MV ? VBAT_SLEEP_EMPTY_S : VBAT_SLEEP_S;
+    ESP_LOGW(TAG, "battery %d mV: deep sleep, next check in %d s", mv, secs);
     vTaskDelay(pdMS_TO_TICKS(200));   /* let the log line out */
     if (s_ble_up) {
         s_notify_enabled = false;   /* the log tee stops sending */
@@ -598,8 +643,17 @@ static void deep_sleep(int mv)
     }
     bmi_write_u16(BMI323_ACC_CONF, 0x0000);   /* accel + gyro off */
     bmi_write_u16(BMI323_GYR_CONF, 0x0000);
-    esp_sleep_enable_timer_wakeup((uint64_t)VBAT_SLEEP_S * 1000000u);
+    esp_sleep_enable_timer_wakeup((uint64_t)secs * 1000000u);
     esp_deep_sleep_start();
+}
+
+/* 'i', and whenever a client subscribes: what happened at boot */
+static void log_status(void)
+{
+    ESP_LOGI(TAG, "status: reset reason %d%s, IMU id 0x%04x err 0x%04x, level cal %s, battery %d mV, %s",
+             s_reset_reason, s_reset_reason == ESP_RST_BROWNOUT ? " (BROWN-OUT)" : "",
+             s_chip_id, s_imu_err, s_ready ? "done" : "waiting for the board to be still and level",
+             s_vbat_mv, s_armed ? "ARMED" : "disarmed");
 }
 
 /* -------------------- motor command consumer -------------------- */
@@ -610,8 +664,12 @@ static void motor_cmd_task(void *arg)
         if (xQueueReceive(s_cmd_q, &c, portMAX_DELAY) != pdTRUE) continue;
         switch (c) {
         case 'a':
-            if (!s_ready || s_conn_handle == 0xFFFF) {
-                ESP_LOGW(TAG, "cmd: arm refused, not ready");
+            if (s_armed) {
+                ESP_LOGW(TAG, "cmd: already armed");   /* never reset throttle mid-air */
+            } else if (s_recal || !s_ready || s_conn_handle == 0xFFFF) {   /* s_recal first: see the control task */
+                ESP_LOGW(TAG, "cmd: arm refused, not ready (level cal needs the board still and level)");
+            } else if ((int32_t)((uint32_t)(xTaskGetTickCount() * portTICK_PERIOD_MS) - s_last_hb_ms) > ARM_HB_MAX_AGE_MS) {
+                ESP_LOGW(TAG, "cmd: arm refused, no heartbeat from the client");
             } else if (s_vbat_mv < VBAT_MIN_ARM_MV) {   /* 0 = can't measure it */
                 ESP_LOGW(TAG, "cmd: arm refused, battery %d mV", s_vbat_mv);
             } else if (fabsf(s_roll_deg) < ARM_TILT_LIMIT_DEG &&
@@ -620,6 +678,7 @@ static void motor_cmd_task(void *arg)
                 taskENTER_CRITICAL(&s_arm_mux);
                 if (s_conn_handle != 0xFFFF) {   /* link still up */
                     s_base_throttle = 0;         /* always start from idle */
+                    s_test_end_ms = (uint32_t)(xTaskGetTickCount() * portTICK_PERIOD_MS);
                     s_armed = ok = true;
                 }
                 taskEXIT_CRITICAL(&s_arm_mux);
@@ -633,6 +692,7 @@ static void motor_cmd_task(void *arg)
         case 'd': case 's': case '0':
             s_armed = false;
             s_base_throttle = 0;
+            s_test_end_ms = (uint32_t)(xTaskGetTickCount() * portTICK_PERIOD_MS);   /* ends a motor test */
             ESP_LOGI(TAG, "cmd: DISARMED");
             break;
         case 'w': case '+': case '=':
@@ -653,13 +713,25 @@ static void motor_cmd_task(void *arg)
             break;
         case '1': case '2': case '3': case '4':
             if (!s_armed) {
-                s_test_motor = (int8_t)(c - '1');
-                s_test_end_ms =
-                    (uint32_t)(xTaskGetTickCount() * portTICK_PERIOD_MS) + 200;
-                ESP_LOGI(TAG, "cmd: test motor %d", (int)s_test_motor);
+                static const char *const corner[4] = { "front right", "back right", "back left", "front left" };
+                int m = c - '1';   /* end time first: the control task reads both */
+                s_test_end_ms = (uint32_t)(xTaskGetTickCount() * portTICK_PERIOD_MS) + MOTOR_TEST_MS;
+                s_test_motor = (int8_t)m;
+                ESP_LOGI(TAG, "cmd: test motor M%d (%s)", m, corner[m]);
             } else {
                 ESP_LOGW(TAG, "cmd: ignored '%c' while armed", c);
             }
+            break;
+        case 'c':
+            if (!s_armed) {
+                s_recal = true;
+                ESP_LOGI(TAG, "cmd: level calibration restarts (keep the board still and level)");
+            } else {
+                ESP_LOGW(TAG, "cmd: 'c' ignored while armed");
+            }
+            break;
+        case 'i':
+            log_status();
             break;
         default:
             ESP_LOGW(TAG, "cmd: ignore 0x%02x", (unsigned)c);
@@ -680,7 +752,7 @@ static void control_task(void *arg)
 {
     const float GYR_LSB_TO_RADS = (1000.0f / 32768.0f) * (float)M_PI / 180.0f;
     const float GYR_LSB_TO_DPS  = 1000.0f / 32768.0f;
-    const float ACC_LSB_TO_G    = 4.0f / 32768.0f;
+    const float ACC_LSB_TO_G    = 8.0f / 32768.0f;   /* ACC_CONF range = +-8 g */
     const float DT              = 1.0f / (float)CTRL_RATE_HZ;
     const float ALPHA           = 0.98f;
     const float RAD_TO_DEG      = 180.0f / (float)M_PI;
@@ -694,16 +766,22 @@ static void control_task(void *arg)
     int   vbat_div = 0, vbat_low_n = 0, vbat_empty_n = 0;
     bool  vbat_seen = false;
 
-    /* Level calibration: collect the first CAL_N accel samples while the
-     * drone is sitting still on the desk and use their mean as the
-     * accelerometer's idea of "level". This compensates for the IMU
-     * being mounted with a small tilt relative to the airframe. Arming
-     * is blocked until calibration completes. */
+    /* Level calibration: average CAL_N consecutive samples taken while the
+     * board is still (every gyro axis below 5 dps, the gravity vector steady
+     * within 0.02 g, i.e. about 1 degree)
+     * and roughly level (both angles within CAL_LEVEL_DEG, right side up);
+     * anything else restarts the count. Their mean accel angle is "level"
+     * (the IMU is never mounted perfectly flat) and their mean gyro reading
+     * is the gyro bias. Arming is blocked until it is done; 'c' redoes it. */
     const int CAL_N = 200;            /* 200 samples @ 200 Hz = 1 s */
     int   cal_count = 0;
     float cal_roll_sum = 0.0f, cal_pitch_sum = 0.0f;
+    float cal_gx = 0.0f, cal_gy = 0.0f, cal_gz = 0.0f;
     float roll_bias = 0.0f, pitch_bias = 0.0f;
+    float gx_bias = 0.0f, gy_bias = 0.0f, gz_bias = 0.0f;
+    float cal_ax0 = 0.0f, cal_ay0 = 0.0f, cal_az0 = 0.0f;
     bool  calibrated = false;
+    uint32_t idle_since_ms = 0, stall_since_ms = 0;
 
     /* If consecutive I2C reads fail this many times in a row we treat the
      * bus as compromised (most likely motor EMI) and force-disarm so the
@@ -727,28 +805,51 @@ static void control_task(void *arg)
             float ax = axi * ACC_LSB_TO_G;
             float ay = ayi * ACC_LSB_TO_G;
             float az = azi * ACC_LSB_TO_G;
-            float gx_rad = gxi * GYR_LSB_TO_RADS;
-            float gy_rad = gyi * GYR_LSB_TO_RADS;
-            float gz_rad = gzi * GYR_LSB_TO_RADS;
-            float gx_dps = gxi * GYR_LSB_TO_DPS;
-            float gy_dps = gyi * GYR_LSB_TO_DPS;
-            float gz_dps = gzi * GYR_LSB_TO_DPS;
+            float gx_dps = gxi * GYR_LSB_TO_DPS - gx_bias;
+            float gy_dps = gyi * GYR_LSB_TO_DPS - gy_bias;
+            float gz_dps = gzi * GYR_LSB_TO_DPS - gz_bias;
+            float gx_rad = gx_dps * (GYR_LSB_TO_RADS / GYR_LSB_TO_DPS);
+            float gy_rad = gy_dps * (GYR_LSB_TO_RADS / GYR_LSB_TO_DPS);
+            float gz_rad = gz_dps * (GYR_LSB_TO_RADS / GYR_LSB_TO_DPS);
 
             float roll_acc_raw  = atan2f(ay, az);
             float pitch_acc_raw = atan2f(-ax, sqrtf(ay*ay + az*az));
 
-            /* Accumulate the level bias during the first CAL_N samples. */
+            if (s_recal) {
+                if (!s_armed) {
+                    s_ready = false;   /* before s_recal clears: no 'a' slips in between */
+                    calibrated = false; cal_count = 0; gx_bias = gy_bias = gz_bias = 0.0f;
+                }
+                s_recal = false;
+            }
             if (!calibrated) {
-                cal_roll_sum  += roll_acc_raw;
-                cal_pitch_sum += pitch_acc_raw;
-                if (++cal_count >= CAL_N) {
-                    roll_bias  = cal_roll_sum  / (float)CAL_N;
-                    pitch_bias = cal_pitch_sum / (float)CAL_N;
-                    calibrated = true;
-                    ESP_LOGI(TAG,
-                        "level cal done: roll_bias=%+.2f deg pitch_bias=%+.2f deg",
-                        roll_bias  * RAD_TO_DEG,
-                        pitch_bias * RAD_TO_DEG);
+                float gxr = gxi * GYR_LSB_TO_DPS, gyr_ = gyi * GYR_LSB_TO_DPS, gzr = gzi * GYR_LSB_TO_DPS;
+                const float lvl = CAL_LEVEL_DEG / RAD_TO_DEG;
+                bool ok = fabsf(gxr) < 5.0f && fabsf(gyr_) < 5.0f && fabsf(gzr) < 5.0f && az > 0.0f &&
+                          fabsf(roll_acc_raw) < lvl && fabsf(pitch_acc_raw) < lvl;
+                float dax = ax - cal_ax0, day = ay - cal_ay0, daz = az - cal_az0;
+                bool moved = dax*dax + day*day + daz*daz > 0.02f * 0.02f;   /* ~1 deg of rotation */
+                if (cal_count > 0 && (!ok || moved)) cal_count = 0;   /* start over */
+                if (ok && cal_count == 0) {
+                    cal_ax0 = ax; cal_ay0 = ay; cal_az0 = az;
+                    cal_roll_sum = cal_pitch_sum = cal_gx = cal_gy = cal_gz = 0.0f;
+                }
+                if (ok) {
+                    cal_roll_sum  += roll_acc_raw;
+                    cal_pitch_sum += pitch_acc_raw;
+                    cal_gx += gxr; cal_gy += gyr_; cal_gz += gzr;
+                    if (++cal_count >= CAL_N) {
+                        roll_bias  = cal_roll_sum  / (float)CAL_N;
+                        pitch_bias = cal_pitch_sum / (float)CAL_N;
+                        gx_bias = cal_gx / (float)CAL_N;
+                        gy_bias = cal_gy / (float)CAL_N;
+                        gz_bias = cal_gz / (float)CAL_N;
+                        calibrated = true;
+                        init = false;   /* restart the filter from the calibrated level */
+                        ESP_LOGI(TAG,
+                            "level cal done: roll %+.2f pitch %+.2f deg, gyro bias %+.2f %+.2f %+.2f dps",
+                            roll_bias * RAD_TO_DEG, pitch_bias * RAD_TO_DEG, gx_bias, gy_bias, gz_bias);
+                    }
                 }
             }
 
@@ -787,6 +888,27 @@ static void control_task(void *arg)
             uint32_t now_ms =
                 (uint32_t)(xTaskGetTickCount() * portTICK_PERIOD_MS);
 
+            /* Safety while armed: the client went silent, idle too long */
+            if (s_armed && (int32_t)(now_ms - s_last_hb_ms) > LINK_TIMEOUT_MS) {
+                s_armed = false;
+                s_base_throttle = 0;
+                for (int i = 0; i < 4; ++i) motor_set_duty(i, 0);
+                ESP_LOGW(TAG, "ctrl: no heartbeat for %d ms -> DISARM", LINK_TIMEOUT_MS);
+            }
+            /* a crashed client can leave the link up (BlueZ does), and then
+             * the board never advertises again: drop a silent link */
+            uint16_t conn = s_conn_handle;
+            if (conn != 0xFFFF && (int32_t)(now_ms - s_conn_ms) > LINK_IDLE_DROP_MS &&
+                (int32_t)(now_ms - s_last_hb_ms) > LINK_IDLE_DROP_MS) {
+                s_conn_ms = now_ms;   /* once per LINK_IDLE_DROP_MS at most */
+                ble_gap_terminate(conn, BLE_ERR_REM_USER_CONN_TERM);
+            }
+            if (!s_armed || s_base_throttle != 0) idle_since_ms = now_ms;
+            else if (now_ms - idle_since_ms > ARMED_IDLE_MS) {
+                s_armed = false;
+                ESP_LOGW(TAG, "ctrl: armed at idle for %d s -> DISARM", ARMED_IDLE_MS / 1000);
+            }
+
             if (s_armed && s_base_throttle == 0) {
                 /* armed at idle: motors stay off until throttle comes up */
             } else if (s_armed) {
@@ -802,8 +924,8 @@ static void control_task(void *arg)
                 float y = YAW_KD * gz_dps;
 
                 /* Quad-X mixer (see physical layout above).
-                 *   +roll  -> right side down, lift left side
-                 *   +pitch -> nose up, lift back side
+                 *   +roll  = right side down: r < 0 raises the right motors (M0, M1)
+                 *   +pitch = nose down (atan2(-ax, ..), +X = nose): p < 0 raises the front motors (M0, M3)
                  *   +yaw   -> nose right, increase CCW motors */
                 float m[4] = {
                     T - r - p + y,   /* M0 FR CCW */
@@ -821,6 +943,21 @@ static void control_task(void *arg)
                 out[s_test_motor] = MOTOR_TEST_DUTY;
             } else if (s_test_motor >= 0) {
                 s_test_motor = -1;
+            }
+
+            /* armed with throttle up and tilted well over for 2 s (held in
+             * grass, against a wall): the low side's motors sit at full power
+             * into a stall -> save the FETs and motors. There are no roll/pitch
+             * setpoints, so a free-flying quad never stays this tilted. */
+            bool stuck = s_armed && s_base_throttle > 0 &&
+                         (fabsf(roll_deg) > STUCK_TILT_DEG || fabsf(pitch_deg) > STUCK_TILT_DEG);
+            if (!stuck) {
+                stall_since_ms = now_ms;
+            } else if (now_ms - stall_since_ms > STUCK_MS) {
+                s_armed = false;
+                s_base_throttle = 0;
+                for (int i = 0; i < 4; ++i) out[i] = 0;
+                ESP_LOGW(TAG, "ctrl: stuck tilted over %d deg for %d s -> DISARM", (int)STUCK_TILT_DEG, STUCK_MS / 1000);
             }
 
             for (int i = 0; i < 4; ++i) motor_set_duty(i, out[i]);
@@ -874,7 +1011,7 @@ static void control_task(void *arg)
             if (vbat_low_n >= 100 || vbat_empty_n >= 10) deep_sleep(mv);
             vbat_seen = true;
         }
-        if (calibrated && vbat_seen) s_ready = true;
+        s_ready = calibrated && vbat_seen;
 
         /* Plain vTaskDelay (not vTaskDelayUntil): if one iteration runs
          * long, we just slip a cycle instead of busy-spinning to catch
@@ -891,24 +1028,23 @@ void app_main(void)
     motors_init();
     vbat_init();
 
-    /* Battery first, before the motor check, BLE and anything else draws
-     * current: an empty pack, or a sleep wake that USB hasn't charged back
+    /* Battery first, before BLE and anything else draws current: an empty
+     * pack, or a sleep wake that USB hasn't charged back
      * above VBAT_WAKE_MV, goes straight back to sleep. */
     esp_reset_reason_t why = esp_reset_reason();
+    s_reset_reason = (int)why;
     int boot_mv = vbat_read_mv();
     bool woke = why == ESP_RST_DEEPSLEEP, low = boot_mv > 0 && boot_mv < VBAT_WAKE_MV;
     i2c_bring_up();
     if (boot_mv > 0 && (boot_mv < VBAT_EMPTY_MV || (woke && low))) {
         bmi_write_u16(BMI323_ACC_CONF, 0x0000);   /* IMU off, if it was on */
         bmi_write_u16(BMI323_GYR_CONF, 0x0000);
-        esp_sleep_enable_timer_wakeup((uint64_t)VBAT_SLEEP_S * 1000000u);
+        int secs = boot_mv < VBAT_EMPTY_MV ? VBAT_SLEEP_EMPTY_S : VBAT_SLEEP_S;
+        esp_sleep_enable_timer_wakeup((uint64_t)secs * 1000000u);
         esp_deep_sleep_start();
     }
-
-    /* One-shot motor wiring check, only on a real power-up (not after a
-     * battery-sleep wake, a crash or a watchdog reset, nobody may be
-     * watching then) and not on a nearly flat pack. */
-    if (why == ESP_RST_POWERON && !low) motors_sweep(100, 250);
+    /* No motor spins at boot (it used to sweep all four, which also fired
+     * on every battery plug-in): test them with BLE keys 1-4. */
 
     /* Bring up BLE NUS server + motor command consumer task. */
     s_cmd_q = xQueueCreate(16, sizeof(uint8_t));
@@ -929,7 +1065,12 @@ void app_main(void)
     vTaskDelay(pdMS_TO_TICKS(50));
 
     uint16_t chip_id = 0;
-    esp_err_t err = bmi_read_u16(BMI323_CHIP_ID, &chip_id);
+    esp_err_t err = ESP_FAIL;
+    for (int t = 0; t < 5 && (chip_id & 0xff) != BMI323_CHIP_ID_VAL; ++t) {
+        if (t) vTaskDelay(pdMS_TO_TICKS(20));
+        err = bmi_read_u16(BMI323_CHIP_ID, &chip_id);
+    }
+    s_chip_id = chip_id;
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "I2C read of CHIP_ID failed: %s",
                  esp_err_to_name(err));
@@ -943,26 +1084,37 @@ void app_main(void)
                  I2C_SDA_GPIO, I2C_SCL_GPIO);
         ESP_LOGE(TAG, " 2. Address 0x68 vs 0x69 (SDO pin)");
         ESP_LOGE(TAG, " 3. VDD / VDDIO supplied");
-        /* Keep blinking so we know the chip is still alive. */
+        /* Fast blink (5 Hz): alive, but no IMU. Normal is 1 Hz. */
         for (bool on = false;; on = !on) {
             led_set(on);
             int mv = vbat_read_mv();
+            s_vbat_mv = mv;
             if (mv > 0 && mv < VBAT_SLEEP_MV) deep_sleep(mv);
-            vTaskDelay(pdMS_TO_TICKS(500));
+            vTaskDelay(pdMS_TO_TICKS(100));
         }
     }
 
     ESP_LOGI(TAG, "BMI323 detected, configuring for 200 Hz...");
 
-    /* Accelerometer: normal mode, 200 Hz ODR, +/-4 g range. */
-    ESP_ERROR_CHECK(bmi_write_u16(BMI323_ACC_CONF, 0x4029));
+    /* Accelerometer: high-performance mode (the one Bosch specifies noise
+     * for), 200 Hz ODR, +/-8 g range, bandwidth ODR/2. */
+    ESP_ERROR_CHECK(bmi_write_u16(BMI323_ACC_CONF, 0x7029));
     vTaskDelay(pdMS_TO_TICKS(5));
-    /* Gyroscope:     normal mode, 200 Hz ODR, +/-1000 dps range. */
-    ESP_ERROR_CHECK(bmi_write_u16(BMI323_GYR_CONF, 0x4039));
+    /* Gyroscope: high-performance mode, 200 Hz ODR, +/-1000 dps. */
+    ESP_ERROR_CHECK(bmi_write_u16(BMI323_GYR_CONF, 0x7039));
     vTaskDelay(pdMS_TO_TICKS(100));
+    /* sensors on (no more suspend-mode write timing): the IMU releases SDA
+     * by itself if a transfer ever hangs for more than 1.25 ms */
+    bmi_write_u16(BMI323_IO_I2C_IF, 0x0002);
+    vTaskDelay(pdMS_TO_TICKS(300));   /* a gyro fatal_err shows within 350 ms */
+    if (bmi_read_u16(BMI323_ERR_REG, &s_imu_err) != ESP_OK) {   /* fatal_err / acc_conf_err / gyr_conf_err */
+        s_imu_err = 0xFFFF;   /* unknown */
+        ESP_LOGE(TAG, "BMI323 ERR_REG read failed");
+    }
+    if (s_imu_err & 0x0061) ESP_LOGE(TAG, "BMI323 ERR_REG 0x%04x", s_imu_err);
 
     ESP_LOGI(TAG, "Starting control loop @ %d Hz. DISARMED. "
-                  "BLE keys: a=arm d=disarm w=thr+ x=thr- 1-4=test motor",
+                  "BLE keys: a=arm d=disarm w=thr+ x=thr- 1-4=test M0-M3 c=level cal i=status",
              CTRL_RATE_HZ);
 
     /* Pin control loop to APP_CPU (core 1) so NimBLE on core 0 cannot
