@@ -126,7 +126,9 @@ const MOTORS = [
 const RAIL = 12.425 // VBAT rails run straight down at x = ±RAIL (top layer)
 for (const { i, sx, sy } of MOTORS) {
   const gateInner = sx * sy > 0
-  AT[`CN${i + 1}`] = [15.6 * sx, 15.6 * sy, (Math.atan2(sy, sx) * 180) / Math.PI + 90]
+  // as far out along the arm as the connector's side tabs allow (pads 0.33 mm
+  // from the curved core edge), the same spot as on the May 2026 board
+  AT[`CN${i + 1}`] = [16.7 * sx, 16.7 * sy, (Math.atan2(sy, sx) * 180) / Math.PI + 90]
   AT[`D${i + 1}`] = [(RAIL + 1.2) * sx, 11.95 * sy, (Math.atan2(-sy, sx) * 180) / Math.PI] // cathode on the rail
   AT[`Q${i + 1}`] = [14.825 * sx, 7.5 * sy, sy > 0 ? 270 : 90] // drain right under the anode
   AT[`R${i + 1}`] = [(gateInner ? 14.025 : 15.775) * sx, 4.2 * sy, sy > 0 ? 90 : 270] // 47R, PWM side toward y = 0
@@ -385,7 +387,7 @@ const Silkscreen = () => (
     {MOTORS.map(({ i, sx, sy, spin }) => (
       <Fragment key={i}>
         <Text t={`M${i} ${spin}`} x={28.5 * sx} y={28.5 * sy} size={1.7} r={45 * sx * sy} />
-        <Text t="+" x={13.14 * sx} y={15.64 * sy} size={1.6} />
+        <Text t="+" x={14.24 * sx} y={16.74 * sy} size={1.6} />
       </Fragment>
     ))}
     <Text t="+" x={4.77} y={-18.35} size={1.8} />
@@ -415,7 +417,9 @@ const Motor = ({ i, name, spin, io }: (typeof MOTORS)[number]) => {
     <>
       <net name={`M${i}`} />
       <schematictext text={`M${i} · ${name} · ${spin} · IO${io}`} schX={ox + 0.35} schY={oy + 2.75} fontSize={0.16} anchor="left" color="#555" />
-      <connector name={`CN${i + 1}`} schSectionName="motors" manufacturerPartNumber="HC-1.25-2PWT" footprint="jlcpcb:C2845379" supplierPartNumbers={JLC("C2845379")}
+      {/* allowOffBoard: tscircuit tests an unrotated box around the part, which pokes past the
+          curved edge although no copper does (drc.py and KiCad keep pads >= 0.3 mm inside) */}
+      <connector name={`CN${i + 1}`} allowOffBoard schSectionName="motors" manufacturerPartNumber="HC-1.25-2PWT" footprint="jlcpcb:C2845379" supplierPartNumbers={JLC("C2845379")}
         schPinArrangement={{ ...CONN_PINS, leftSide: { direction: "top-to-bottom", pins: [plus, minus] } }} noConnect={["pin3", "pin4"]} {...sch([ox + 1.2, oy + 1.7])} {...pcb(`CN${i + 1}`)}
         connections={{ [plus]: "net.VBAT", [minus]: `net.M${i}` }} />
       <diode name={`D${i + 1}`} schSectionName="motors" manufacturerPartNumber="B5819W" footprint="jlcpcb:C8598" supplierPartNumbers={JLC("C8598")} {...sch([ox, oy + 1.7, 90])}

@@ -27,7 +27,8 @@ The ready‑made files are in [fab/](fab/). On jlcpcb.com:
 3. The ESP32 module overhangs the nose edge (its antenna) and the USB‑C
    socket the tail edge, on purpose. Say so in the order remark. If JLCPCB
    asks for edge rails, let them add them on the left/right (arm) sides, not
-   across the nose or tail.
+   across the nose or tail, and no break‑off tabs on the curved edges next
+   to the motor connectors (their pads are 0.33 mm from the edge).
 4. In the placement preview check each part once: antenna toward the nose,
    USB‑C opening at the tail edge, the diode bands (cathode) on the inner end
    of D1–D4 where each diode meets its VBAT rail, LED anodes toward their 1 k
@@ -65,7 +66,10 @@ Pin map (also on the schematic, and in `firmware/main/main.c`):
 
 Motors: FR and BL spin CCW, BR and FL spin CW (printed on each arm). The
 connector pin marked "+" is VBAT; the other pin is switched to ground. The
-pinout matches the May 2026 board, so its motor leads plug in the same way.
+pinout and the connector positions match the May 2026 board, so its motor
+leads plug in the same way and reach just as far: each connector sits as far
+out along its arm as its metal side tabs allow (0.33 mm from the curved
+edge), its opening about 24.8 mm from the arm tip.
 A brushed motor's direction follows its polarity – if one spins the wrong
 way, swap its two wires.
 
