@@ -84,6 +84,10 @@ $$
 
 The commanded rotor speeds are clamped to $[\omega_{\min}, \omega_{\max}]$ before being applied to the dynamics. The implementation runs physics at $1\,\mathrm{kHz}$, control at $100\,\mathrm{Hz}$, and renders frames through a CPU raytracer at $24\,\mathrm{fps}$.
 
+## Hardware
+
+The flight controller / frame PCB lives in [pcb/](pcb/) as a [tscircuit](https://tscircuit.com) design with a JLCPCB-ready build (`npm run fab`). Firmware for it is in [firmware/](firmware/). Older EasyEDA designs are kept in [hardware/](hardware/).
+
 ## How to run
 ### Ubuntu
 ```bash

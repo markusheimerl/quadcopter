@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": ["tscircuit"],
+    // This tscircuit dependency ships raw .ts sources instead of type
+    // definitions, which fail to type-check. Pointing its import at a
+    // non-module file makes TypeScript skip it like any other library.
+    "paths": { "@tscircuit/fanout-solver": ["./node_modules/@tscircuit/fanout-solver/package.json"] }
+  },
+  "include": ["index.tsx"]
+}

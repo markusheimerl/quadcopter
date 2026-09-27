@@ -1,9 +1,10 @@
 /*
- * XIAO ESP32-S3 Sense -- blink + Bosch BMI323 IMU readout over I2C.
+ * Quad flight controller (pcb/, ESP32-S3-WROOM-1) -- blink + Bosch BMI323
+ * IMU readout over I2C, motors, BLE log.
  *
- *   LED  : on-board user LED, GPIO21, active-LOW.       Driven via raw
+ *   LED  : status LED1, GPIO21, active-LOW.              Driven via raw
  *          GPIO register writes (no driver).
- *   IMU  : BMI323 on I2C0, SDA=GPIO5, SCL=GPIO6, 400 kHz.
+ *   IMU  : BMI323 on I2C0, SDA=GPIO11, SCL=GPIO12, 400 kHz, address 0x68.
  *          Uses ESP-IDF's i2c_master driver (writing a register-level
  *          I2C driver is a separate project).
  *
@@ -43,17 +44,17 @@
 #define LED_BIT         (1u << LED_GPIO)
 
 /* ---------- Motors (MOSFET gates) ----------
- * XIAO silkscreen -> SoC GPIO:
- *   D0 -> GPIO1   (motor 0)
- *   D1 -> GPIO2   (motor 1)
- *   D2 -> GPIO3   (motor 2)
- *   D3 -> GPIO4   (motor 3)
+ * Board net -> SoC GPIO (see the pin map in pcb/index.tsx):
+ *   PWM0 -> GPIO1   (motor 0, front right)
+ *   PWM1 -> GPIO2   (motor 1, back right)
+ *   PWM2 -> GPIO16  (motor 2, back left)
+ *   PWM3 -> GPIO4   (motor 3, front left)
  * All four pins live in GPIO bank 0 (bits 0..31), so the standard
  * GPIO_OUT_W1T{S,C} / GPIO_ENABLE_W1TS registers are enough.
  */
 #define MOTOR0_GPIO     1u
 #define MOTOR1_GPIO     2u
-#define MOTOR2_GPIO     3u
+#define MOTOR2_GPIO     16u
 #define MOTOR3_GPIO     4u
 static const uint32_t MOTOR_GPIOS[4] = {
     MOTOR0_GPIO, MOTOR1_GPIO, MOTOR2_GPIO, MOTOR3_GPIO,
@@ -98,8 +99,8 @@ static const ledc_channel_t MOTOR_LEDC_CH[4] = {
 
 /* ---------- I2C ---------- */
 #define I2C_PORT        I2C_NUM_0
-#define I2C_SDA_GPIO    5
-#define I2C_SCL_GPIO    6
+#define I2C_SDA_GPIO    11
+#define I2C_SCL_GPIO    12
 #define I2C_FREQ_HZ     400000
 
 /* ---------- BLE control ---------- */

@@ -1,0 +1,22 @@
+{
+  "name": "quad-pcb",
+  "private": true,
+  "description": "Micro quadcopter flight controller + frame PCB (tscircuit)",
+  "main": "index.tsx",
+  "scripts": {
+    "postinstall": "node scripts/patch-tscircuit.mjs",
+    "place": "bun ./build.tsx --place; tsci export dist/place.circuit.json -f pcb-png -o \"$PWD/img/place.png\"",
+    "sch": "bun ./build.tsx --sch; tsci export dist/sch.circuit.json -f schematic-svg -o \"$PWD/img/schematic.svg\"",
+    "build": "bun ./build.tsx",
+    "fab": "mkdir -p fab && tsci export dist/circuit.json -f gerbers -o \"$PWD/fab/gerbers.zip\" && zip -q -d fab/gerbers.zip bom.csv pick_and_place.csv F_Fab.gbr && bun scripts/jlc.ts",
+    "kicad": "mkdir -p kicad && tsci export dist/circuit.json -f kicad_pcb -o \"$PWD/kicad/quad.kicad_pcb\" && tsci export dist/sch.circuit.json -f kicad_sch -o \"$PWD/kicad/quad.kicad_sch\" && bun scripts/kicad.ts",
+    "img": "tsci export dist/circuit.json -f pcb-png -o \"$PWD/img/pcb.png\" && tsci export dist/sch.circuit.json -f schematic-svg -o \"$PWD/img/schematic.svg\"",
+    "dev": "tsci dev index.tsx"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "bun": "^1.4.2",
+    "tscircuit": "^0.0.2646",
+    "typescript": "^5.9.3"
+  }
+}
