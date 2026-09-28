@@ -27,7 +27,7 @@ The ready‑made files are in [fab/](fab/). On jlcpcb.com:
    part number and all are in stock. Seven are *extended* parts (module,
    IMU, TPS63001, inductor, the three connector types), the rest *basic* or
    *preferred* – which only matters for Economic PCBA: Standard charges the
-   same feeder fee (about $1.53) for each of the 27 BOM lines. Tick *Confirm
+   same feeder fee (about $1.53) for each of the 26 BOM lines. Tick *Confirm
    production file* and look at the panel drawing before it goes into
    production.
 3. Order remark: "The ESP32 module and the USB‑C socket overhang the nose
@@ -53,7 +53,7 @@ The ready‑made files are in [fab/](fab/). On jlcpcb.com:
 | Motor connectors ×4 | HC‑1.25‑2PWT (1.25 mm, 2 pin), "+" marked on the silkscreen | C2845379 |
 | Battery | Molex PicoBlade 53398‑0271, "+"/"−" marked, 100 µF bulk | C122410, C15008 |
 | 3.3 V | TPS63001 buck‑boost: 3.3 V from 1.8–5.5 V in (1.2 A buck, 0.8 A boost), always on, power‑save mode at light load, 2.2 µH | C28060, C5832372 |
-| Charger | TP4054, 260 mA (R16 = 3.3 k, datasheet formula 1), CHG LED | C32574 |
+| Charger | TP4054, 190 mA (R16 = 5.1 k, datasheet formula 1), CHG LED | C32574 |
 | USB | USB‑C, native S3 USB (flashing + console), 5.1 k CC pull‑downs | C2765186 |
 | Buttons | RST (EN, left edge) and BOOT (IO0, right edge), top‑actuated | C720477 |
 | Battery sense | VBAT / 2 on IO10 (100 k / 100 k, 100 nF) | |
@@ -161,7 +161,7 @@ npm run dev     # live PCB / schematic / 3D view at http://localhost:3020
    power‑up.
 3. Connect with `firmware/tools/motor_keys.py` (`pip install bleak`). It
    prints the status (reset reason, IMU id `0x..43`, level calibration,
-   battery mV); `i` repeats it. The level calibration runs as soon as the
+   battery mV, trim, gain); `?` repeats it. The level calibration runs as soon as the
    board lies still and within 5° of level for 1 s; if it was moved or on a
    slope then, set it on a level surface and press `c`.
 4. Tilt by hand and watch the log: `r` goes positive with the right side
@@ -171,8 +171,24 @@ npm run dev     # live PCB / schematic / 3D view at http://localhost:3020
    and M3 CW; swap a motor's two wires if not.
 6. Still without props: `a` (arm), a few `w`, then tilt the board – the
    motors on the lower side speed up. `d` disarms. Keep a hand on it.
-7. First flight low over a soft floor. If the quad isn't getting light by
-   throttle ≈ 185, stop: motors or props too small for its weight.
+7. First hover, over a soft floor with room around it: `a`, then `w` until
+   the quad gets light and lifts off. If it isn't light by throttle ≈ 185,
+   stop: motors or props too small for its weight. Keep it about 30 cm up
+   with `w`/`x` and hold it in place with the arrow keys (a press tilts it
+   4° that way for 0.7 s; hold the key to keep going). It holds itself
+   level, not in place: like any toy quad it drifts, and you steer against
+   that. Climb briskly off the floor (one `w` more than it needs to lift),
+   and after touching down take the throttle to 0 before the next take‑off:
+   the integrators need to see the lift‑off (`air` in the log).
+8. If it keeps drifting the same way, trim after landing: `i` `k` `j` `l`
+   (forward, back, left, right, 0.5° per press) toward where it should go,
+   e.g. `i` a few times when it drifts backward. Trim adds to the level
+   found at power‑up, so always power up (or press `c`) on a level floor.
+9. Fast wobble or buzz: lower the gain with `[`. Slow rocking, overshoot or
+   a soft feel: raise it with `]` (×1.25 per press). Trim and gain are
+   saved on the drone. The log's `I` columns show how much the integrators
+   correct: roll or pitch near ±25 means the weight is far off centre (move
+   the battery). Until the log says `air` they stop at ±7.5.
 
 ## Limits worth knowing
 
@@ -180,6 +196,13 @@ npm run dev     # live PCB / schematic / 3D view at http://localhost:3020
   as 1.8 V, so motor current can no longer reset the ESP32 (the old boards
   fed it from an LDO, or from the motor rail itself). The firmware logs the
   reset reason at boot; `BROWN-OUT` there would mean something else is wrong.
+* **Packs:** fly RC LiPos without a protection board, rated for the 2–6 A
+  the four motors pull (6 A is 35 C from 170 mAh, 24 C from 250 mAh). A
+  phone‑type cell with a protection PCB, such as a generic LP502030
+  "250 mAh", is made for about 0.5 C, and its protection typically cuts off
+  at 2–3 A: it can switch the whole board off in flight. That looks like a
+  brown‑out, but after re‑plugging the reset reason reads 1 (power‑on),
+  not `BROWN-OUT`. Keep such cells for the bench.
 * **Low battery:** because the ESP32 keeps running on a nearly empty pack,
   only the firmware protects it: it logs VBAT (IO10) with every status line,
   warns below 3.3 V while armed and won't arm below 3.5 V. Disarmed below
@@ -198,13 +221,15 @@ npm run dev     # live PCB / schematic / 3D view at http://localhost:3020
   connectors (also 1 A) are within rating up to about 1 A per motor.
 * No reverse‑polarity protection on the battery and no ESD protection on
   USB: see *First power‑up*.
-* **Charging:** 260 mA is 1 C for a 260 mAh pack. For smaller packs change
-  R16 to 5.1 k (C25905, about 190 mA; already used for R14/R15). There is no
-  temperature sensing: charge attended. While the ESP32 runs, the charger
-  doesn't terminate (the board draws more than its 26 mA end‑of‑charge
-  current), so the CHG LED stays on even when the pack is full and the pack
-  is held at 4.2 V: unplug USB once the pack has had time to fill (about
-  1–1.5 h per 260 mAh). Never store a pack plugged in – even asleep the
+* **Charging:** 190 mA from the charger, of which the running board takes
+  about 50 mA: about 140 mA into the pack, and the full 190 mA while a flat
+  pack charges with the board asleep – about 1 C for the 170 mAh pack, less
+  for 250 mAh. For a pack of 300 mAh or more, R16 = 3.3 k (C25890) gives
+  260 mA. There is no temperature sensing: charge attended. While the ESP32
+  runs, the charger doesn't terminate (the board draws more than its 19 mA
+  end‑of‑charge current), so the CHG LED stays on even when the pack is full
+  and the pack is held at 4.2 V: unplug USB once the pack has had time to
+  fill (about 1.2 h for 170 mAh, 1.8 h for 250 mAh from empty). Never store a pack plugged in – even asleep the
   board takes it below 3.0 V within days – and don't recharge a pack found
   below about 2.5 V.
 * The board may not start from USB alone (the charger only trickles into an
@@ -217,7 +242,8 @@ npm run dev     # live PCB / schematic / 3D view at http://localhost:3020
   5° of level, and starts at zero throttle, where the motors stay off. It
   disarms when the link drops, when the heartbeat stops for 1 s, after 20 s
   armed at zero throttle, after 2 s tilted over 30° with throttle up (stuck
-  in grass or against a wall), and beyond 50° of tilt. The attitude loop (angle PD, no integral or trim
-  yet) is untested on this frame: expect to tune the gains.
+  in grass or against a wall), and beyond 50° of tilt. The attitude loop
+  (`firmware/main/flight.c`) was tuned in a simulation of this frame, not
+  in flight: expect to adjust the gain with `[` `]`.
 * The buttons are pressed from the top. The antenna sits at the nose: keep
   metal and the battery away from it and test BLE range on the first board.

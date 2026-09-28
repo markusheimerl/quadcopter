@@ -22,7 +22,6 @@ CONFIG_BOOTLOADER_SKIP_VALIDATE_IN_DEEP_SLEEP=y
 CONFIG_BT_ENABLED=y
 CONFIG_BT_NIMBLE_ENABLED=y
 
-# 1 kHz FreeRTOS tick so we can run the 200 Hz control loop with a 5 ms
-# vTaskDelayUntil period (default 100 Hz tick rounds 5 ms down to 0 and
-# trips the kernel assertion).
+# 1 kHz FreeRTOS tick for the 500 Hz control loop (vTaskDelay of 2 ticks;
+# the default 100 Hz tick would round 2 ms down to 0).
 CONFIG_FREERTOS_HZ=1000

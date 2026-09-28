@@ -5,9 +5,13 @@ module, BMI323 IMU, four brushed motors on low-side FETs). Written in C
 against [ESP-IDF](https://github.com/espressif/esp-idf), with as little
 framework code between us and the silicon as practical.
 
-It reads the IMU at 200 Hz, levels the quad with an angle PD loop and a
-quad-X mixer, and takes commands over BLE (Nordic UART service, device
-name `QuadFW`) from `tools/motor_keys.py`, which also streams the log back.
+It runs a 500 Hz loop on 800 Hz IMU data and holds the quad level
+(`main/flight.c`: the gyro carries the attitude, the accelerometer corrects
+it slowly; an angle loop feeds a rate PID loop and a quad-X mixer). You fly the throttle and
+steer against drift with the arrow keys, as with a toy quad: it holds
+itself level, not in place. Commands come over BLE (Nordic UART service,
+device name `QuadFW`) from `tools/motor_keys.py`, which also streams the
+log back.
 
 ## Hardware
 
@@ -23,9 +27,12 @@ name `QuadFW`) from `tools/motor_keys.py`, which also streams the log back.
 |---|---|
 | `1`..`4` | spin M0 front right / M1 back right / M2 back left / M3 front left for 1 s (disarmed; props off) |
 | `c` | redo the level calibration (disarmed, board still on a level surface) |
-| `i` | status: reset reason, IMU id and error register, calibration, battery |
+| `?` | status: reset reason, IMU id and error register, calibration, battery, trim, gain |
 | `a` | arm (needs a live heartbeat, a finished level calibration, a battery >= 3.5 V and a board within 5 degrees of level) |
 | `w` `+` `=` / `x` `-` | throttle up / down (steps of 5, max 220) |
+| arrow keys | steer: tilt 4 degrees that way for 0.7 s (hold the key to keep going) |
+| `i` `k` `j` `l` | trim forward / back / left / right by 0.5 degrees: press toward where it should go when it keeps drifting |
+| `[` / `]` | rate-loop gain down / up (x1.25): down for a fast wobble, up for slow rocking or a soft feel |
 | `d` `s` `0` | disarm |
 | `q` | quit the client (it disarms first) |
 
@@ -35,6 +42,13 @@ at least every 500 ms to arm and every second to stay armed, and a client
 that sends none for 5 s is disconnected (a crashed client must not keep the
 link, or the board stops advertising).
 
+Trim and gain are saved on the drone (NVS, written while disarmed). The
+10 Hz log line shows throttle, roll/pitch/yaw, the four motor duties, the
+three integrators (`I`, in PWM steps; roll or pitch near 25 means the
+weight is far off centre), `air` once a lift-off was seen (until then the
+integrators stop at 7.5, so they can't wind up while the quad sits on its
+feet; below throttle 100 they hold) and the battery.
+
 Nothing spins at power-up. The level calibration runs once the board has
 been still and within 5 degrees of level for 1 s. Safety: the quad
 disarms when the BLE link drops, when the heartbeat stops for 1 s, after
@@ -42,6 +56,18 @@ disarms when the BLE link drops, when the heartbeat stops for 1 s, after
 throttle up, and on a tilt beyond 50 degrees. A disarmed board below
 3.3 V goes to deep sleep and checks the battery every 5 minutes (every 30
 below 3.0 V; press RST to wake it at once).
+
+## Simulator
+
+`tools/hover_sim.c` flies `main/flight.c` against a model of this quad
+(32 g, 7 mm brushed motors lagging 70 ms, the IMU's delay, noise, an
+off-centre battery) and prints how it copes with a bump, and over which
+range of the `[` `]` gain the loop stays stable for slower or faster
+motors. Run it after changing `flight.c`:
+
+```bash
+cc -O2 -Imain tools/hover_sim.c main/flight.c -lm -o hover_sim && ./hover_sim
+```
 
 ## One-time setup
 
@@ -125,6 +151,8 @@ firmware/
   main/
     CMakeLists.txt      'main' component registration
     main.c              app_main(), control loop, BLE, battery guard
+    flight.c/.h         attitude estimate + control (plain C, also runs on a PC)
   tools/
+    hover_sim.c         flies flight.c in a simulated quad
     motor_keys.py       BLE keyboard client + log viewer
 ```

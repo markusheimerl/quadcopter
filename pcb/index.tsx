@@ -453,7 +453,7 @@ export default ({ copper = true }: { copper?: boolean }) => (
     <net name="V3V3" isPowerNet />
     <net name="VBUS" isPowerNet />
     <schematictext text="QUAD · micro quadcopter flight controller · rev A" schX={-8.3} schY={12.6} fontSize={0.32} anchor="left" />
-    <schematictext text="USB-C 5 V → TP4054 charges the 1S LiPo at 260 mA (R16 = 3.3 k, datasheet formula 1) · TPS63001 buck-boost makes 3.3 V from VBAT · ESP32-S3 drives four brushed motors through AO3400A low-side switches" schX={-8.3} schY={12.2} fontSize={0.16} anchor="left" color="#555" />
+    <schematictext text="USB-C 5 V → TP4054 charges the 1S LiPo at 190 mA (R16 = 5.1 k, datasheet formula 1) · TPS63001 buck-boost makes 3.3 V from VBAT · ESP32-S3 drives four brushed motors through AO3400A low-side switches" schX={-8.3} schY={12.2} fontSize={0.16} anchor="left" color="#555" />
     {/* sections decide wire vs. label (links between blocks become labels);
         the frames are drawn explicitly below */}
     {["power", "battery", "mcu", "imu", "motors"].map((name) => <Fragment key={name}><schematicsection name={name} /></Fragment>)}
@@ -589,7 +589,7 @@ export default ({ copper = true }: { copper?: boolean }) => (
       {...pcb("C9")} connections={{ pin1: "net.VBUS_C", pin2: "net.GND" }} />
     <resistor name="R18" schSectionName="power" resistance="2.2" footprint="0603" supplierPartNumbers={JLC("C22939")} {...sch("R18")}
       {...pcb("R18")} connections={{ pin1: "net.VBUS", pin2: "net.VBUS_C" }} />
-    <resistor name="R16" schSectionName="power" resistance="3.3k" footprint="0402" supplierPartNumbers={JLC("C25890")} {...sch("R16")}
+    <resistor name="R16" schSectionName="power" resistance="5.1k" footprint="0402" supplierPartNumbers={JLC("C25905")} {...sch("R16")}
       {...pcb("R16")} connections={{ pin1: "net.PROG", pin2: "net.GND" }} />
     <led name="LED2" schSectionName="power" color="red" manufacturerPartNumber="KT-0603R" footprint="jlcpcb:C2286" supplierPartNumbers={JLC("C2286")} pinLabels={{ pin1: "anode", pin2: "cathode" }} {...sch("LED2")}
       {...pcb("LED2")} connections={{ anode: "net.CHG_A", cathode: "net.CHRG" }} />

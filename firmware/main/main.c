@@ -14,6 +14,9 @@
  *          heartbeat ('h' every 200 ms, tools/motor_keys.py); disarm on
  *          link loss, heartbeat loss, 20 s idle, 50 deg tilt, or 2 s stuck
  *          beyond 30 deg with throttle up. Nothing spins at power-up.
+ *   Flight: flight.c holds roll and pitch at trim + steering (arrow keys)
+ *          and stops yaw rotation; the pilot flies the throttle. Trim and
+ *          the gain scale are kept in NVS.
  *
  * BMI323 quirk: every register read returns 2 dummy bytes followed by
  * the 16-bit register value, LSB first. Every register write is 1
@@ -38,6 +41,7 @@
 #include "esp_adc/adc_cali_scheme.h"
 #include "esp_system.h"
 #include "esp_sleep.h"
+#include "esp_timer.h"
 #include "esp_err.h"
 #include "esp_log.h"
 #include "nvs_flash.h"
@@ -53,6 +57,8 @@
 #include "host/util/util.h"
 #include "services/gap/ble_svc_gap.h"
 #include "services/gatt/ble_svc_gatt.h"
+
+#include "flight.h"
 
 /* ---------- LED ---------- */
 #define LED_GPIO        21u
@@ -109,15 +115,18 @@ static const ledc_channel_t MOTOR_LEDC_CH[4] = {
 #define ARM_TILT_LIMIT_DEG      5.0f      /* refuse to arm if tilted       */
 #define KILL_TILT_LIMIT_DEG     50.0f     /* auto-disarm on big tilt       */
 
-/* PID gains (PWM units per degree / dps). These are FIRST-GUESS values
- * for a small brushed tiny-whoop-class drone -- expect to retune. */
-#define ROLL_KP   1.5f
-#define ROLL_KD   0.25f
-#define PITCH_KP  1.5f
-#define PITCH_KD  0.25f
-#define YAW_KD    0.5f
+#define STEER_DEG               4.0f      /* arrow key: tilt this far ... */
+#define STEER_FIRST_MS          700       /* ... this long: a terminal repeats a held key only after 500-660 ms */
+#define STEER_HOLD_MS           150       /* each repeat of a held key: this much longer */
+#define TRIM_STEP_DEG           0.5f      /* keys i/k/j/l: level offset per press */
+#define TRIM_MAX_DEG            10.0f
+#define GAIN_STEP               1.25f     /* keys [ ]: rate-loop gain scale */
+#define GAIN_MIN                0.25f
+#define GAIN_MAX                4.0f
 
-#define CTRL_RATE_HZ            200
+/* 500 Hz on 800 Hz IMU data: the motors lag 70-140 ms, so every ms of
+ * sensor and loop delay costs stability margin (tools/hover_sim.c) */
+#define CTRL_RATE_HZ            500
 #define CTRL_PERIOD_MS          (1000 / CTRL_RATE_HZ)
 
 /* ---------- I2C ---------- */
@@ -136,7 +145,7 @@ static const ledc_channel_t MOTOR_LEDC_CH[4] = {
  * and below VBAT_SLEEP_MV for 10 s (or below VBAT_EMPTY_MV for 1 s): deep sleep
  * (~0.1 mA for the whole board), waking every 5 min (every 30 min below
  * VBAT_EMPTY_MV); back to normal above VBAT_WAKE_MV. This
- * also lets USB charging recover a flat pack (the charger trickles 26 mA). */
+ * also lets USB charging recover a flat pack (the charger trickles about 19 mA). */
 #define VBAT_SLEEP_MV      3300
 #define VBAT_EMPTY_MV      3000
 #define VBAT_WAKE_MV       3500
@@ -152,7 +161,6 @@ static const ledc_channel_t MOTOR_LEDC_CH[4] = {
 #define BMI323_ERR_REG     0x01
 #define BMI323_IO_I2C_IF   0x52
 #define BMI323_ACC_DATA_X  0x03
-#define BMI323_GYR_DATA_X  0x06
 #define BMI323_ACC_CONF    0x20
 #define BMI323_GYR_CONF    0x21
 #define BMI323_CHIP_ID_VAL 0x43
@@ -261,6 +269,11 @@ static volatile float     s_pitch_deg     = 0.0f;
 static volatile int       s_vbat_mv       = 0;     /* 0 = not measured */
 static volatile bool      s_ready         = false; /* level cal + VBAT done */
 static volatile bool      s_recal         = false; /* 'c': redo the level calibration */
+static volatile float     s_steer[2]      = { 0 };  /* roll, pitch setpoint from the arrow keys (deg) */
+static volatile uint32_t  s_steer_end_ms[2] = { 0 };
+static volatile float     s_trim[2]       = { 0 };  /* roll, pitch level offset (deg), in NVS */
+static volatile float     s_gain          = 1.0f;   /* rate-loop gain scale, in NVS */
+static bool               s_tune_dirty    = false;  /* trim/gain changed, not saved yet */
 static volatile uint32_t  s_last_hb_ms    = 0;     /* last heartbeat 'h' from the client */
 static volatile uint32_t  s_conn_ms       = 0;     /* when the current client connected */
 static uint16_t           s_imu_err       = 0;     /* ERR_REG after configuring the IMU */
@@ -277,7 +290,7 @@ static esp_err_t bmi_read(uint8_t reg, uint8_t *dst, size_t n)
         return ESP_ERR_INVALID_SIZE;
     }
     esp_err_t err = i2c_master_transmit_receive(s_bmi, &reg, 1,
-                                                rx, 2 + n, 10);
+                                                rx, 2 + n, 3);   /* ms; a burst takes 0.4 */
     if (err == ESP_OK) {
         memcpy(dst, rx + 2, n);
     }
@@ -383,6 +396,34 @@ static SemaphoreHandle_t    s_log_mux = NULL;   /* several tasks log; the buffer
 
 static void ble_advertise(void);
 static void log_status(void);
+
+/* trim + gain survive a reboot. Saved only while disarmed: a flash write
+ * stalls the control loop for a few ms. */
+typedef struct { float trim[2], gain; } tune_t;
+
+static void tune_load(void)
+{
+    nvs_handle_t h;
+    tune_t t;
+    size_t n = sizeof t;
+    if (nvs_open("quad", NVS_READONLY, &h) != ESP_OK) return;
+    if (nvs_get_blob(h, "tune", &t, &n) == ESP_OK && n == sizeof t &&
+        fabsf(t.trim[0]) <= TRIM_MAX_DEG && fabsf(t.trim[1]) <= TRIM_MAX_DEG &&
+        t.gain >= GAIN_MIN && t.gain <= GAIN_MAX) {
+        s_trim[0] = t.trim[0]; s_trim[1] = t.trim[1]; s_gain = t.gain;
+    }
+    nvs_close(h);
+}
+
+static void tune_save(void)
+{
+    nvs_handle_t h;
+    tune_t t = { { s_trim[0], s_trim[1] }, s_gain };
+    s_tune_dirty = false;
+    if (nvs_open("quad", NVS_READWRITE, &h) != ESP_OK) return;
+    if (nvs_set_blob(h, "tune", &t, sizeof t) == ESP_OK) nvs_commit(h);
+    nvs_close(h);
+}
 
 static void handle_cmd_byte(uint8_t c)
 {
@@ -614,6 +655,7 @@ static void ble_bring_up(void)
         err = nvs_flash_init();
     }
     ESP_ERROR_CHECK(err);
+    tune_load();
 
     ESP_ERROR_CHECK(nimble_port_init());
     ble_hs_cfg.sync_cb  = ble_on_sync;
@@ -647,13 +689,14 @@ static void deep_sleep(int mv)
     esp_deep_sleep_start();
 }
 
-/* 'i', and whenever a client subscribes: what happened at boot */
+/* '?', and whenever a client subscribes: what happened at boot */
 static void log_status(void)
 {
-    ESP_LOGI(TAG, "status: reset reason %d%s, IMU id 0x%04x err 0x%04x, level cal %s, battery %d mV, %s",
+    ESP_LOGI(TAG, "status: reset reason %d%s, IMU id 0x%04x err 0x%04x, level cal %s, battery %d mV, "
+                  "trim r %+.1f p %+.1f, gain %.2f, %s",
              s_reset_reason, s_reset_reason == ESP_RST_BROWNOUT ? " (BROWN-OUT)" : "",
              s_chip_id, s_imu_err, s_ready ? "done" : "waiting for the board to be still and level",
-             s_vbat_mv, s_armed ? "ARMED" : "disarmed");
+             s_vbat_mv, s_trim[0], s_trim[1], s_gain, s_armed ? "ARMED" : "disarmed");
 }
 
 /* -------------------- motor command consumer -------------------- */
@@ -661,8 +704,35 @@ static void motor_cmd_task(void *arg)
 {
     uint8_t c;
     for (;;) {
-        if (xQueueReceive(s_cmd_q, &c, portMAX_DELAY) != pdTRUE) continue;
+        if (xQueueReceive(s_cmd_q, &c, pdMS_TO_TICKS(500)) != pdTRUE) c = 0;
+        if (s_tune_dirty && !s_armed) tune_save();   /* also after an automatic disarm */
+        uint32_t now_ms = (uint32_t)(xTaskGetTickCount() * portTICK_PERIOD_MS);
         switch (c) {
+        case 0:
+            break;
+        case '^': case 'v': case '<': case '>':   /* arrow keys: steer while armed */
+            if (s_armed) {
+                int ax = c == '^' || c == 'v';   /* 0 roll, 1 pitch */
+                float v = c == '^' || c == '>' ? STEER_DEG : -STEER_DEG;   /* nose down / right side down */
+                bool held = (int32_t)(s_steer_end_ms[ax] - now_ms) > 0 && s_steer[ax] == v;
+                uint32_t end = now_ms + (held ? STEER_HOLD_MS : STEER_FIRST_MS);
+                s_steer[ax] = v;
+                if (!held || (int32_t)(end - s_steer_end_ms[ax]) > 0) s_steer_end_ms[ax] = end;
+            }
+            break;
+        case 'i': case 'k': case 'j': case 'l': {   /* trim: toward where it should go */
+            int ax = c == 'i' || c == 'k';
+            float t = s_trim[ax] + (c == 'i' || c == 'l' ? TRIM_STEP_DEG : -TRIM_STEP_DEG);
+            s_trim[ax] = fmaxf(-TRIM_MAX_DEG, fminf(TRIM_MAX_DEG, t));
+            s_tune_dirty = true;
+            ESP_LOGI(TAG, "cmd: trim r %+.1f p %+.1f deg", s_trim[0], s_trim[1]);
+            break;
+        }
+        case '[': case ']':
+            s_gain = fmaxf(GAIN_MIN, fminf(GAIN_MAX, c == ']' ? s_gain * GAIN_STEP : s_gain / GAIN_STEP));
+            s_tune_dirty = true;
+            ESP_LOGI(TAG, "cmd: gain %.2f", s_gain);
+            break;
         case 'a':
             if (s_armed) {
                 ESP_LOGW(TAG, "cmd: already armed");   /* never reset throttle mid-air */
@@ -679,6 +749,7 @@ static void motor_cmd_task(void *arg)
                 if (s_conn_handle != 0xFFFF) {   /* link still up */
                     s_base_throttle = 0;         /* always start from idle */
                     s_test_end_ms = (uint32_t)(xTaskGetTickCount() * portTICK_PERIOD_MS);
+                    s_steer_end_ms[0] = s_steer_end_ms[1] = s_test_end_ms;   /* no steering left over */
                     s_armed = ok = true;
                 }
                 taskEXIT_CRITICAL(&s_arm_mux);
@@ -730,7 +801,7 @@ static void motor_cmd_task(void *arg)
                 ESP_LOGW(TAG, "cmd: 'c' ignored while armed");
             }
             break;
-        case 'i':
+        case '?':
             log_status();
             break;
         default:
@@ -740,25 +811,23 @@ static void motor_cmd_task(void *arg)
     }
 }
 
-/* -------------------- 200 Hz control loop --------------------
+/* -------------------- 500 Hz control loop --------------------
  * 1. Read accel + gyro.
- * 2. Complementary filter -> roll/pitch (rad) and yaw (gyro-integrated).
+ * 2. flight_estimate -> roll/pitch; yaw gyro-integrated (log only).
  * 3. Auto-disarm on extreme tilt.
- * 4. If armed: angle PID + quad-X mixer -> 4 PWM outputs.
+ * 4. If armed: flight_control (trim + steering setpoints) -> 4 PWM outputs.
  *    If disarmed: motors 0, except an optional motor-test pulse.
  * 5. Print state at 10 Hz, blink LED at 1 Hz.
  */
 static void control_task(void *arg)
 {
-    const float GYR_LSB_TO_RADS = (1000.0f / 32768.0f) * (float)M_PI / 180.0f;
     const float GYR_LSB_TO_DPS  = 1000.0f / 32768.0f;
     const float ACC_LSB_TO_G    = 8.0f / 32768.0f;   /* ACC_CONF range = +-8 g */
-    const float DT              = 1.0f / (float)CTRL_RATE_HZ;
-    const float ALPHA           = 0.98f;
     const float RAD_TO_DEG      = 180.0f / (float)M_PI;
 
-    float roll = 0.0f, pitch = 0.0f, yaw = 0.0f;
-    bool  init = false;
+    flight_t fl = { 0 };
+    float yaw_deg = 0.0f;
+    int64_t last_ok_us = esp_timer_get_time();   /* last good IMU sample */
     bool  led_on = false;
     int   print_div = 0;
     int   blink_div = 0;
@@ -768,32 +837,36 @@ static void control_task(void *arg)
 
     /* Level calibration: average CAL_N consecutive samples taken while the
      * board is still (every gyro axis below 5 dps, the gravity vector steady
-     * within 0.02 g, i.e. about 1 degree)
+     * within 0.035 g, i.e. about 2 degrees)
      * and roughly level (both angles within CAL_LEVEL_DEG, right side up);
      * anything else restarts the count. Their mean accel angle is "level"
      * (the IMU is never mounted perfectly flat) and their mean gyro reading
      * is the gyro bias. Arming is blocked until it is done; 'c' redoes it. */
-    const int CAL_N = 200;            /* 200 samples @ 200 Hz = 1 s */
+    const int CAL_N = CTRL_RATE_HZ;   /* 1 s */
     int   cal_count = 0;
     float cal_roll_sum = 0.0f, cal_pitch_sum = 0.0f;
     float cal_gx = 0.0f, cal_gy = 0.0f, cal_gz = 0.0f;
     float roll_bias = 0.0f, pitch_bias = 0.0f;
     float gx_bias = 0.0f, gy_bias = 0.0f, gz_bias = 0.0f;
-    float cal_ax0 = 0.0f, cal_ay0 = 0.0f, cal_az0 = 0.0f;
+    float cal_ax0 = 0.0f, cal_ay0 = 0.0f, cal_az0 = 0.0f, cal_g = 0.0f;
     bool  calibrated = false;
     uint32_t idle_since_ms = 0, stall_since_ms = 0;
 
-    /* If consecutive I2C reads fail this many times in a row we treat the
-     * bus as compromised (most likely motor EMI) and force-disarm so the
-     * controller can't keep commanding motors based on stale data. */
-    const int I2C_ERR_DISARM_THRESHOLD = 5;
+    /* No good IMU sample for this long while armed: the bus is compromised
+     * (most likely motor EMI), disarm rather than hold stale motor duties. */
+    const int64_t I2C_LOSS_US = 25000;
 
     for (;;) {
-        uint8_t acc[6], gyr[6];
-        esp_err_t e1 = bmi_read(BMI323_ACC_DATA_X, acc, sizeof(acc));
-        esp_err_t e2 = bmi_read(BMI323_GYR_DATA_X, gyr, sizeof(gyr));
+        uint8_t d[12];   /* ACC X Y Z, GYR X Y Z: one burst, one sample */
+        esp_err_t err = bmi_read(BMI323_ACC_DATA_X, d, sizeof(d));
+        const uint8_t *acc = d, *gyr = d + 6;
 
-        if (e1 == ESP_OK && e2 == ESP_OK) {
+        int64_t now_us = esp_timer_get_time();
+
+        if (err == ESP_OK) {
+            /* since the last good sample: about 2 ms, longer after failed reads */
+            float dt = fminf((float)(now_us - last_ok_us) * 1e-6f, 0.02f);
+            last_ok_us = now_us;
             i2c_err_streak = 0;
             int16_t axi = (int16_t)(acc[0] | (acc[1] << 8));
             int16_t ayi = (int16_t)(acc[2] | (acc[3] << 8));
@@ -805,12 +878,8 @@ static void control_task(void *arg)
             float ax = axi * ACC_LSB_TO_G;
             float ay = ayi * ACC_LSB_TO_G;
             float az = azi * ACC_LSB_TO_G;
-            float gx_dps = gxi * GYR_LSB_TO_DPS - gx_bias;
-            float gy_dps = gyi * GYR_LSB_TO_DPS - gy_bias;
-            float gz_dps = gzi * GYR_LSB_TO_DPS - gz_bias;
-            float gx_rad = gx_dps * (GYR_LSB_TO_RADS / GYR_LSB_TO_DPS);
-            float gy_rad = gy_dps * (GYR_LSB_TO_RADS / GYR_LSB_TO_DPS);
-            float gz_rad = gz_dps * (GYR_LSB_TO_RADS / GYR_LSB_TO_DPS);
+            float gyr[3] = { gxi * GYR_LSB_TO_DPS - gx_bias, gyi * GYR_LSB_TO_DPS - gy_bias,
+                             gzi * GYR_LSB_TO_DPS - gz_bias };
 
             float roll_acc_raw  = atan2f(ay, az);
             float pitch_acc_raw = atan2f(-ax, sqrtf(ay*ay + az*az));
@@ -828,16 +897,17 @@ static void control_task(void *arg)
                 bool ok = fabsf(gxr) < 5.0f && fabsf(gyr_) < 5.0f && fabsf(gzr) < 5.0f && az > 0.0f &&
                           fabsf(roll_acc_raw) < lvl && fabsf(pitch_acc_raw) < lvl;
                 float dax = ax - cal_ax0, day = ay - cal_ay0, daz = az - cal_az0;
-                bool moved = dax*dax + day*day + daz*daz > 0.02f * 0.02f;   /* ~1 deg of rotation */
+                bool moved = dax*dax + day*day + daz*daz > 0.035f * 0.035f;   /* ~2 deg; 800 Hz noise is ~5 mg */
                 if (cal_count > 0 && (!ok || moved)) cal_count = 0;   /* start over */
                 if (ok && cal_count == 0) {
                     cal_ax0 = ax; cal_ay0 = ay; cal_az0 = az;
-                    cal_roll_sum = cal_pitch_sum = cal_gx = cal_gy = cal_gz = 0.0f;
+                    cal_roll_sum = cal_pitch_sum = cal_gx = cal_gy = cal_gz = cal_g = 0.0f;
                 }
                 if (ok) {
                     cal_roll_sum  += roll_acc_raw;
                     cal_pitch_sum += pitch_acc_raw;
                     cal_gx += gxr; cal_gy += gyr_; cal_gz += gzr;
+                    cal_g += sqrtf(ax*ax + ay*ay + az*az);
                     if (++cal_count >= CAL_N) {
                         roll_bias  = cal_roll_sum  / (float)CAL_N;
                         pitch_bias = cal_pitch_sum / (float)CAL_N;
@@ -845,7 +915,10 @@ static void control_task(void *arg)
                         gy_bias = cal_gy / (float)CAL_N;
                         gz_bias = cal_gz / (float)CAL_N;
                         calibrated = true;
-                        init = false;   /* restart the filter from the calibrated level */
+                        fl.roll0  = roll_bias  * RAD_TO_DEG;
+                        fl.pitch0 = pitch_bias * RAD_TO_DEG;
+                        fl.g1 = cal_g / (float)CAL_N;   /* this IMU's 1 g, for the lift-off check */
+                        fl.init = false;   /* restart the estimate from the calibrated level */
                         ESP_LOGI(TAG,
                             "level cal done: roll %+.2f pitch %+.2f deg, gyro bias %+.2f %+.2f %+.2f dps",
                             roll_bias * RAD_TO_DEG, pitch_bias * RAD_TO_DEG, gx_bias, gy_bias, gz_bias);
@@ -853,25 +926,19 @@ static void control_task(void *arg)
                 }
             }
 
-            float roll_acc  = roll_acc_raw  - roll_bias;
-            float pitch_acc = pitch_acc_raw - pitch_bias;
-
-            if (!init) {
-                roll  = roll_acc;
-                pitch = pitch_acc;
-                yaw   = 0.0f;
-                init  = true;
-            } else {
-                roll  = ALPHA * (roll  + gx_rad * DT)
-                      + (1.0f - ALPHA) * roll_acc;
-                pitch = ALPHA * (pitch + gy_rad * DT)
-                      + (1.0f - ALPHA) * pitch_acc;
-                yaw   = yaw + gz_rad * DT;
+            /* the gyro bias drifts as the board warms up: keep following it
+             * while the quad sits disarmed and still */
+            if (calibrated && !s_armed && s_test_motor < 0 &&
+                fabsf(gyr[0]) < 1.0f && fabsf(gyr[1]) < 1.0f && fabsf(gyr[2]) < 1.0f) {
+                float k = dt / 5.0f;
+                gx_bias += k * gyr[0]; gy_bias += k * gyr[1]; gz_bias += k * gyr[2];
             }
 
-            float roll_deg  = roll  * RAD_TO_DEG;
-            float pitch_deg = pitch * RAD_TO_DEG;
-            float yaw_deg   = yaw   * RAD_TO_DEG;
+            float acc_g[3] = { ax, ay, az };
+            flight_estimate(&fl, acc_g, gyr, dt);
+            yaw_deg += gyr[2] * dt;
+            float roll_deg  = fl.roll;
+            float pitch_deg = fl.pitch;
             s_roll_deg  = roll_deg;
             s_pitch_deg = pitch_deg;
 
@@ -909,37 +976,13 @@ static void control_task(void *arg)
                 ESP_LOGW(TAG, "ctrl: armed at idle for %d s -> DISARM", ARMED_IDLE_MS / 1000);
             }
 
-            if (s_armed && s_base_throttle == 0) {
-                /* armed at idle: motors stay off until throttle comes up */
-            } else if (s_armed) {
-                float T = (float)s_base_throttle;
-                float roll_err  = 0.0f - roll_deg;
-                float pitch_err = 0.0f - pitch_deg;
-                float r = ROLL_KP  * roll_err  - ROLL_KD  * gx_dps;
-                float p = PITCH_KP * pitch_err - PITCH_KD * gy_dps;
-                /* Damp yaw rate. +y in the mixer drives the airframe CW
-                 * (increases CCW motors); gz>0 is CCW rotation, so we
-                 * need y = +KD*gz to oppose it. The previous "-KD*gz"
-                 * was positive feedback and caused a runaway spin. */
-                float y = YAW_KD * gz_dps;
-
-                /* Quad-X mixer (see physical layout above).
-                 *   +roll  = right side down: r < 0 raises the right motors (M0, M1)
-                 *   +pitch = nose down (atan2(-ax, ..), +X = nose): p < 0 raises the front motors (M0, M3)
-                 *   +yaw   -> nose right, increase CCW motors */
-                float m[4] = {
-                    T - r - p + y,   /* M0 FR CCW */
-                    T - r + p - y,   /* M1 BR CW  */
-                    T + r + p + y,   /* M2 BL CCW */
-                    T + r - p - y,   /* M3 FL CW  */
-                };
-                for (int i = 0; i < 4; ++i) {
-                    if (m[i] < 0.0f) m[i] = 0.0f;
-                    if (m[i] > (float)LEDC_MAX) m[i] = (float)LEDC_MAX;
-                    out[i] = (int)m[i];
-                }
-            } else if (s_test_motor >= 0 && s_test_motor < 4 &&
-                       (int32_t)(s_test_end_ms - now_ms) > 0) {
+            /* armed at throttle 0 the motors stay off (and the integrators clear) */
+            float sp[2];
+            for (int k = 0; k < 2; ++k)
+                sp[k] = s_trim[k] + ((int32_t)(s_steer_end_ms[k] - now_ms) > 0 ? s_steer[k] : 0.0f);
+            flight_control(&fl, s_armed ? (float)s_base_throttle : 0.0f, sp[0], sp[1], s_gain, gyr, dt, out);
+            if (!s_armed && s_test_motor >= 0 && s_test_motor < 4 &&
+                (int32_t)(s_test_end_ms - now_ms) > 0) {
                 out[s_test_motor] = MOTOR_TEST_DUTY;
             } else if (s_test_motor >= 0) {
                 s_test_motor = -1;
@@ -947,8 +990,8 @@ static void control_task(void *arg)
 
             /* armed with throttle up and tilted well over for 2 s (held in
              * grass, against a wall): the low side's motors sit at full power
-             * into a stall -> save the FETs and motors. There are no roll/pitch
-             * setpoints, so a free-flying quad never stays this tilted. */
+             * into a stall -> save the FETs and motors. Trim + steering stay
+             * under 15 deg, so a free-flying quad never stays this tilted. */
             bool stuck = s_armed && s_base_throttle > 0 &&
                          (fabsf(roll_deg) > STUCK_TILT_DEG || fabsf(pitch_deg) > STUCK_TILT_DEG);
             if (!stuck) {
@@ -962,17 +1005,18 @@ static void control_task(void *arg)
 
             for (int i = 0; i < 4; ++i) motor_set_duty(i, out[i]);
 
-            if (++print_div >= 20) {  /* 10 Hz */
+            if (++print_div >= CTRL_RATE_HZ / 10) {
                 print_div = 0;
                 ESP_LOGI(TAG,
                        "%s T=%3u r=%+6.1f p=%+6.1f y=%+6.1f | "
-                       "%3d %3d %3d %3d | %4d mV",
+                       "%3d %3d %3d %3d | I %+5.1f %+5.1f %+5.1f %s | %4d mV",
                        s_armed ? "ARM" : "dis",
                        (unsigned)s_base_throttle,
                        roll_deg, pitch_deg, yaw_deg,
-                       out[0], out[1], out[2], out[3], s_vbat_mv);
+                       out[0], out[1], out[2], out[3],
+                       fl.i[0], fl.i[1], fl.i[2], fl.air ? "air" : "gnd", s_vbat_mv);
             }
-            if (++blink_div >= 100) {  /* 1 Hz */
+            if (++blink_div >= CTRL_RATE_HZ / 2) {  /* 1 Hz blink */
                 blink_div = 0;
                 if (s_armed && s_vbat_mv > 0 && s_vbat_mv < VBAT_LOW_MV) {
                     ESP_LOGW(TAG, "battery low (%d mV): land", s_vbat_mv);
@@ -983,12 +1027,11 @@ static void control_task(void *arg)
         } else {
             /* Don't spam the log -- one line per error is enough. */
             if (i2c_err_streak < 100) {
-                ESP_LOGW(TAG, "i2c read failed: acc=%s gyr=%s (streak=%d)",
-                         esp_err_to_name(e1), esp_err_to_name(e2),
-                         i2c_err_streak + 1);
+                ESP_LOGW(TAG, "i2c read failed: %s (streak=%d)",
+                         esp_err_to_name(err), i2c_err_streak + 1);
             }
             ++i2c_err_streak;
-            if (s_armed && i2c_err_streak >= I2C_ERR_DISARM_THRESHOLD) {
+            if (s_armed && now_us - last_ok_us > I2C_LOSS_US) {
                 s_armed = false;
                 s_base_throttle = 0;
                 ESP_LOGE(TAG, "ctrl: I2C lost -> AUTO-DISARM");
@@ -1001,7 +1044,7 @@ static void control_task(void *arg)
 
         /* Battery, 10 Hz, also while the IMU is failing. Only counted with
          * no motor current, and only consecutive low samples put it to sleep. */
-        if (++vbat_div >= 20) {
+        if (++vbat_div >= CTRL_RATE_HZ / 10) {
             vbat_div = 0;
             int mv = vbat_read_mv();
             s_vbat_mv = mv;
@@ -1094,14 +1137,15 @@ void app_main(void)
         }
     }
 
-    ESP_LOGI(TAG, "BMI323 detected, configuring for 200 Hz...");
+    ESP_LOGI(TAG, "BMI323 detected, configuring for 800 Hz...");
 
     /* Accelerometer: high-performance mode (the one Bosch specifies noise
-     * for), 200 Hz ODR, +/-8 g range, bandwidth ODR/2. */
-    ESP_ERROR_CHECK(bmi_write_u16(BMI323_ACC_CONF, 0x7029));
+     * for), 800 Hz ODR, +/-8 g range, bandwidth ODR/2 (0.95 ms group delay). */
+    ESP_ERROR_CHECK(bmi_write_u16(BMI323_ACC_CONF, 0x702B));
     vTaskDelay(pdMS_TO_TICKS(5));
-    /* Gyroscope: high-performance mode, 200 Hz ODR, +/-1000 dps. */
-    ESP_ERROR_CHECK(bmi_write_u16(BMI323_GYR_CONF, 0x7039));
+    /* Gyroscope: high-performance mode, 800 Hz ODR, +/-1000 dps, ODR/2
+     * (1.43 ms group delay; 3.72 ms at the old 200 Hz). */
+    ESP_ERROR_CHECK(bmi_write_u16(BMI323_GYR_CONF, 0x703B));
     vTaskDelay(pdMS_TO_TICKS(100));
     /* sensors on (no more suspend-mode write timing): the IMU releases SDA
      * by itself if a transfer ever hangs for more than 1.25 ms */
@@ -1114,7 +1158,7 @@ void app_main(void)
     if (s_imu_err & 0x0061) ESP_LOGE(TAG, "BMI323 ERR_REG 0x%04x", s_imu_err);
 
     ESP_LOGI(TAG, "Starting control loop @ %d Hz. DISARMED. "
-                  "BLE keys: a=arm d=disarm w=thr+ x=thr- 1-4=test M0-M3 c=level cal i=status",
+                  "BLE keys: a=arm d=disarm w=thr+ x=thr- arrows=steer ijkl=trim []=gain 1-4=test M0-M3 c=level cal ?=status",
              CTRL_RATE_HZ);
 
     /* Pin control loop to APP_CPU (core 1) so NimBLE on core 0 cannot
